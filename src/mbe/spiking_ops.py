@@ -194,20 +194,53 @@ class SpikingActivation(torch.nn.Module):
         return self.neuron(x)
 
 
+# Non-monotone activations (a near-zero bend/dip) are unrepresentable by a single
+# global MBE neuron -- its linear-readout ceiling on GELU is ~0.5. They require the
+# polarity-split (signed) MBE, which is the paper-faithful GELU/SiLU handler. Using
+# the plain neuron here makes a converted Transformer diverge (perplexity blow-up).
+_NONMONOTONE_ACTS = {"gelu", "gelu_tanh", "silu"}
+
+
 def build_activation(name: str, sample_x: torch.Tensor, n_basis: int = 4,
                      n_steps: int = 16, seed: int = 0, margin: float = 0.05,
-                     epochs: int = 600,
-                     device: torch.device | str = "cpu") -> SpikingActivation:
+                     epochs: int = 600, device: torch.device | str = "cpu",
+                     signed: bool | None = None) -> SpikingActivation:
     """Calibrate a :class:`SpikingActivation` for ``name`` (``gelu`` / ``silu`` /
-    ``tanh``) on the range measured in ``sample_x`` (padded by ``margin``)."""
+    ``tanh``) on the range measured in ``sample_x`` (padded by ``margin``).
+
+    ``signed`` (default: auto) uses the polarity-split MBE for non-monotone
+    activations whose range crosses zero -- required for GELU/SiLU, where a single
+    global neuron cannot represent the near-zero bend. Pass ``signed=False`` to
+    force the (failing) plain neuron for an ablation.
+    """
     lo = float(sample_x.min())
     hi = float(sample_x.max())
     span = max(hi - lo, 1e-6)
     lo -= margin * span
     hi += margin * span
-    neuron = calibrate(name, lo, hi, n_basis=n_basis, n_steps=n_steps,
-                       epochs=epochs, seed=seed, device=device)
+    if signed is None:
+        signed = name in _NONMONOTONE_ACTS and lo < 0.0 < hi
+    if signed:
+        neuron = _fit_signed_activation(name, lo, hi, n_basis, n_steps,
+                                        epochs, seed, device)
+    else:
+        neuron = calibrate(name, lo, hi, n_basis=n_basis, n_steps=n_steps,
+                           epochs=epochs, seed=seed, device=device)
     return SpikingActivation(neuron)
+
+
+def _fit_signed_activation(name, lo, hi, n_basis, n_steps, epochs, seed, device):
+    """Polarity-split (signed) MBE fit of ``name`` on ``[lo, hi]`` (crosses 0).
+
+    Each side gets ``n_basis`` bases, curvature-placed for its restriction of the
+    activation; a single joint readout combines both banks (see
+    :class:`SignedMBENeuron`)."""
+    device = torch.device(device)
+    sm = functions.make_signed(name, n_pos=n_basis, n_neg=n_basis, pivot=0.0,
+                               n_steps=n_steps, domain=(lo, hi)).to(device)
+    x, y, _ = functions.sample(name, m=4000, seed=seed, domain=(lo, hi))
+    fit_model(sm, x.to(device), y.to(device), seed=seed, epochs=epochs)
+    return sm
 
 
 # --------------------------------------------------------------------------
