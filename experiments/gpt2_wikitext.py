@@ -151,6 +151,11 @@ def main():
             "activation" if args.convert_ops == "activation" else "layernorm"
         } if args.convert_ops != "both" else None
         convert_gpt2(model, calib, cfg=cfg, only=only, verbose=True)
+        # Fair-comparison cost metrics (MBE and PASN store different #bases, so
+        # accuracy alone is not comparable): stored/active bases + spikes per input.
+        sample_batch = ids[:block].unsqueeze(0)
+        costs = cv.activation_cost_report(model, sample_batch)
+        print(cv.format_cost_report(costs, label=args.backend), flush=True)
         ppl_snn = perplexity(
             model, ids, block, device, args.limit_blocks,
             batch_size=eval_batch_size, progress_every=args.progress_every,

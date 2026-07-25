@@ -514,3 +514,64 @@ def convert(model: nn.Module, recorder: CalibrationRecorder,
             rng = ", ".join(f"[{s.lo:.3g},{s.hi:.3g}]" for s in slots)
             print(f"  convert {name:22s} {kind:10s} range={rng}")
     return model
+
+
+# --------------------------------------------------------------------------
+# Cost metrics (fair comparison: accuracy is not enough when N differs)
+# --------------------------------------------------------------------------
+
+@torch.no_grad()
+def activation_cost_report(model: nn.Module, batch, keep: int = 20_000) -> dict:
+    """Per-activation cost of a converted model, measured on a real ``batch``.
+
+    Runs ``batch`` through ``model`` once, capturing each spiking activation's
+    input, and returns ``{module_name: neuron_cost(...)}`` (stored / active bases,
+    timesteps, spikes per input). Because MBE and PASN store different numbers of
+    bases, these let the comparison be made at matched cost, not just accuracy.
+    """
+    from .pasn import neuron_cost
+    acts = [(n, m) for n, m in model.named_modules()
+            if isinstance(m, _SpikingActModule)]
+    if not acts:
+        return {}
+    caps: dict[str, torch.Tensor] = {}
+    handles = []
+
+    def _mk(name):
+        def hook(mod, args):
+            if name not in caps and args and torch.is_tensor(args[0]):
+                caps[name] = args[0].detach().reshape(-1)[:keep]
+        return hook
+
+    for name, mod in acts:
+        handles.append(mod.register_forward_pre_hook(_mk(name)))
+    device = _module_device(model)
+    b = _batch_to_device(batch, device)
+    was_training = model.training
+    model.eval()
+    if isinstance(b, dict):
+        model(**b)
+    elif isinstance(b, (tuple, list)):
+        model(*b)
+    else:
+        model(b)
+    model.train(was_training)
+    for h in handles:
+        h.remove()
+    return {name: neuron_cost(mod.act.neuron, caps[name])
+            for name, mod in acts if name in caps}
+
+
+def format_cost_report(costs: dict, label: str = "") -> str:
+    """Aggregate :func:`activation_cost_report` output into a printable summary."""
+    if not costs:
+        return f"[cost{(' ' + label) if label else ''}] no spiking activations"
+    n = len(costs)
+    stored = max(c["stored"] for c in costs.values())
+    steps = max(c["steps"] for c in costs.values())
+    active = sum(c["active"] for c in costs.values()) / n
+    spikes = sum(c["spikes"] for c in costs.values()) / n
+    tag = f" {label}" if label else ""
+    return (f"[cost{tag}] activations={n}  T={steps}  "
+            f"stored bases/act={stored}  active bases/input={active:.2f}  "
+            f"spikes/input={spikes:.2f}")

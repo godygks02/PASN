@@ -5,7 +5,8 @@ from .surrogate import heaviside
 from . import functions
 from . import spiking_ops
 from .fit import fit_function, fit_model, solve_readout, FitResult
-from .pasn import PrefixRouter, PASNNeuron, build_pasn, spikes_per_input
+from .pasn import (PrefixRouter, PASNNeuron, build_pasn, spikes_per_input,
+                   neuron_cost)
 
 __all__ = [
     "MBENeuron",
@@ -22,4 +23,5 @@ __all__ = [
     "PASNNeuron",
     "build_pasn",
     "spikes_per_input",
+    "neuron_cost",
 ]
