@@ -4,8 +4,10 @@ torch==2.11.0        # CPU build is sufficient for the 1-D function-fitting stag
 numpy>=2.0
 matplotlib>=3.8      # optional, for plotting approximation curves
 
-# Later phases (Transformer conversion on GPU / vast.ai) — not needed for the
-# CPU function-fitting verification in this repo:
+# Phase 4d — GPT-2 conversion on WikiText-2 (experiments/gpt2_wikitext.py).
+# Tested with transformers 5.8, datasets 4.8 in the SNN env.
+transformers>=5.0
+datasets>=3.0
+
+# Later benchmark phases (ImageNet CV) — uncomment when needed:
 # timm>=1.0
-# transformers>=4.40
-# datasets>=2.19

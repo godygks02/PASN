@@ -21,6 +21,13 @@ def gelu(x: torch.Tensor) -> torch.Tensor:
     return 0.5 * x * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
+def gelu_tanh(x: torch.Tensor) -> torch.Tensor:
+    # tanh-approx GELU (HF ``NewGELUActivation``, used by GPT-2): calibrate the
+    # spiking neuron to the *same* activation the ANN uses.
+    return 0.5 * x * (1.0 + torch.tanh(
+        math.sqrt(2.0 / math.pi) * (x + 0.044715 * torch.pow(x, 3.0))))
+
+
 def tanh(x: torch.Tensor) -> torch.Tensor:
     return torch.tanh(x)
 
@@ -48,6 +55,7 @@ def identity(x: torch.Tensor) -> torch.Tensor:
 # name -> (callable, (domain_lo, domain_hi))
 REGISTRY = {
     "gelu": (gelu, (-120.0, 10.0)),
+    "gelu_tanh": (gelu_tanh, (-120.0, 10.0)),
     "tanh": (tanh, (-5.0, 5.0)),
     "silu": (silu, (-8.0, 12.0)),
     "inv": (reciprocal, (0.5, 1.0)),

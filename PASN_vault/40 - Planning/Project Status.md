@@ -12,8 +12,12 @@ updated: 2026-07-25
 - ✅ **Phase 2** — 함수근사 검증, Table X/VII **재현·능가** ([[Table X Reproduction]], [[Table VII and SiLU]])
 - ✅ **Phase 3** — 스파이크 FP-mult/Softmax/LayerNorm 조립·검증 ([[Phase 3 Verification]])
 - 🟡 **Phase 4** — 변환 프레임워크(calibrate→build→replace) + 토이 Transformer 배선
-  **CPU 완결·검증** ([[Phase 4 - Conversion Framework]]). 남은 것: 4d 실 모델
-  sanity(GPT-2×WikiText-2, vast.ai) + 4e 발화율 계측.
+  **CPU 완결·검증** ([[Phase 4 - Conversion Framework]]). MBE↔PASN 전방위 비교 완료.
+  **4d GPT-2 배선 프리앱 완료**: `src/mbe/gpt2_convert.py`가 GPT-2 GELU+LayerNorm를
+  스파이킹(MBE/PASN)으로 변환 — CPU 스모크 near-lossless(≈0% Δppl, 양 backend).
+  실 perplexity는 vast.ai(`experiments/gpt2_wikitext.py`, `VASTAI_GPT2.md`).
+  attention(QK^T/softmax/AV) 스파이킹은 Stage 2. 남은 것: 4e 발화율 계측.
+- **Git**: repo화 완료(main, 초기 커밋). GPT-2 프리앱은 미커밋(사용자 승인 대기).
 - ⬜ **Phase 5** — 전체 벤치마크 (GPU/vast.ai)
 - ⬜ **Phase 6** — 에너지 추정 + 논문 정리
 
