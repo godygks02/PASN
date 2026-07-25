@@ -71,6 +71,47 @@ def perplexity(model, ids, block, device, limit_blocks=None, batch_size=1,
     return math.exp(nll / max(ntok, 1))
 
 
+@torch.no_grad()
+def perplexity_sliding(model, ids, device, max_length, stride,
+                       limit_windows=None, progress_every=10, label="eval"):
+    """Canonical sliding-window perplexity (the HF/paper recipe).
+
+    Each token is scored once with up to ``max_length`` tokens of left context;
+    only the last ``stride`` tokens of each window contribute (the rest are
+    context, masked with -100). Non-overlapping blocks over-estimate perplexity,
+    which is why our earlier block eval gave 38 where the paper reports ~22.3 for
+    GPT-2-medium.
+    """
+    model.eval()
+    n = ids.numel()
+    specs, prev_end = [], 0
+    for begin in range(0, n, stride):
+        end = min(begin + max_length, n)
+        specs.append((begin, end, end - prev_end))
+        prev_end = end
+        if end == n:
+            break
+    if limit_windows:
+        specs = specs[:limit_windows]
+    total = len(specs)
+    nll_sum, ntok, done = 0.0, 0, 0
+    started = time.perf_counter()
+    for begin, end, trg in specs:
+        input_ids = ids[begin:end].unsqueeze(0).to(device)
+        target = input_ids.clone()
+        target[:, :-trg] = -100                    # score only the new tokens
+        loss = model(input_ids, labels=target).loss
+        nll_sum += float(loss) * trg
+        ntok += trg
+        done += 1
+        if progress_every and (done == total or done % progress_every == 0):
+            elapsed = time.perf_counter() - started
+            rate = done / max(elapsed, 1e-9)
+            print(f"  [{label}] win {done}/{total}  {rate:.2f} win/s  "
+                  f"ETA {(total - done) / max(rate, 1e-9) / 60:.1f} min", flush=True)
+    return math.exp(nll_sum / max(ntok, 1))
+
+
 def load_wikitext_ids(tokenizer, split="test"):
     from datasets import load_dataset
     # Use the canonical namespaced repository ID. The legacy shorthand
@@ -122,6 +163,13 @@ def main():
                     help="PASN bases per binade bank")
     ap.add_argument("--pasn-e-min", type=int, default=-3,
                     help="PASN smallest binade exponent (near-zero resolution)")
+    ap.add_argument("--eval-mode", choices=["sliding", "block"], default="sliding",
+                    help="sliding = canonical HF window ppl (matches the paper); "
+                         "block = fast non-overlapping (over-estimates ppl)")
+    ap.add_argument("--max-length", type=int, default=0,
+                    help="sliding-window context length (0 = model n_positions)")
+    ap.add_argument("--stride", type=int, default=512,
+                    help="sliding-window stride (tokens scored per window)")
     args = ap.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     eval_batch_size = args.eval_batch_size or (4 if device == "cuda" else 1)
@@ -140,12 +188,20 @@ def main():
                  for i in range(0, 8 * args.block, args.block)]
         block = args.block
 
-    ppl_ann = perplexity(
-        model, ids, block, device, args.limit_blocks,
-        batch_size=eval_batch_size, progress_every=args.progress_every,
-        label="ANN",
-    )
-    print(f"ANN ({args.model}) perplexity = {ppl_ann:.4f}")
+    max_length = args.max_length or getattr(model.config, "n_positions", 1024)
+
+    def eval_ppl(label):
+        if args.eval_mode == "block":
+            return perplexity(model, ids, block, device, args.limit_blocks,
+                              batch_size=eval_batch_size,
+                              progress_every=args.progress_every, label=label)
+        return perplexity_sliding(model, ids, device, max_length, args.stride,
+                                  limit_windows=args.limit_blocks,
+                                  progress_every=args.progress_every, label=label)
+
+    ppl_ann = eval_ppl("ANN")
+    print(f"ANN ({args.model}) perplexity = {ppl_ann:.4f}  "
+          f"[eval={args.eval_mode}, ctx={max_length}, stride={args.stride}]")
 
     if args.backend != "none":
         n = make_spikable(model)
@@ -166,11 +222,7 @@ def main():
         sample_batch = ids[:block].unsqueeze(0)
         costs = cv.activation_cost_report(model, sample_batch)
         print(cv.format_cost_report(costs, label=args.backend), flush=True)
-        ppl_snn = perplexity(
-            model, ids, block, device, args.limit_blocks,
-            batch_size=eval_batch_size, progress_every=args.progress_every,
-            label=f"SNN-{args.backend}",
-        )
+        ppl_snn = eval_ppl(f"SNN-{args.backend}")
         drop = 100.0 * (ppl_snn - ppl_ann) / ppl_ann
         print(f"SNN ({args.backend}) perplexity = {ppl_snn:.4f}   "
               f"(delta {drop:+.2f}%)")
