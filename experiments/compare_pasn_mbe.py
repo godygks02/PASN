@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import torch  # noqa: E402
 
-from mbe import (MBENeuron, functions, fit_model, build_pasn,  # noqa: E402
+from mbe import (MBENeuron, functions, fit_model, build_mbe_pasn,  # noqa: E402
                  spikes_per_input)
 
 # per-function (domain, e_min, e_max) for the PASN router; domains follow the
@@ -56,7 +56,7 @@ def eval_signed_mbe(name, domain, n_side, n_steps, epochs, seed):
 
 
 def eval_pasn(name, setup, n_steps, epochs, seed, **kw):
-    p = build_pasn(name, setup["domain"], e_min=setup["e_min"], e_max=setup["e_max"],
+    p = build_mbe_pasn(name, setup["domain"], e_min=setup["e_min"], e_max=setup["e_max"],
                    n_steps=n_steps, epochs=epochs, seed=seed, **kw)
     x, y, _ = functions.sample(name, m=4000, seed=seed + 1, domain=setup["domain"])
     with torch.no_grad():

@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import torch  # noqa: E402
 import torch.nn.functional as F  # noqa: E402
 
-from mbe import functions, build_pasn, spikes_per_input  # noqa: E402
+from mbe import functions, build_mbe_pasn, spikes_per_input  # noqa: E402
 from mbe import spiking_ops as so  # noqa: E402
 
 
@@ -45,7 +45,7 @@ def row(tag, mse, spikes, extra=""):
 def compare_fp_mult(hi=64.0, epochs=250):
     print(f"\n== FP multiply (identity reconstruction over [0,{hi:.0f}]) ==")
     idn_mbe = so.calibrate_identity(0.0, hi, n_basis=8, epochs=epochs)
-    idn_pasn = build_pasn("identity", (0.0, hi), e_min=0,
+    idn_pasn = build_mbe_pasn("identity", (0.0, hi), e_min=0,
                           e_max=int(hi).bit_length(), n_local=2, n_near0=2,
                           epochs=epochs)
     # primitive: reconstruct identity on [0,hi]
@@ -69,9 +69,9 @@ def compare_softmax(epochs=250):
     # MBE primitives
     sm_mbe = so.build_softmax(logits, n_basis=8, spike_mult=True)
     # PASN primitives
-    exp_p = build_pasn("exp2", (0.0, 1.0), e_min=-3, e_max=0, n_local=2, n_near0=4, epochs=epochs)
-    inv_p = build_pasn("inv", (0.5, 1.0), e_min=-2, e_max=0, n_local=2, n_near0=2, epochs=epochs)
-    id_p = build_pasn("identity", (0.0, 1.0), e_min=-3, e_max=0, n_local=2, n_near0=2, epochs=epochs)
+    exp_p = build_mbe_pasn("exp2", (0.0, 1.0), e_min=-3, e_max=0, n_local=2, n_near0=4, epochs=epochs)
+    inv_p = build_mbe_pasn("inv", (0.5, 1.0), e_min=-2, e_max=0, n_local=2, n_near0=2, epochs=epochs)
+    id_p = build_mbe_pasn("identity", (0.0, 1.0), e_min=-3, e_max=0, n_local=2, n_near0=2, epochs=epochs)
     sm_pasn = so.SpikingSoftmax(exp_p, inv_p, id_p, spike_mult=True)
     for tag, sm, expn in [("MBE softmax", sm_mbe, sm_mbe.exp),
                           ("PASN softmax", sm_pasn, exp_p)]:
@@ -89,10 +89,10 @@ def _build_ln_pasn(sample_x, eps=1e-5, epochs=250):
     dev_max = float(dev.abs().max()) * 1.1 + 1e-3
     var = (dev * dev).mean(dim=-1, keepdim=True) + eps
     istd_max = float((1.0 / var.sqrt()).max()) * 1.1 + 1e-3
-    rsqrt = build_pasn("invsqrt", (0.5, 2.0), e_min=-2, e_max=1, n_local=2, n_near0=4, epochs=epochs)
-    id_dev = build_pasn("identity", (0.0, dev_max), e_min=-2,
+    rsqrt = build_mbe_pasn("invsqrt", (0.5, 2.0), e_min=-2, e_max=1, n_local=2, n_near0=4, epochs=epochs)
+    id_dev = build_mbe_pasn("identity", (0.0, dev_max), e_min=-2,
                         e_max=int(max(dev_max, 2)).bit_length(), n_local=2, n_near0=2, epochs=epochs)
-    id_istd = build_pasn("identity", (0.0, istd_max), e_min=-2,
+    id_istd = build_mbe_pasn("identity", (0.0, istd_max), e_min=-2,
                          e_max=int(max(istd_max, 2)).bit_length(), n_local=2, n_near0=2, epochs=epochs)
     return so.SpikingLayerNorm(rsqrt, id_dev, id_istd, eps=eps, spike_mult=True), rsqrt
 

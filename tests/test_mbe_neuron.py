@@ -14,7 +14,10 @@ import torch.nn.functional as F  # noqa: E402
 
 from mbe import (  # noqa: E402
     MBENeuron, MBEConfig, SignedMBENeuron, functions, fit_function, fit_model,
-    solve_readout, spiking_ops, PrefixRouter, PASNNeuron, build_pasn,
+    solve_readout, spiking_ops, PASNNeuron, build_pasn, sar_encode,
+)
+from mbe.mbe_pasn import (  # noqa: E402
+    PrefixRouter as MBEPrefixRouter, MBEPASNNeuron, build_mbe_pasn,
 )
 
 
@@ -57,50 +60,46 @@ def test_decay_off_is_constant_kernel():
         assert torch.allclose(k[0], k[-1])
 
 
-def test_r1_reduces_to_single_bank():
-    """PASN with R=1 is bit-identical to the MBE neuron (PASN_method.md section 13).
+def test_mbe_pasn_r1_reduces_to_single_bank():
+    """MBE-PASN with R=1 is bit-identical to the MBE neuron.
 
     A single-binade, single-sign router sends every input to one magnitude bank
-    fed the magnitude ``|x|``. With ``x >= 0`` and the bank's ``x_min/x_scale``
-    matching, the PASN output must equal that MBE neuron's output exactly.
+    fed ``|x|``. With ``x >= 0`` and the bank's ``x_min/x_scale`` matching, the
+    MBE-PASN output must equal that MBE neuron's output exactly.
     """
     torch.manual_seed(0)
-    # domain [1,2): router has one active magnitude binade at e=0 (plus an unused
-    # near-zero bank), so all inputs route to a single MBE bank.
-    router = PrefixRouter(1.0, 2.0, e_min=0, e_max=1)
+    router = MBEPrefixRouter(1.0, 2.0, e_min=0, e_max=1)
     assert router.signed is False
     mbe = MBENeuron(MBEConfig(n_basis=4, n_steps=16, x_min=1.0, x_scale=1.0))
     dummy = MBENeuron(MBEConfig(n_basis=1, n_steps=16))     # near-zero bank, unused
-    pasn = PASNNeuron(router, [dummy, mbe])
+    pasn = MBEPASNNeuron(router, [dummy, mbe])
     x = torch.linspace(1.0, 2.0, 50)[:-1]                   # in [1,2)
     assert torch.equal(pasn(x), mbe(x))
-    # confirm only the single magnitude bank is ever used
     usage = pasn.bank_usage(x)
     assert usage[0] == 0 and usage[1] == len(x)
 
 
-def test_prefix_router_routes_by_binade():
+def test_mbe_pasn_router_routes_by_binade():
     """Router places inputs in the correct sign+exponent binade, near-zero first."""
-    r = PrefixRouter(-8.0, 8.0, e_min=-2, e_max=3)          # near0 span = 0.25
+    r = MBEPrefixRouter(-8.0, 8.0, e_min=-2, e_max=3)       # near0 span = 0.25
     x = torch.tensor([0.1, -0.1, 1.5, 3.0, -1.5, -6.0])
     idx = r.route(x)
     assert int(idx[0]) == 0 and int(idx[1]) == 0            # |x|<0.25 -> near0
-    # same-binade same-sign share a bank; different sign / exponent differ
     assert int(idx[2]) == r.key_to_idx[(1.0, 0)]            # 1.5 in [1,2)
     assert int(idx[3]) == r.key_to_idx[(1.0, 1)]            # 3.0 in [2,4)
     assert int(idx[4]) == r.key_to_idx[(-1.0, 0)]           # -1.5 in [-2,-1)
     assert int(idx[5]) == r.key_to_idx[(-1.0, 2)]           # -6.0 in [-8,-4)
 
 
-def test_pasn_dispatch_matches_per_bank():
-    """PASN forward == each element routed through its own bank (dispatch check)."""
+def test_mbe_pasn_dispatch_matches_per_bank():
+    """MBE-PASN forward == each element routed through its own bank."""
     torch.manual_seed(0)
-    router = PrefixRouter(-4.0, 4.0, e_min=-1, e_max=2)
+    router = MBEPrefixRouter(-4.0, 4.0, e_min=-1, e_max=2)
     banks = [MBENeuron(MBEConfig(n_basis=2, n_steps=8,
                                  x_min=b.get("x_min", -0.5),
                                  x_scale=b.get("x_scale", 1.0)))
              for b in router.banks]
-    pasn = PASNNeuron(router, banks)
+    pasn = MBEPASNNeuron(router, banks)
     x = torch.linspace(-4.0, 4.0, 60)[:-1]
     out = pasn(x)
     idx = router.route(x)
@@ -109,6 +108,32 @@ def test_pasn_dispatch_matches_per_bank():
         spec = router.banks[bi]
         feed = xi if spec["kind"] == "near0" else xi.abs()
         assert torch.allclose(out[i], banks[bi](feed.reshape(1)).reshape(()))
+
+
+# -- standalone PASN (successive-approximation) neuron ---------------------
+
+def test_pasn_sar_encode_reconstructs():
+    """SAR code reconstructs rho to T-bit precision; spikes = bit count."""
+    rho = torch.tensor([0.0, 0.5, 0.75, 0.1, 0.999])
+    recon, spikes = sar_encode(rho, T=10)
+    assert (recon - rho).abs().max() < 2 ** -9
+    # 0.5 -> one spike; 0.75 -> two spikes (0.5 + 0.25)
+    assert int(spikes[1]) == 1 and int(spikes[2]) == 2
+
+
+def test_pasn_beats_global_on_gelu_near_zero_at_fewer_spikes():
+    """The standalone PASN resolves GELU near zero (where a global neuron floors
+    at ~0.07) with a low near-zero error and few spikes -- its whole point."""
+    torch.manual_seed(0)
+    p = build_pasn("gelu", (-14.3, 10.9), e_min=-6, e_max=4, T=6, order=1)
+    x = (torch.randn(4000) * 3.0).clamp(-14.3, 10.9)
+    y = functions.gelu(x)
+    with torch.no_grad():
+        pred = p(x)
+    near0 = x.abs() < 3
+    assert (pred[near0] - y[near0]).abs().max() < 0.05     # global MBE floored ~0.07
+    assert p.mean_spikes(x) < 6                            # vs MBE ~35 spikes/in
+    assert p.stored_params() < 200                         # tiny readout-only memory
 
 
 def test_can_fit_monotone_function():

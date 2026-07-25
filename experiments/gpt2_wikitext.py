@@ -135,7 +135,8 @@ def build_smoke():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--backend", choices=["none", "mbe", "pasn"], default="none")
+    ap.add_argument("--backend", choices=["none", "mbe", "mbe_pasn"],
+                    default="none")
     ap.add_argument("--model", default="gpt2")
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--block", type=int, default=512)

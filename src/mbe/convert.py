@@ -27,7 +27,7 @@ import torch.nn as nn
 
 from . import functions
 from . import spiking_ops as so
-from .pasn import build_pasn
+from .mbe_pasn import build_mbe_pasn
 
 
 # --------------------------------------------------------------------------
@@ -325,8 +325,9 @@ class ConvertConfig:
     margin: float = 0.05             # range padding for identity/activation fits
     # Neuron backend used consistently by activation and LayerNorm primitives
     # (and activation*activation matmul where a model exposes MatMulAA markers).
-    # "mbe" = one global neuron; "pasn" = FP-prefix binade banks. GPT-2 Stage 1
-    # converts GELU + LayerNorm only; functional attention/Softmax stays exact.
+    # "mbe" = one global MBE neuron; "mbe_pasn" = FP-prefix binade banks of MBE
+    # neurons. GPT-2 Stage 1 converts GELU + LayerNorm only; functional
+    # attention/Softmax stays exact.
     backend: str = "mbe"
     pasn_n_local: int = 2
     pasn_e_min: int = -3
@@ -351,18 +352,18 @@ def _erange(lo, hi, e_min):
     return e_min, max(int(math.ceil(math.log2(maxmag))), e_min + 1)
 
 
-def _pasn_identity(hi, cfg: ConvertConfig, fit_device):
-    """PASN identity over ``[0, hi]`` for the spike-driven matmul operands."""
+def _mbe_pasn_identity(hi, cfg: ConvertConfig, fit_device):
+    """MBE-PASN identity over ``[0, hi]`` for the spike-driven matmul operands."""
     e_min, e_max = _erange(0.0, hi, cfg.pasn_e_min)
-    return build_pasn("identity", (0.0, hi), e_min=e_min, e_max=e_max,
-                      n_local=cfg.pasn_n_local, n_near0=cfg.pasn_n_local,
-                      n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
-                      device=fit_device, verbose=cfg.verbose_fits)
+    return build_mbe_pasn("identity", (0.0, hi), e_min=e_min, e_max=e_max,
+                          n_local=cfg.pasn_n_local, n_near0=cfg.pasn_n_local,
+                          n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
+                          device=fit_device, verbose=cfg.verbose_fits)
 
 
-def _pasn_primitive(name, domain, e_min, e_max, cfg, fit_device,
-                    n_near0=None):
-    return build_pasn(
+def _mbe_pasn_primitive(name, domain, e_min, e_max, cfg, fit_device,
+                        n_near0=None):
+    return build_mbe_pasn(
         name, domain, e_min=e_min, e_max=e_max,
         n_local=cfg.pasn_n_local,
         n_near0=n_near0 or cfg.pasn_n_local,
@@ -377,12 +378,12 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
         lo, hi = float(s.min()), float(s.max())
         span = max(hi - lo, 1e-6)
         lo, hi = lo - cfg.margin * span, hi + cfg.margin * span
-        if cfg.backend == "pasn":
+        if cfg.backend == "mbe_pasn":
             e_min, e_max = _erange(lo, hi, cfg.pasn_e_min)
-            neuron = build_pasn(mod.kind, (lo, hi), e_min=e_min, e_max=e_max,
-                                n_local=cfg.pasn_n_local, n_near0=cfg.pasn_n_local + 2,
-                                n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
-                                device=fit_device, verbose=cfg.verbose_fits)
+            neuron = build_mbe_pasn(mod.kind, (lo, hi), e_min=e_min, e_max=e_max,
+                                    n_local=cfg.pasn_n_local, n_near0=cfg.pasn_n_local + 2,
+                                    n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
+                                    device=fit_device, verbose=cfg.verbose_fits)
             return _SpikingActModule(so.SpikingActivation(neuron))
         act = so.build_activation(mod.kind, slots[0].sample,
                                   n_basis=cfg.n_basis_act, n_steps=cfg.n_steps,
@@ -404,17 +405,17 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
         flat = slots[0].sample
         flat = flat[: (flat.numel() // D) * D]        # trim to a multiple of D
         sample = flat.reshape(-1, D)
-        if cfg.backend == "pasn":
+        if cfg.backend == "mbe_pasn":
             mu = sample.mean(dim=-1, keepdim=True)
             dev = sample - mu
             dev_max = float(dev.abs().max()) * 1.1 + 1e-3
             var = (dev * dev).mean(dim=-1, keepdim=True) + mod.eps
             istd_max = float((1.0 / var.sqrt()).max()) * 1.1 + 1e-3
-            rsqrt = _pasn_primitive(
+            rsqrt = _mbe_pasn_primitive(
                 "invsqrt", (0.5, 2.0), -2, 1, cfg, fit_device, n_near0=4
             )
-            id_dev = _pasn_identity(dev_max, cfg, fit_device)
-            id_istd = _pasn_identity(istd_max, cfg, fit_device)
+            id_dev = _mbe_pasn_identity(dev_max, cfg, fit_device)
+            id_istd = _mbe_pasn_identity(istd_max, cfg, fit_device)
             ln = so.SpikingLayerNorm(
                 rsqrt, id_dev, id_istd, eps=mod.eps,
                 spike_mult=cfg.spike_mult
@@ -431,9 +432,9 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
     if kind == "matmul":
         hi_a = slots[0].absmax * (1.0 + cfg.margin) + 1e-6
         hi_b = slots[1].absmax * (1.0 + cfg.margin) + 1e-6
-        if cfg.backend == "pasn":
-            idn = _pasn_identity(hi_a, cfg, fit_device)
-            idn2 = _pasn_identity(hi_b, cfg, fit_device)
+        if cfg.backend == "mbe_pasn":
+            idn = _mbe_pasn_identity(hi_a, cfg, fit_device)
+            idn2 = _mbe_pasn_identity(hi_b, cfg, fit_device)
         else:
             idn = so.calibrate_identity(0.0, hi_a, n_basis=cfg.n_basis_mm,
                                         n_steps=cfg.n_steps, epochs=cfg.epochs,
@@ -529,7 +530,7 @@ def activation_cost_report(model: nn.Module, batch, keep: int = 20_000) -> dict:
     timesteps, spikes per input). Because MBE and PASN store different numbers of
     bases, these let the comparison be made at matched cost, not just accuracy.
     """
-    from .pasn import neuron_cost
+    from .metrics import neuron_cost
     acts = [(n, m) for n, m in model.named_modules()
             if isinstance(m, _SpikingActModule)]
     if not acts:

@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import torch  # noqa: E402
 
 from mbe import convert as cv  # noqa: E402
-from mbe.pasn import spikes_per_input  # noqa: E402
+from mbe.metrics import spikes_per_input  # noqa: E402
 from mbe.toy import make_toy, make_inputs  # noqa: E402
 
 
@@ -53,7 +53,7 @@ def main():
     print(f"toy: {n_layers} layers, d={D}   ANN mean|y|={ann.abs().mean():.4f}\n")
     print(f"{'backend':10s} {'fwd rel|err|':>13s} {'GELU spikes/in':>15s}")
     print("-" * 42)
-    for backend in ["mbe", "pasn"]:
+    for backend in ["mbe", "mbe_pasn"]:
         m, act_spikes = convert_backend(model, calib, backend, epochs=200)
         with torch.no_grad():
             out = m(test)
