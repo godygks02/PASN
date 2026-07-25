@@ -224,7 +224,7 @@ class MBENeuron(nn.Module):
         x_flat = x.reshape(-1)
         _, r, vth = self._kernels()
         u = self._normalise(x_flat).unsqueeze(1).expand(-1, N).contiguous()
-        S = torch.zeros(x_flat.shape[0], N, T, dtype=u.dtype)
+        S = torch.zeros(x_flat.shape[0], N, T, device=u.device, dtype=u.dtype)
         for t in range(T):
             s = (u - vth[t] >= 0).to(u.dtype)
             S[:, :, t] = s

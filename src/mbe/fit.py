@@ -47,7 +47,12 @@ def solve_readout(model, x, y, ridge: float = 1e-8):
     feats = model.readout_features(x)               # (M, K)
     has_bias = getattr(model, "bias", None) is not None
     if has_bias:
-        feats = torch.cat([feats, torch.ones(feats.shape[0], 1, dtype=feats.dtype)], 1)
+        feats = torch.cat([
+            feats,
+            torch.ones(
+                feats.shape[0], 1, device=feats.device, dtype=feats.dtype
+            ),
+        ], 1)
     # Ridge-regularised normal equations: (F^T F + lambda I) c = F^T y. K is tiny
     # (<= ~9), so this is cheap, and it avoids the MKL ``gelsd`` lstsq path that is
     # buggy for some shapes on Windows. The Tikhonov term keeps it well-posed even
@@ -56,7 +61,7 @@ def solve_readout(model, x, y, ridge: float = 1e-8):
     K = feats.shape[1]
     G = feats.t() @ feats                            # (K, K)
     rhs = feats.t() @ y                              # (K,)
-    eye = torch.eye(K, dtype=feats.dtype)
+    eye = torch.eye(K, device=feats.device, dtype=feats.dtype)
     lam = max(ridge, 0.0)
     for _ in range(6):
         try:

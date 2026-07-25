@@ -214,6 +214,15 @@ def test_phase4_conversion_replaces_only_nonlinearities():
     # weight matmuls stay as ordinary Linear
     assert isinstance(snn.get_submodule("blocks.0.attn.q"), nn.Linear)
     assert isinstance(snn.get_submodule("blocks.0.fc1"), nn.Linear)
+    # The callable primitive containers must themselves be nn.Modules so their
+    # internal MBE/PASN neurons follow model.to(device/dtype) on GPU conversion.
+    assert isinstance(snn.get_submodule("blocks.0.act").act, nn.Module)
+    assert isinstance(snn.get_submodule("blocks.0.attn.softmax").sm, nn.Module)
+    assert isinstance(snn.get_submodule("blocks.0.ln1").ln, nn.Module)
+    snn.to(dtype=torch.float64)
+    assert snn.get_submodule("blocks.0.act").act.neuron.w.dtype == torch.float64
+    assert snn.get_submodule("blocks.0.attn.softmax").sm.exp.w.dtype == torch.float64
+    assert snn.get_submodule("blocks.0.ln1").ln.rsqrt.w.dtype == torch.float64
 
 
 def test_phase4_spike_path_matches_exact_wiring():

@@ -152,8 +152,9 @@ def multiply_outer(idn: MBENeuron, x1: float, x2: float) -> float:
     the paper's Hadamard-product formulation.
     """
     a = idn.intensities().reshape(-1)               # (K,)  precomputed
-    b1 = idn.spike_train(torch.tensor([float(x1)])).reshape(-1)  # (K,)
-    b2 = idn.spike_train(torch.tensor([float(x2)])).reshape(-1)
+    sample = dict(device=a.device, dtype=a.dtype)
+    b1 = idn.spike_train(torch.tensor([float(x1)], **sample)).reshape(-1)  # (K,)
+    b2 = idn.spike_train(torch.tensor([float(x2)], **sample)).reshape(-1)
     D = torch.outer(a, a)                            # (K, K) precomputable
     S = torch.outer(b1, b2)                          # (K, K) binary
     return float((D * S).sum())
@@ -163,7 +164,7 @@ def multiply_outer(idn: MBENeuron, x1: float, x2: float) -> float:
 # Spike-driven activation (GELU / SiLU / Tanh) -- a single calibrated MBE neuron
 # --------------------------------------------------------------------------
 
-class SpikingActivation:
+class SpikingActivation(torch.nn.Module):
     """Element-wise activation approximated by one MBE neuron (Phase 2).
 
     The neuron's decoded output ``f_hat(x) = sum_n w_n o_n(T)`` is itself the
@@ -173,10 +174,11 @@ class SpikingActivation:
     """
 
     def __init__(self, neuron: MBENeuron):
+        super().__init__()
         self.neuron = neuron
 
     @torch.no_grad()
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.neuron(x)
 
 
@@ -202,7 +204,7 @@ def build_activation(name: str, sample_x: torch.Tensor, n_basis: int = 4,
 _LOG2E = 1.4426950408889634         # log2(e)
 
 
-class SpikingSoftmax:
+class SpikingSoftmax(torch.nn.Module):
     """Softmax decomposed into exp / sum / reciprocal / FP-multiply.
 
     * exp:  e^x = 2^(x log2 e) = 2^floor * 2^frac; the integer power is an exact
@@ -215,13 +217,14 @@ class SpikingSoftmax:
 
     def __init__(self, exp_neuron: MBENeuron, inv_neuron: MBENeuron,
                  id_neuron: MBENeuron, spike_mult: bool = True):
+        super().__init__()
         self.exp = exp_neuron          # 2^x on [0, 1]
         self.inv = inv_neuron          # 1/x on [0.5, 1]
         self.idn = id_neuron           # identity on [0, 1] (for the final mult)
         self.spike_mult = spike_mult
 
     @torch.no_grad()
-    def __call__(self, x: torch.Tensor, dim: int = -1) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, dim: int = -1) -> torch.Tensor:
         # numerical-stability shift (does not change softmax); makes x_m <= 0
         x_m = x - x.max(dim=dim, keepdim=True).values
         z = x_m * _LOG2E
@@ -244,7 +247,7 @@ class SpikingSoftmax:
 # Spike-driven LayerNorm  (Fig. 5(c))
 # --------------------------------------------------------------------------
 
-class SpikingLayerNorm:
+class SpikingLayerNorm(torch.nn.Module):
     """LayerNorm decomposed into square / inverse-sqrt / FP-multiply.
 
     LN(x) = γ (x-μ) / sqrt( Σ(x-μ)^2 / n + ε ) + β
@@ -261,6 +264,7 @@ class SpikingLayerNorm:
 
     def __init__(self, invsqrt_neuron: MBENeuron, id_dev: MBENeuron,
                  id_istd: MBENeuron, eps: float = 1e-5, spike_mult: bool = True):
+        super().__init__()
         self.rsqrt = invsqrt_neuron    # 1/sqrt(x) on [0.5, 2]
         self.id_dev = id_dev           # identity over the deviation range
         self.id_istd = id_istd         # identity over the inverse-std range
@@ -276,7 +280,7 @@ class SpikingLayerNorm:
         return sq.sum(dim=-1, keepdim=True) / n
 
     @torch.no_grad()
-    def __call__(self, x, weight=None, bias=None):
+    def forward(self, x, weight=None, bias=None):
         n = x.shape[-1]
         mu = x.mean(dim=-1, keepdim=True)
         dev = x - mu

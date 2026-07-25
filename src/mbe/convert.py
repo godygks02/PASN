@@ -151,11 +151,15 @@ class _Range:
         self.lo = min(self.lo, float(t.min()))
         self.hi = max(self.hi, float(t.max()))
         self.absmax = max(self.absmax, float(t.abs().max()))
-        if self.sample is None or self.sample.numel() < keep:
-            flat = t.reshape(-1)
-            take = flat[:keep] if self.sample is None else torch.cat(
-                [self.sample, flat])[:keep]
-            self.sample = take.clone()
+        have = 0 if self.sample is None else self.sample.numel()
+        if have < keep:
+            # Calibration may run on CUDA, but primitive fitting is intentionally
+            # performed on CPU. Copy only the retained prefix so hooks do not keep
+            # GPU tensors alive or later mix CUDA samples with CPU-fitted neurons.
+            take = t.reshape(-1)[:keep - have].to(device="cpu").clone()
+            self.sample = take if self.sample is None else torch.cat(
+                [self.sample, take]
+            )
 
 
 class CalibrationRecorder:
@@ -209,10 +213,47 @@ def calibrate(model: nn.Module, batches, keep: int = 20_000) -> CalibrationRecor
     rec = CalibrationRecorder(model, keep=keep)
     was_training = model.training
     model.eval()
+    device = _module_device(model)
     for xb in batches:
-        model(xb)
+        xb = _batch_to_device(xb, device)
+        if isinstance(xb, dict):
+            model(**xb)
+        elif isinstance(xb, (tuple, list)):
+            model(*xb)
+        else:
+            model(xb)
     model.train(was_training)
     return rec
+
+
+def _module_device(model: nn.Module) -> torch.device:
+    """Execution device of a module, falling back to CPU for parameterless models."""
+    first = next(model.parameters(), None)
+    if first is not None:
+        return first.device
+    first = next(model.buffers(), None)
+    return first.device if first is not None else torch.device("cpu")
+
+
+def _batch_to_device(batch, device: torch.device):
+    """Move tensor leaves in a calibration batch to the model's device."""
+    if torch.is_tensor(batch):
+        return batch.to(device=device)
+    if isinstance(batch, dict):
+        return {k: _batch_to_device(v, device) for k, v in batch.items()}
+    if isinstance(batch, tuple):
+        return tuple(_batch_to_device(v, device) for v in batch)
+    if isinstance(batch, list):
+        return [_batch_to_device(v, device) for v in batch]
+    return batch
+
+
+def _module_device_dtype(model: nn.Module) -> tuple[torch.device, torch.dtype]:
+    """Device and floating dtype used by newly inserted conversion modules."""
+    for tensor in list(model.parameters()) + list(model.buffers()):
+        if tensor.is_floating_point():
+            return tensor.device, tensor.dtype
+    return _module_device(model), torch.float32
 
 
 # --------------------------------------------------------------------------
@@ -322,6 +363,7 @@ def convert(model: nn.Module, recorder: CalibrationRecorder,
     kinds (``{"layernorm"}`` etc.) so each op's contribution can be isolated.
     """
     cfg = cfg or ConvertConfig()
+    device, dtype = _module_device_dtype(model)
     for name, kind in list(recorder.kinds.items()):
         if only is not None and kind not in only:
             continue
@@ -330,6 +372,9 @@ def convert(model: nn.Module, recorder: CalibrationRecorder,
             continue                      # never exercised during calibration
         mod = model.get_submodule(name)
         new = _build_replacement(kind, mod, slots, cfg)
+        # Builders fit small one-dimensional primitives on CPU. Move every
+        # registered neuron/buffer to the ANN's execution device before insertion.
+        new.to(device=device, dtype=dtype)
         _set_submodule(model, name, new)
         if verbose:
             rng = ", ".join(f"[{s.lo:.3g},{s.hi:.3g}]" for s in slots)
