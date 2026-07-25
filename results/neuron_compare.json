@@ -1,0 +1,258 @@
+[
+  {
+    "fn": "gelu",
+    "model": "MBE N=4",
+    "family": "mbe",
+    "mse": 0.13175906240940094,
+    "spikes": 18.771,
+    "params": 25
+  },
+  {
+    "fn": "gelu",
+    "model": "MBE N=8",
+    "family": "mbe",
+    "mse": 0.11842226982116699,
+    "spikes": 32.58775,
+    "params": 49
+  },
+  {
+    "fn": "gelu",
+    "model": "SignedMBE 4x2",
+    "family": "signed",
+    "mse": 0.000378984899725765,
+    "spikes": 45.51675,
+    "params": 49
+  },
+  {
+    "fn": "gelu",
+    "model": "MBE-PASN nloc=2",
+    "family": "mbe_pasn",
+    "mse": 1.6490348571096547e-05,
+    "spikes": 18.21525,
+    "params": 181
+  },
+  {
+    "fn": "gelu",
+    "model": "PASN T=4 o=1",
+    "family": "pasn",
+    "mse": 0.0015763492556288838,
+    "spikes": 1.9832500219345093,
+    "params": 42
+  },
+  {
+    "fn": "gelu",
+    "model": "PASN T=6 o=1",
+    "family": "pasn",
+    "mse": 0.00010882574133574963,
+    "spikes": 2.990999937057495,
+    "params": 42
+  },
+  {
+    "fn": "gelu",
+    "model": "PASN T=6 o=2",
+    "family": "pasn",
+    "mse": 9.963013144442812e-05,
+    "spikes": 2.990999937057495,
+    "params": 63
+  },
+  {
+    "fn": "silu",
+    "model": "MBE N=4",
+    "family": "mbe",
+    "mse": 0.09942431002855301,
+    "spikes": 19.3415,
+    "params": 25
+  },
+  {
+    "fn": "silu",
+    "model": "MBE N=8",
+    "family": "mbe",
+    "mse": 0.19727730751037598,
+    "spikes": 54.77275,
+    "params": 49
+  },
+  {
+    "fn": "silu",
+    "model": "SignedMBE 4x2",
+    "family": "signed",
+    "mse": 0.0015142129268497229,
+    "spikes": 31.70675,
+    "params": 49
+  },
+  {
+    "fn": "silu",
+    "model": "MBE-PASN nloc=2",
+    "family": "mbe_pasn",
+    "mse": 4.1496154153719544e-05,
+    "spikes": 13.08025,
+    "params": 181
+  },
+  {
+    "fn": "silu",
+    "model": "PASN T=4 o=1",
+    "family": "pasn",
+    "mse": 0.0016675980295985937,
+    "spikes": 1.9832500219345093,
+    "params": 42
+  },
+  {
+    "fn": "silu",
+    "model": "PASN T=6 o=1",
+    "family": "pasn",
+    "mse": 0.00013323216990102082,
+    "spikes": 2.990999937057495,
+    "params": 42
+  },
+  {
+    "fn": "silu",
+    "model": "PASN T=6 o=2",
+    "family": "pasn",
+    "mse": 0.00010521490185055882,
+    "spikes": 2.990999937057495,
+    "params": 63
+  },
+  {
+    "fn": "inv",
+    "model": "MBE N=4",
+    "family": "mbe",
+    "mse": 4.2035528167616576e-05,
+    "spikes": 29.3275,
+    "params": 25
+  },
+  {
+    "fn": "inv",
+    "model": "MBE N=8",
+    "family": "mbe",
+    "mse": 1.2005135431536473e-05,
+    "spikes": 70.0545,
+    "params": 49
+  },
+  {
+    "fn": "inv",
+    "model": "MBE-PASN nloc=2",
+    "family": "mbe_pasn",
+    "mse": 0.0002392314054304734,
+    "spikes": 8.15425,
+    "params": 51
+  },
+  {
+    "fn": "inv",
+    "model": "PASN T=4 o=1",
+    "family": "pasn",
+    "mse": 0.0027618538588285446,
+    "spikes": 2.015749931335449,
+    "params": 14
+  },
+  {
+    "fn": "inv",
+    "model": "PASN T=6 o=1",
+    "family": "pasn",
+    "mse": 0.0024721184745430946,
+    "spikes": 3.0144999027252197,
+    "params": 14
+  },
+  {
+    "fn": "inv",
+    "model": "PASN T=6 o=2",
+    "family": "pasn",
+    "mse": 9.976136061595753e-05,
+    "spikes": 3.0144999027252197,
+    "params": 21
+  },
+  {
+    "fn": "exp2",
+    "model": "MBE N=4",
+    "family": "mbe",
+    "mse": 5.489940303959884e-05,
+    "spikes": 20.15175,
+    "params": 25
+  },
+  {
+    "fn": "exp2",
+    "model": "MBE N=8",
+    "family": "mbe",
+    "mse": 1.5488740245928057e-05,
+    "spikes": 64.48825,
+    "params": 49
+  },
+  {
+    "fn": "exp2",
+    "model": "MBE-PASN nloc=2",
+    "family": "mbe_pasn",
+    "mse": 1.1928134881600272e-05,
+    "spikes": 12.61825,
+    "params": 77
+  },
+  {
+    "fn": "exp2",
+    "model": "PASN T=4 o=1",
+    "family": "pasn",
+    "mse": 9.308623702963814e-05,
+    "spikes": 2.0255000591278076,
+    "params": 14
+  },
+  {
+    "fn": "exp2",
+    "model": "PASN T=6 o=1",
+    "family": "pasn",
+    "mse": 3.4487831726437435e-05,
+    "spikes": 3.0264999866485596,
+    "params": 14
+  },
+  {
+    "fn": "exp2",
+    "model": "PASN T=6 o=2",
+    "family": "pasn",
+    "mse": 3.8671487345709465e-06,
+    "spikes": 3.0264999866485596,
+    "params": 21
+  },
+  {
+    "fn": "invsqrt",
+    "model": "MBE N=4",
+    "family": "mbe",
+    "mse": 2.4691829821676947e-05,
+    "spikes": 47.07375,
+    "params": 25
+  },
+  {
+    "fn": "invsqrt",
+    "model": "MBE N=8",
+    "family": "mbe",
+    "mse": 8.041733963182196e-06,
+    "spikes": 77.337,
+    "params": 49
+  },
+  {
+    "fn": "invsqrt",
+    "model": "MBE-PASN nloc=2",
+    "family": "mbe_pasn",
+    "mse": 2.2483385691884905e-05,
+    "spikes": 6.79125,
+    "params": 64
+  },
+  {
+    "fn": "invsqrt",
+    "model": "PASN T=4 o=1",
+    "family": "pasn",
+    "mse": 0.00019619916565716267,
+    "spikes": 2.006500005722046,
+    "params": 16
+  },
+  {
+    "fn": "invsqrt",
+    "model": "PASN T=6 o=1",
+    "family": "pasn",
+    "mse": 0.0001630478072911501,
+    "spikes": 3.0360000133514404,
+    "params": 16
+  },
+  {
+    "fn": "invsqrt",
+    "model": "PASN T=6 o=2",
+    "family": "pasn",
+    "mse": 5.948871148575563e-06,
+    "spikes": 3.0360000133514404,
+    "params": 24
+  }
+]

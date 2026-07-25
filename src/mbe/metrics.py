@@ -54,3 +54,19 @@ def neuron_cost(neuron, x: torch.Tensor) -> dict:
 def spikes_per_input(neuron, x: torch.Tensor) -> float:
     """Mean spikes per input element for any neuron type (unified cost meter)."""
     return neuron_cost(neuron, x)["spikes"]
+
+
+@torch.no_grad()
+def neuron_params(neuron) -> int:
+    """Stored floating-point parameters (memory) for any neuron type.
+
+    PASN stores only per-bank readout coefficients (the SAR thresholds are fixed
+    constants); MBE / signed-MBE / MBE-PASN store learned spike-dynamics + readout.
+    """
+    from .mbe_pasn import MBEPASNNeuron
+    from .pasn import PASNNeuron
+    if isinstance(neuron, PASNNeuron):
+        return int(neuron.W.numel())
+    if isinstance(neuron, MBEPASNNeuron):
+        return int(sum(b.num_learnable() for b in neuron.bank_mods))
+    return int(neuron.num_learnable())   # MBE and signed-MBE
