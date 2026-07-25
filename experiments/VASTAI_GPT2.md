@@ -21,9 +21,13 @@ pip install -r requirements-vastai.txt        # torch(CUDA) assumed from the ima
 # baseline ANN perplexity (sanity)
 python experiments/gpt2_wikitext.py --backend none --model gpt2
 
-# MBE-converted and PASN-converted perplexity
-python experiments/gpt2_wikitext.py --backend mbe  --model gpt2 --epochs 300
-python experiments/gpt2_wikitext.py --backend pasn --model gpt2 --epochs 300
+# Same Stage-1 scope, two independent runs:
+#   MBE run  = GELU(MBE)  + LayerNorm primitives(MBE)
+#   PASN run = GELU(PASN) + LayerNorm primitives(PASN)
+python experiments/gpt2_wikitext.py --backend mbe  --model gpt2 --epochs 300 \
+  --fit-device cuda --convert-ops both --eval-batch-size 4
+python experiments/gpt2_wikitext.py --backend pasn --model gpt2 --epochs 300 \
+  --fit-device cuda --convert-ops both --eval-batch-size 4
 ```
 Conversion fitting defaults to the model device, so on a CUDA instance the PASN
 banks and MBE primitives are optimized on the GPU. The script prints each module

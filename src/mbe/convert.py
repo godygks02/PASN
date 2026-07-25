@@ -323,10 +323,10 @@ class ConvertConfig:
     seed: int = 0
     spike_mult: bool = True          # spike-driven FP mult inside SM/LN/MatMul
     margin: float = 0.05             # range padding for identity/activation fits
-    # neuron backend for the high-value ops (activation, activation*activation
-    # matmul). "mbe" = one global neuron; "pasn" = FP-prefix binade banks.
-    # Softmax/LayerNorm primitives stay MBE for both (narrow-range, low PASN gain),
-    # so the comparison isolates where PASN helps at the network level.
+    # Neuron backend used consistently by activation and LayerNorm primitives
+    # (and activation*activation matmul where a model exposes MatMulAA markers).
+    # "mbe" = one global neuron; "pasn" = FP-prefix binade banks. GPT-2 Stage 1
+    # converts GELU + LayerNorm only; functional attention/Softmax stays exact.
     backend: str = "mbe"
     pasn_n_local: int = 2
     pasn_e_min: int = -3
@@ -360,6 +360,17 @@ def _pasn_identity(hi, cfg: ConvertConfig, fit_device):
                       device=fit_device, verbose=cfg.verbose_fits)
 
 
+def _pasn_primitive(name, domain, e_min, e_max, cfg, fit_device,
+                    n_near0=None):
+    return build_pasn(
+        name, domain, e_min=e_min, e_max=e_max,
+        n_local=cfg.pasn_n_local,
+        n_near0=n_near0 or cfg.pasn_n_local,
+        n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
+        device=fit_device, verbose=cfg.verbose_fits,
+    )
+
+
 def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
     if kind == "activation":
         s = slots[0].sample
@@ -380,20 +391,41 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
         return _SpikingActModule(act)
 
     if kind == "softmax":
-        sm = so.build_softmax(slots[0].sample, dim=mod.dim,
-                              n_basis=cfg.n_basis_sm, n_steps=cfg.n_steps,
-                              epochs=cfg.epochs, seed=cfg.seed,
-                              spike_mult=cfg.spike_mult, device=fit_device)
+        sm = so.build_softmax(
+            slots[0].sample, dim=mod.dim,
+            n_basis=cfg.n_basis_sm, n_steps=cfg.n_steps,
+            epochs=cfg.epochs, seed=cfg.seed,
+            spike_mult=cfg.spike_mult, device=fit_device
+        )
         return _SpikingSoftmaxModule(sm, mod.dim)
 
     if kind == "layernorm":
         D = mod.normalized_shape[0]
         flat = slots[0].sample
         flat = flat[: (flat.numel() // D) * D]        # trim to a multiple of D
-        ln = so.build_layernorm(flat.reshape(-1, D), eps=mod.eps,
-                                n_basis=cfg.n_basis_ln, n_steps=cfg.n_steps,
-                                epochs=cfg.epochs, seed=cfg.seed,
-                                spike_mult=cfg.spike_mult, device=fit_device)
+        sample = flat.reshape(-1, D)
+        if cfg.backend == "pasn":
+            mu = sample.mean(dim=-1, keepdim=True)
+            dev = sample - mu
+            dev_max = float(dev.abs().max()) * 1.1 + 1e-3
+            var = (dev * dev).mean(dim=-1, keepdim=True) + mod.eps
+            istd_max = float((1.0 / var.sqrt()).max()) * 1.1 + 1e-3
+            rsqrt = _pasn_primitive(
+                "invsqrt", (0.5, 2.0), -2, 1, cfg, fit_device, n_near0=4
+            )
+            id_dev = _pasn_identity(dev_max, cfg, fit_device)
+            id_istd = _pasn_identity(istd_max, cfg, fit_device)
+            ln = so.SpikingLayerNorm(
+                rsqrt, id_dev, id_istd, eps=mod.eps,
+                spike_mult=cfg.spike_mult
+            )
+        else:
+            ln = so.build_layernorm(
+                sample, eps=mod.eps,
+                n_basis=cfg.n_basis_ln, n_steps=cfg.n_steps,
+                epochs=cfg.epochs, seed=cfg.seed,
+                spike_mult=cfg.spike_mult, device=fit_device
+            )
         return _SpikingLayerNormModule(ln, mod.weight, mod.bias)
 
     if kind == "matmul":
@@ -429,6 +461,7 @@ def convert(model: nn.Module, recorder: CalibrationRecorder,
         print(f"  fitting conversion primitives on {fit_device}", flush=True)
     shared_slots = _shared_fit_slots(model, recorder) if cfg.share_fits else {}
     activation_prototypes: dict[str, nn.Module] = {}
+    layernorm_prototypes: dict[tuple, so.SpikingLayerNorm] = {}
     for name, kind in list(recorder.kinds.items()):
         if only is not None and kind not in only:
             continue
@@ -448,6 +481,23 @@ def convert(model: nn.Module, recorder: CalibrationRecorder,
                 model, name, copy.deepcopy(activation_prototypes[prototype_key])
             )
             continue
+        if kind == "layernorm" and cfg.share_fits:
+            ln_key = (tuple(mod.normalized_shape), float(mod.eps), cfg.backend)
+            if ln_key in layernorm_prototypes:
+                if verbose or cfg.verbose_fits:
+                    print(
+                        f"  reuse   {name:32s} "
+                        f"(layernorm: {cfg.backend})",
+                        flush=True,
+                    )
+                new = _SpikingLayerNormModule(
+                    copy.deepcopy(layernorm_prototypes[ln_key]),
+                    mod.weight,
+                    mod.bias,
+                )
+                new.to(device=device, dtype=dtype)
+                _set_submodule(model, name, new)
+                continue
         if verbose or cfg.verbose_fits:
             print(f"  fitting {name:32s} ({kind})", flush=True)
         new = _build_replacement(kind, mod, fit_slots, cfg, fit_device)
@@ -455,6 +505,10 @@ def convert(model: nn.Module, recorder: CalibrationRecorder,
         new.to(device=device, dtype=dtype)
         if prototype_key is not None:
             activation_prototypes[prototype_key] = new
+        if kind == "layernorm" and cfg.share_fits:
+            layernorm_prototypes[
+                (tuple(mod.normalized_shape), float(mod.eps), cfg.backend)
+            ] = new.ln
         _set_submodule(model, name, new)
         if verbose:
             rng = ", ".join(f"[{s.lo:.3g},{s.hi:.3g}]" for s in slots)
