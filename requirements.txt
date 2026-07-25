@@ -9,5 +9,5 @@ matplotlib>=3.8      # optional, for plotting approximation curves
 transformers>=5.0
 datasets>=3.0
 
-# Later benchmark phases (ImageNet CV) — uncomment when needed:
-# timm>=1.0
+# For the GPU run on vast.ai (GPT-2 + later benchmarks), use the dedicated
+# pinned environment file instead:  pip install -r requirements-vastai.txt

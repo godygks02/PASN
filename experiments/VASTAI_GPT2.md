@@ -13,7 +13,7 @@ study) and PASN's biggest win, so this isolates the highest-value swap first.
 ## Setup on the instance
 ```bash
 git clone <this-repo> pasn && cd pasn
-pip install torch transformers datasets       # GPU torch build on the instance
+pip install -r requirements-vastai.txt        # torch(CUDA) assumed from the image
 ```
 
 ## Run

@@ -1,0 +1,29 @@
+# vast.ai GPU environment for Phase 4d (GPT-2 x WikiText-2) and later benchmarks.
+#
+#   pip install -r requirements-vastai.txt
+#
+# Assumes a CUDA-enabled PyTorch base image (vast.ai "pytorch/*" templates ship
+# torch with CUDA). The CPU-only function-fitting env is requirements.txt.
+
+# --- PyTorch --------------------------------------------------------------
+# Usually preinstalled (with CUDA) on the instance; the floor below is satisfied
+# by any recent 2.x CUDA build so pip will not downgrade it. If the image has no
+# torch, install a CUDA wheel from https://pytorch.org/ FIRST, then run this file.
+torch>=2.4
+
+# --- Core numerics --------------------------------------------------------
+numpy>=2.0
+
+# --- GPT-2 conversion + WikiText-2 ---------------------------------------
+# PINNED: the GPT-2 adapter (mbe/gpt2_convert.py) depends on transformers 5.x
+# internals (eager_attention_forward, NewGELUActivation). These are the versions
+# it was written and CPU-smoke-tested against; loosen only after re-checking the
+# GPT-2 module structure.
+transformers==5.8.*
+datasets==4.8.*
+accelerate>=1.0        # weight loading / device placement for from_pretrained
+
+# --- Later CV benchmarks (ImageNet: ViT / VGG16 / ResNet34) --------------
+# Uncomment when Phase 5 CV runs start.
+# timm>=1.0
+# torchvision>=0.19
