@@ -27,6 +27,10 @@ from mbe import convert as cv  # noqa: E402
 from mbe.gpt2_convert import make_spikable, convert_gpt2  # noqa: E402
 
 
+WIKITEXT_DATASET_ID = "Salesforce/wikitext"
+WIKITEXT_CONFIG = "wikitext-2-raw-v1"
+
+
 @torch.no_grad()
 def perplexity(model, ids, block, device, limit_blocks=None):
     model.eval()
@@ -48,7 +52,11 @@ def perplexity(model, ids, block, device, limit_blocks=None):
 
 def load_wikitext_ids(tokenizer, split="test"):
     from datasets import load_dataset
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1", split=split)
+    # Use the canonical namespaced repository ID. The legacy shorthand
+    # ``"wikitext"`` is resolved by some datasets releases to an invalid
+    # ``hf://datasets/wikitext@...`` URI; recent huggingface_hub parsers require
+    # repository IDs in ``namespace/name`` form.
+    ds = load_dataset(WIKITEXT_DATASET_ID, WIKITEXT_CONFIG, split=split)
     text = "\n\n".join(t for t in ds["text"] if t.strip())
     return tokenizer(text, return_tensors="pt").input_ids[0]
 

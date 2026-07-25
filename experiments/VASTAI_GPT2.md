@@ -25,6 +25,11 @@ python experiments/gpt2_wikitext.py --backend none --model gpt2
 python experiments/gpt2_wikitext.py --backend mbe  --model gpt2 --epochs 300
 python experiments/gpt2_wikitext.py --backend pasn --model gpt2 --epochs 300
 ```
+The script loads WikiText-2 from its canonical Hugging Face repository ID,
+`Salesforce/wikitext`. This avoids the invalid unnamespaced `hf://datasets/wikitext`
+URI produced by recent `datasets` / `huggingface_hub` combinations when the legacy
+`"wikitext"` shorthand is used.
+
 `--limit-blocks N` gives a quick partial pass; omit for the full test set.
 `--model gpt2-medium` (345M) for the paper's NLG variant once gpt2 checks out.
 
