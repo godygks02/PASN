@@ -79,6 +79,10 @@ def main():
     ap.add_argument("--block", type=int, default=512)
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--limit-blocks", type=int, default=None)
+    ap.add_argument(
+        "--fit-device", choices=["auto", "cpu", "cuda"], default="auto",
+        help="device for MBE/PASN calibration fitting (default: model device)",
+    )
     args = ap.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -103,8 +107,11 @@ def main():
         n = make_spikable(model)
         print(f"marked {n} GELU activations; converting (backend={args.backend}) ...")
         cfg = cv.ConvertConfig(epochs=args.epochs, backend=args.backend,
-                               spike_mult=True, pasn_n_local=2, pasn_e_min=-3)
-        convert_gpt2(model, calib, cfg=cfg, verbose=args.smoke)
+                               spike_mult=True, pasn_n_local=2, pasn_e_min=-3,
+                               fit_device=None if args.fit_device == "auto"
+                               else args.fit_device,
+                               verbose_fits=True)
+        convert_gpt2(model, calib, cfg=cfg, verbose=True)
         ppl_snn = perplexity(model, ids, block, device, args.limit_blocks)
         drop = 100.0 * (ppl_snn - ppl_ann) / ppl_ann
         print(f"SNN ({args.backend}) perplexity = {ppl_snn:.4f}   "

@@ -40,23 +40,28 @@ def clear_cache() -> None:
     _FIT_CACHE.clear()
 
 
-def _cache_key(name, lo, hi, n_basis, n_steps, epochs, seed):
+def _cache_key(name, lo, hi, n_basis, n_steps, epochs, seed, device):
     return (name, round(float(lo), 4), round(float(hi), 4), n_basis, n_steps,
-            epochs, seed)
+            epochs, seed, str(torch.device(device)))
 
 
 def calibrate_identity(lo: float, hi: float, n_basis: int = 8, n_steps: int = 16,
                        epochs: int = 600, seed: int = 0,
-                       use_cache: bool = True) -> MBENeuron:
+                       use_cache: bool = True,
+                       device: torch.device | str = "cpu") -> MBENeuron:
     """MBE_Id: approximate the identity map on ``[lo, hi]`` with **no bias**, so
     ``reconstruct(x) = sum_{n,t} a_{n,t} s_n[t] ~= x`` is a pure spike sum."""
-    key = _cache_key("identity", lo, hi, n_basis, n_steps, epochs, seed)
+    device = torch.device(device)
+    key = _cache_key(
+        "identity", lo, hi, n_basis, n_steps, epochs, seed, device
+    )
     if use_cache and key in _FIT_CACHE:
         return _FIT_CACHE[key]
     x, y, _ = functions.sample("identity", m=4000, seed=seed, domain=(lo, hi))
+    x, y = x.to(device), y.to(device)
     cfg = functions.make_config("identity", n_basis=n_basis, n_steps=n_steps,
                                 domain=(lo, hi), use_bias=False)
-    m = MBENeuron(cfg)
+    m = MBENeuron(cfg).to(device)
     fit_model(m, x, y, seed=seed, epochs=epochs)
     if use_cache:
         _FIT_CACHE[key] = m
@@ -64,16 +69,19 @@ def calibrate_identity(lo: float, hi: float, n_basis: int = 8, n_steps: int = 16
 
 
 def calibrate(name: str, lo: float, hi: float, n_basis: int = 8, n_steps: int = 16,
-              epochs: int = 600, seed: int = 0, use_cache: bool = True) -> MBENeuron:
+              epochs: int = 600, seed: int = 0, use_cache: bool = True,
+              device: torch.device | str = "cpu") -> MBENeuron:
     """Calibrate a primitive MBE neuron (``exp2`` / ``inv`` / ``invsqrt`` / ...)
     on ``[lo, hi]``."""
-    key = _cache_key(name, lo, hi, n_basis, n_steps, epochs, seed)
+    device = torch.device(device)
+    key = _cache_key(name, lo, hi, n_basis, n_steps, epochs, seed, device)
     if use_cache and key in _FIT_CACHE:
         return _FIT_CACHE[key]
     x, y, _ = functions.sample(name, m=4000, seed=seed, domain=(lo, hi))
+    x, y = x.to(device), y.to(device)
     cfg = functions.make_config(name, n_basis=n_basis, n_steps=n_steps,
                                 domain=(lo, hi))
-    m = MBENeuron(cfg)
+    m = MBENeuron(cfg).to(device)
     fit_model(m, x, y, seed=seed, epochs=epochs)
     if use_cache:
         _FIT_CACHE[key] = m
@@ -184,7 +192,8 @@ class SpikingActivation(torch.nn.Module):
 
 def build_activation(name: str, sample_x: torch.Tensor, n_basis: int = 4,
                      n_steps: int = 16, seed: int = 0, margin: float = 0.05,
-                     epochs: int = 600) -> SpikingActivation:
+                     epochs: int = 600,
+                     device: torch.device | str = "cpu") -> SpikingActivation:
     """Calibrate a :class:`SpikingActivation` for ``name`` (``gelu`` / ``silu`` /
     ``tanh``) on the range measured in ``sample_x`` (padded by ``margin``)."""
     lo = float(sample_x.min())
@@ -193,7 +202,7 @@ def build_activation(name: str, sample_x: torch.Tensor, n_basis: int = 4,
     lo -= margin * span
     hi += margin * span
     neuron = calibrate(name, lo, hi, n_basis=n_basis, n_steps=n_steps,
-                       epochs=epochs, seed=seed)
+                       epochs=epochs, seed=seed, device=device)
     return SpikingActivation(neuron)
 
 
@@ -310,23 +319,45 @@ class SpikingLayerNorm(torch.nn.Module):
 # --------------------------------------------------------------------------
 
 def build_softmax(sample_logits: torch.Tensor, dim: int = -1, n_basis: int = 8,
-                  seed: int = 0, spike_mult: bool = True) -> SpikingSoftmax:
+                  n_steps: int = 16, epochs: int = 600, seed: int = 0,
+                  spike_mult: bool = True,
+                  device: torch.device | str = "cpu") -> SpikingSoftmax:
     """Calibrate a :class:`SpikingSoftmax` for logits like ``sample_logits``."""
-    exp_n = calibrate("exp2", 0.0, 1.0, n_basis=n_basis, seed=seed)
-    inv_n = calibrate("inv", 0.5, 1.0, n_basis=n_basis, seed=seed)
-    id_n = calibrate_identity(0.0, 1.0, n_basis=n_basis, seed=seed)
+    exp_n = calibrate(
+        "exp2", 0.0, 1.0, n_basis=n_basis, n_steps=n_steps,
+        epochs=epochs, seed=seed, device=device
+    )
+    inv_n = calibrate(
+        "inv", 0.5, 1.0, n_basis=n_basis, n_steps=n_steps,
+        epochs=epochs, seed=seed, device=device
+    )
+    id_n = calibrate_identity(
+        0.0, 1.0, n_basis=n_basis, n_steps=n_steps,
+        epochs=epochs, seed=seed, device=device
+    )
     return SpikingSoftmax(exp_n, inv_n, id_n, spike_mult=spike_mult)
 
 
 def build_layernorm(sample_x: torch.Tensor, eps: float = 1e-5, n_basis: int = 8,
-                    seed: int = 0, spike_mult: bool = True) -> SpikingLayerNorm:
+                    n_steps: int = 16, epochs: int = 600, seed: int = 0,
+                    spike_mult: bool = True,
+                    device: torch.device | str = "cpu") -> SpikingLayerNorm:
     """Calibrate a :class:`SpikingLayerNorm` using the ranges seen in ``sample_x``."""
     mu = sample_x.mean(dim=-1, keepdim=True)
     dev = sample_x - mu
     dev_max = float(dev.abs().max()) * 1.1 + 1e-3
     var = (dev * dev).mean(dim=-1, keepdim=True) + eps
     istd_max = float((1.0 / var.sqrt()).max()) * 1.1 + 1e-3
-    rsqrt = calibrate("invsqrt", 0.5, 2.0, n_basis=n_basis, seed=seed)
-    id_dev = calibrate_identity(0.0, dev_max, n_basis=n_basis, seed=seed)
-    id_istd = calibrate_identity(0.0, istd_max, n_basis=n_basis, seed=seed)
+    rsqrt = calibrate(
+        "invsqrt", 0.5, 2.0, n_basis=n_basis, n_steps=n_steps,
+        epochs=epochs, seed=seed, device=device
+    )
+    id_dev = calibrate_identity(
+        0.0, dev_max, n_basis=n_basis, n_steps=n_steps,
+        epochs=epochs, seed=seed, device=device
+    )
+    id_istd = calibrate_identity(
+        0.0, istd_max, n_basis=n_basis, n_steps=n_steps,
+        epochs=epochs, seed=seed, device=device
+    )
     return SpikingLayerNorm(rsqrt, id_dev, id_istd, eps=eps, spike_mult=spike_mult)

@@ -157,13 +157,17 @@ class PASNNeuron(nn.Module):
 # Builder
 # --------------------------------------------------------------------------
 
-def _fit_bank(fn, sign, feed_lo, feed_hi, n_basis, n_steps, epochs, seed):
+def _fit_bank(fn, sign, feed_lo, feed_hi, n_basis, n_steps, epochs, seed,
+              device):
     """Fit one MBE bank and return ``(bank, mse)``. ``[feed_lo,feed_hi]`` is the
     range of the value actually fed to the neuron (magnitude for mag banks); the
     true target is ``fn(sign*feed)`` (``sign=None`` for the raw near-zero bank)."""
     from .fit import fit_model
-    g = torch.Generator().manual_seed(seed)
-    feed = torch.rand(4000, generator=g) * (feed_hi - feed_lo) + feed_lo
+    device = torch.device(device)
+    g = torch.Generator(device=device).manual_seed(seed)
+    feed = torch.rand(4000, generator=g, device=device) * (
+        feed_hi - feed_lo
+    ) + feed_lo
     feed, _ = torch.sort(feed)
     y = fn(sign * feed) if sign is not None else fn(feed)
     alpha = functions.curvature_alpha(
@@ -171,18 +175,20 @@ def _fit_bank(fn, sign, feed_lo, feed_hi, n_basis, n_steps, epochs, seed):
         feed_lo, feed_hi, n_basis)
     cfg = MBEConfig(n_basis=n_basis, n_steps=n_steps, x_min=float(feed_lo),
                     x_scale=float(feed_hi - feed_lo), alpha_v=alpha, use_bias=True)
-    bank = MBENeuron(cfg)
+    bank = MBENeuron(cfg).to(device)
     res = fit_model(bank, feed, y, seed=seed, epochs=epochs)
     return bank, res.mse
 
 
 def _fit_bank_adaptive(fn, sign, feed_lo, feed_hi, target_mse, n_max,
-                       n_steps, epochs, seed):
+                       n_steps, epochs, seed, device):
     """Smallest-N bank reaching ``target_mse`` (flat tails settle at N=1). Returns
     the first N whose MSE is under target, else the best over ``1..n_max``."""
     best = None
     for N in range(1, n_max + 1):
-        bank, mse = _fit_bank(fn, sign, feed_lo, feed_hi, N, n_steps, epochs, seed)
+        bank, mse = _fit_bank(
+            fn, sign, feed_lo, feed_hi, N, n_steps, epochs, seed, device
+        )
         if best is None or mse < best[1]:
             best = (bank, mse)
         if mse <= target_mse:
@@ -194,7 +200,8 @@ def build_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
                e_max: int | None = None, n_local: int = 2, n_near0: int = 4,
                n_steps: int = 16, epochs: int = 300, seed: int = 0,
                adaptive: bool = False, target_mse: float = 1e-4, n_max: int = 6,
-               verbose: bool = False) -> PASNNeuron:
+               verbose: bool = False,
+               device: torch.device | str = "cpu") -> PASNNeuron:
     """Build + fit a PASN neuron for target ``name`` on ``domain``.
 
     Fixed budget: ``n_local`` bases per magnitude binade, ``n_near0`` near-zero.
@@ -214,14 +221,20 @@ def build_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
             cap = n_local
         if adaptive:
             bank, mse = _fit_bank_adaptive(fn, sign, flo, fhi, target_mse,
-                                           n_max, n_steps, epochs, seed)
+                                           n_max, n_steps, epochs, seed, device)
         else:
-            bank, mse = _fit_bank(fn, sign, flo, fhi, cap, n_steps, epochs, seed)
+            bank, mse = _fit_bank(
+                fn, sign, flo, fhi, cap, n_steps, epochs, seed, device
+            )
         banks.append(bank)
         if verbose:
             k = "near0" if spec["kind"] == "near0" else \
                 f"mag s={spec['sign']:+.0f} e={spec['e']}"
-            print(f"  bank {len(banks)-1:2d} {k:16s} N={bank.cfg.n_basis} mse={mse:.2e}")
+            print(
+                f"    bank {len(banks)-1:2d}/{router.n_banks - 1:2d} "
+                f"{k:16s} N={bank.cfg.n_basis} mse={mse:.2e}",
+                flush=True,
+            )
     return PASNNeuron(router, banks)
 
 

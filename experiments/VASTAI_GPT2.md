@@ -25,6 +25,15 @@ python experiments/gpt2_wikitext.py --backend none --model gpt2
 python experiments/gpt2_wikitext.py --backend mbe  --model gpt2 --epochs 300
 python experiments/gpt2_wikitext.py --backend pasn --model gpt2 --epochs 300
 ```
+Conversion fitting defaults to the model device, so on a CUDA instance the PASN
+banks and MBE primitives are optimized on the GPU. The script prints each module
+and PASN bank as it is fitted. Use `--fit-device cpu` only for debugging; explicit
+`--fit-device cuda` is equivalent to the default on a GPU instance.
+Repeated GPT-2 blocks share calibration work: one PASN GELU is fitted on the union
+of all 12 observed GELU ranges, and LayerNorm primitives use the combined retained
+calibration rows and the fitting cache rather than being optimized from scratch
+for every block.
+
 The script loads WikiText-2 from its canonical Hugging Face repository ID,
 `Salesforce/wikitext`. This avoids the invalid unnamespaced `hf://datasets/wikitext`
 URI produced by recent `datasets` / `huggingface_hub` combinations when the legacy

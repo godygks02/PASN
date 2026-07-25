@@ -18,6 +18,7 @@ build -> replace loop can be verified end-to-end on CPU (``verify_phase4.py``).
 """
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import dataclass, field
 
@@ -256,6 +257,57 @@ def _module_device_dtype(model: nn.Module) -> tuple[torch.device, torch.dtype]:
     return _module_device(model), torch.float32
 
 
+def _shared_fit_slots(model: nn.Module, recorder: CalibrationRecorder) -> dict:
+    """Build shared calibration inputs for repeated Transformer blocks."""
+    overrides: dict[str, list[_Range]] = {}
+    act_groups: dict[str, list[tuple[str, _Range]]] = {}
+    ln_groups: dict[tuple, list[tuple[str, _Range]]] = {}
+
+    for name, kind in recorder.kinds.items():
+        slots = recorder.ranges.get(name)
+        if not slots:
+            continue
+        mod = model.get_submodule(name)
+        if kind == "activation":
+            act_groups.setdefault(mod.kind, []).append((name, slots[0]))
+        elif kind == "layernorm":
+            key = (tuple(mod.normalized_shape), float(mod.eps))
+            ln_groups.setdefault(key, []).append((name, slots[0]))
+
+    # One activation fit on the union of ranges observed across all blocks.
+    for group in act_groups.values():
+        lo = min(slot.lo for _, slot in group)
+        hi = max(slot.hi for _, slot in group)
+        shared = _Range(
+            lo=lo,
+            hi=hi,
+            absmax=max(abs(lo), abs(hi)),
+            sample=torch.tensor([lo, hi], dtype=torch.float32),
+        )
+        for name, _ in group:
+            overrides[name] = [shared]
+
+    # One LayerNorm primitive range from the retained rows of all matching LNs.
+    for (shape, _eps), group in ln_groups.items():
+        width = shape[0]
+        samples = []
+        for _, slot in group:
+            usable = (slot.sample.numel() // width) * width
+            if usable:
+                samples.append(slot.sample[:usable])
+        if not samples:
+            continue
+        shared = _Range(
+            lo=min(slot.lo for _, slot in group),
+            hi=max(slot.hi for _, slot in group),
+            absmax=max(slot.absmax for _, slot in group),
+            sample=torch.cat(samples),
+        )
+        for name, _ in group:
+            overrides[name] = [shared]
+    return overrides
+
+
 # --------------------------------------------------------------------------
 # Build + replace
 # --------------------------------------------------------------------------
@@ -278,6 +330,10 @@ class ConvertConfig:
     backend: str = "mbe"
     pasn_n_local: int = 2
     pasn_e_min: int = -3
+    # None -> fit on the ANN's execution device (CUDA on vast.ai, CPU locally).
+    fit_device: str | None = None
+    verbose_fits: bool = False
+    share_fits: bool = True
 
 
 def _set_submodule(root: nn.Module, name: str, new: nn.Module):
@@ -295,15 +351,16 @@ def _erange(lo, hi, e_min):
     return e_min, max(int(math.ceil(math.log2(maxmag))), e_min + 1)
 
 
-def _pasn_identity(hi, cfg: ConvertConfig):
+def _pasn_identity(hi, cfg: ConvertConfig, fit_device):
     """PASN identity over ``[0, hi]`` for the spike-driven matmul operands."""
     e_min, e_max = _erange(0.0, hi, cfg.pasn_e_min)
     return build_pasn("identity", (0.0, hi), e_min=e_min, e_max=e_max,
                       n_local=cfg.pasn_n_local, n_near0=cfg.pasn_n_local,
-                      n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed)
+                      n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
+                      device=fit_device, verbose=cfg.verbose_fits)
 
 
-def _build_replacement(kind, mod, slots, cfg: ConvertConfig):
+def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
     if kind == "activation":
         s = slots[0].sample
         lo, hi = float(s.min()), float(s.max())
@@ -313,18 +370,20 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig):
             e_min, e_max = _erange(lo, hi, cfg.pasn_e_min)
             neuron = build_pasn(mod.kind, (lo, hi), e_min=e_min, e_max=e_max,
                                 n_local=cfg.pasn_n_local, n_near0=cfg.pasn_n_local + 2,
-                                n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed)
+                                n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
+                                device=fit_device, verbose=cfg.verbose_fits)
             return _SpikingActModule(so.SpikingActivation(neuron))
         act = so.build_activation(mod.kind, slots[0].sample,
                                   n_basis=cfg.n_basis_act, n_steps=cfg.n_steps,
                                   seed=cfg.seed, margin=cfg.margin,
-                                  epochs=cfg.epochs)
+                                  epochs=cfg.epochs, device=fit_device)
         return _SpikingActModule(act)
 
     if kind == "softmax":
         sm = so.build_softmax(slots[0].sample, dim=mod.dim,
-                              n_basis=cfg.n_basis_sm, seed=cfg.seed,
-                              spike_mult=cfg.spike_mult)
+                              n_basis=cfg.n_basis_sm, n_steps=cfg.n_steps,
+                              epochs=cfg.epochs, seed=cfg.seed,
+                              spike_mult=cfg.spike_mult, device=fit_device)
         return _SpikingSoftmaxModule(sm, mod.dim)
 
     if kind == "layernorm":
@@ -332,23 +391,24 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig):
         flat = slots[0].sample
         flat = flat[: (flat.numel() // D) * D]        # trim to a multiple of D
         ln = so.build_layernorm(flat.reshape(-1, D), eps=mod.eps,
-                                n_basis=cfg.n_basis_ln, seed=cfg.seed,
-                                spike_mult=cfg.spike_mult)
+                                n_basis=cfg.n_basis_ln, n_steps=cfg.n_steps,
+                                epochs=cfg.epochs, seed=cfg.seed,
+                                spike_mult=cfg.spike_mult, device=fit_device)
         return _SpikingLayerNormModule(ln, mod.weight, mod.bias)
 
     if kind == "matmul":
         hi_a = slots[0].absmax * (1.0 + cfg.margin) + 1e-6
         hi_b = slots[1].absmax * (1.0 + cfg.margin) + 1e-6
         if cfg.backend == "pasn":
-            idn = _pasn_identity(hi_a, cfg)
-            idn2 = _pasn_identity(hi_b, cfg)
+            idn = _pasn_identity(hi_a, cfg, fit_device)
+            idn2 = _pasn_identity(hi_b, cfg, fit_device)
         else:
             idn = so.calibrate_identity(0.0, hi_a, n_basis=cfg.n_basis_mm,
                                         n_steps=cfg.n_steps, epochs=cfg.epochs,
-                                        seed=cfg.seed)
+                                        seed=cfg.seed, device=fit_device)
             idn2 = so.calibrate_identity(0.0, hi_b, n_basis=cfg.n_basis_mm,
                                          n_steps=cfg.n_steps, epochs=cfg.epochs,
-                                         seed=cfg.seed)
+                                         seed=cfg.seed, device=fit_device)
         return _SpikingMatMulModule(idn, idn2, cfg.spike_mult)
 
     raise ValueError(kind)
@@ -364,6 +424,11 @@ def convert(model: nn.Module, recorder: CalibrationRecorder,
     """
     cfg = cfg or ConvertConfig()
     device, dtype = _module_device_dtype(model)
+    fit_device = torch.device(cfg.fit_device) if cfg.fit_device else device
+    if verbose or cfg.verbose_fits:
+        print(f"  fitting conversion primitives on {fit_device}", flush=True)
+    shared_slots = _shared_fit_slots(model, recorder) if cfg.share_fits else {}
+    activation_prototypes: dict[str, nn.Module] = {}
     for name, kind in list(recorder.kinds.items()):
         if only is not None and kind not in only:
             continue
@@ -371,10 +436,25 @@ def convert(model: nn.Module, recorder: CalibrationRecorder,
         if not slots:
             continue                      # never exercised during calibration
         mod = model.get_submodule(name)
-        new = _build_replacement(kind, mod, slots, cfg)
-        # Builders fit small one-dimensional primitives on CPU. Move every
-        # registered neuron/buffer to the ANN's execution device before insertion.
+        fit_slots = shared_slots.get(name, slots)
+        prototype_key = mod.kind if kind == "activation" else None
+        if prototype_key in activation_prototypes:
+            if verbose or cfg.verbose_fits:
+                print(
+                    f"  reuse   {name:32s} (activation: {prototype_key})",
+                    flush=True,
+                )
+            _set_submodule(
+                model, name, copy.deepcopy(activation_prototypes[prototype_key])
+            )
+            continue
+        if verbose or cfg.verbose_fits:
+            print(f"  fitting {name:32s} ({kind})", flush=True)
+        new = _build_replacement(kind, mod, fit_slots, cfg, fit_device)
+        # Keep insertion compatible when fitting and inference devices differ.
         new.to(device=device, dtype=dtype)
+        if prototype_key is not None:
+            activation_prototypes[prototype_key] = new
         _set_submodule(model, name, new)
         if verbose:
             rng = ", ".join(f"[{s.lo:.3g},{s.hi:.3g}]" for s in slots)
