@@ -1,0 +1,6 @@
+# Normalise line endings: store LF in the repo, check out LF on Linux (vast.ai).
+* text=auto eol=lf
+*.png binary
+*.pdf binary
+*.pt binary
+*.pth binary

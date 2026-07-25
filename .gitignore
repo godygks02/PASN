@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual envs
+venv/
+.venv/
+env/
+
+# Baseline paper: copyrighted PDF + large extracted scans (do not redistribute)
+paper/
+
+# Local Claude Code assistant state / memory (machine-specific)
+.claude/
+
+# Obsidian editor state (keep the notes, drop the workspace/session files)
+PASN_vault/.obsidian/
+
+# Model / data artifacts (added for the GPU phases; keep large blobs out of git)
+data/
+datasets/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+wandb/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,58 @@
+[
+  {
+    "fn": "gelu",
+    "model": "MBE N=4",
+    "family": "mbe",
+    "mse": 0.2839217782020569,
+    "spikes": 22.579,
+    "stored": 4
+  },
+  {
+    "fn": "gelu",
+    "model": "MBE N=8",
+    "family": "mbe",
+    "mse": 0.3304581940174103,
+    "spikes": 36.5285,
+    "stored": 8
+  },
+  {
+    "fn": "gelu",
+    "model": "SignedMBE 2x2",
+    "family": "signed",
+    "mse": 0.00030666840029880404,
+    "spikes": 30.0955,
+    "stored": 4
+  },
+  {
+    "fn": "gelu",
+    "model": "SignedMBE 4x2",
+    "family": "signed",
+    "mse": 7.880866178311408e-05,
+    "spikes": 58.5235,
+    "stored": 8
+  },
+  {
+    "fn": "gelu",
+    "model": "PASN n_local=1",
+    "family": "pasn",
+    "mse": 3.470868614385836e-05,
+    "spikes": 13.18725,
+    "stored": 22
+  },
+  {
+    "fn": "gelu",
+    "model": "PASN n_local=2",
+    "family": "pasn",
+    "mse": 4.620995696313912e-06,
+    "spikes": 14.7415,
+    "stored": 40
+  },
+  {
+    "fn": "gelu",
+    "model": "PASN adaptive",
+    "family": "pasn",
+    "mse": 2.7170524390385253e-06,
+    "spikes": 13.211,
+    "stored": 32
+  }
+]

@@ -1,0 +1,11 @@
+# MBE / PASN — CPU verification environment (conda env: SNN, Python 3.10)
+# Core numerics (already present in the SNN env; versions below are what was tested)
+torch==2.11.0        # CPU build is sufficient for the 1-D function-fitting stage
+numpy>=2.0
+matplotlib>=3.8      # optional, for plotting approximation curves
+
+# Later phases (Transformer conversion on GPU / vast.ai) — not needed for the
+# CPU function-fitting verification in this repo:
+# timm>=1.0
+# transformers>=4.40
+# datasets>=2.19

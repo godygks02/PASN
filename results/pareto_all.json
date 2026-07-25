@@ -1,0 +1,234 @@
+[
+  {
+    "fn": "gelu",
+    "model": "MBE N=4",
+    "family": "mbe",
+    "mse": 0.2543467581272125,
+    "spikes": 19.34075,
+    "stored": 4
+  },
+  {
+    "fn": "gelu",
+    "model": "MBE N=8",
+    "family": "mbe",
+    "mse": 0.17919471859931946,
+    "spikes": 38.846,
+    "stored": 8
+  },
+  {
+    "fn": "gelu",
+    "model": "SignedMBE 2x2",
+    "family": "signed",
+    "mse": 0.002288027200847864,
+    "spikes": 9.518,
+    "stored": 4
+  },
+  {
+    "fn": "gelu",
+    "model": "SignedMBE 4x2",
+    "family": "signed",
+    "mse": 0.0006323812413029373,
+    "spikes": 24.4315,
+    "stored": 8
+  },
+  {
+    "fn": "gelu",
+    "model": "PASN n_local=1",
+    "family": "pasn",
+    "mse": 0.00013868957466911525,
+    "spikes": 11.9225,
+    "stored": 14
+  },
+  {
+    "fn": "gelu",
+    "model": "PASN n_local=2",
+    "family": "pasn",
+    "mse": 1.716398764983751e-05,
+    "spikes": 18.53925,
+    "stored": 24
+  },
+  {
+    "fn": "gelu",
+    "model": "PASN adaptive",
+    "family": "pasn",
+    "mse": 2.2280286430031992e-05,
+    "spikes": 11.0385,
+    "stored": 13
+  },
+  {
+    "fn": "silu",
+    "model": "MBE N=4",
+    "family": "mbe",
+    "mse": 0.17429646849632263,
+    "spikes": 19.69725,
+    "stored": 4
+  },
+  {
+    "fn": "silu",
+    "model": "MBE N=8",
+    "family": "mbe",
+    "mse": 0.12754836678504944,
+    "spikes": 58.85575,
+    "stored": 8
+  },
+  {
+    "fn": "silu",
+    "model": "SignedMBE 2x2",
+    "family": "signed",
+    "mse": 0.001994559308513999,
+    "spikes": 17.2725,
+    "stored": 4
+  },
+  {
+    "fn": "silu",
+    "model": "SignedMBE 4x2",
+    "family": "signed",
+    "mse": 0.002203238196671009,
+    "spikes": 38.71975,
+    "stored": 8
+  },
+  {
+    "fn": "silu",
+    "model": "PASN n_local=1",
+    "family": "pasn",
+    "mse": 0.00010909193952102214,
+    "spikes": 8.17,
+    "stored": 14
+  },
+  {
+    "fn": "silu",
+    "model": "PASN n_local=2",
+    "family": "pasn",
+    "mse": 3.0811097531113774e-05,
+    "spikes": 12.8035,
+    "stored": 24
+  },
+  {
+    "fn": "silu",
+    "model": "PASN adaptive",
+    "family": "pasn",
+    "mse": 4.011329292552546e-05,
+    "spikes": 9.115,
+    "stored": 13
+  },
+  {
+    "fn": "inv",
+    "model": "MBE N=4",
+    "family": "mbe",
+    "mse": 7.359180744970217e-05,
+    "spikes": 38.93975,
+    "stored": 4
+  },
+  {
+    "fn": "inv",
+    "model": "MBE N=8",
+    "family": "mbe",
+    "mse": 1.3661770935868844e-05,
+    "spikes": 68.53775,
+    "stored": 8
+  },
+  {
+    "fn": "inv",
+    "model": "PASN n_local=1",
+    "family": "pasn",
+    "mse": 0.0014229218941181898,
+    "spikes": 12.81925,
+    "stored": 6
+  },
+  {
+    "fn": "inv",
+    "model": "PASN n_local=2",
+    "family": "pasn",
+    "mse": 0.00021640329214278609,
+    "spikes": 7.8335,
+    "stored": 8
+  },
+  {
+    "fn": "inv",
+    "model": "PASN adaptive",
+    "family": "pasn",
+    "mse": 7.213588105514646e-05,
+    "spikes": 38.796,
+    "stored": 15
+  },
+  {
+    "fn": "exp2",
+    "model": "MBE N=4",
+    "family": "mbe",
+    "mse": 2.5641325919423252e-05,
+    "spikes": 20.9185,
+    "stored": 4
+  },
+  {
+    "fn": "exp2",
+    "model": "MBE N=8",
+    "family": "mbe",
+    "mse": 1.6843710909597576e-05,
+    "spikes": 62.91575,
+    "stored": 8
+  },
+  {
+    "fn": "exp2",
+    "model": "PASN n_local=1",
+    "family": "pasn",
+    "mse": 3.2129057217389345e-05,
+    "spikes": 9.287,
+    "stored": 7
+  },
+  {
+    "fn": "exp2",
+    "model": "PASN n_local=2",
+    "family": "pasn",
+    "mse": 1.1858184734592214e-05,
+    "spikes": 12.6445,
+    "stored": 10
+  },
+  {
+    "fn": "exp2",
+    "model": "PASN adaptive",
+    "family": "pasn",
+    "mse": 3.240966179873794e-05,
+    "spikes": 8.0115,
+    "stored": 4
+  },
+  {
+    "fn": "invsqrt",
+    "model": "MBE N=4",
+    "family": "mbe",
+    "mse": 1.883213008113671e-05,
+    "spikes": 45.48075,
+    "stored": 4
+  },
+  {
+    "fn": "invsqrt",
+    "model": "MBE N=8",
+    "family": "mbe",
+    "mse": 9.078198672796134e-06,
+    "spikes": 77.1155,
+    "stored": 8
+  },
+  {
+    "fn": "invsqrt",
+    "model": "PASN n_local=1",
+    "family": "pasn",
+    "mse": 0.00012131831317674369,
+    "spikes": 13.5605,
+    "stored": 7
+  },
+  {
+    "fn": "invsqrt",
+    "model": "PASN n_local=2",
+    "family": "pasn",
+    "mse": 2.421779208816588e-05,
+    "spikes": 6.893,
+    "stored": 10
+  },
+  {
+    "fn": "invsqrt",
+    "model": "PASN adaptive",
+    "family": "pasn",
+    "mse": 7.25988793419674e-05,
+    "spikes": 11.306,
+    "stored": 6
+  }
+]
