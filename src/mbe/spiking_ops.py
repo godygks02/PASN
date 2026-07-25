@@ -119,11 +119,15 @@ def spiking_multiply(idn: MBENeuron, x1: torch.Tensor, x2: torch.Tensor,
     if not signed:
         return _recon(idn, x1) * _recon(idn2, x2)
     p1, n1 = torch.relu(x1), torch.relu(-x1)
-    p2, n2 = torch.relu(x2), torch.relu(-x2)
-    return (_recon(idn, p1) * _recon(idn2, p2)
-            - _recon(idn, p1) * _recon(idn2, n2)
-            - _recon(idn, n1) * _recon(idn2, p2)
-            + _recon(idn, n1) * _recon(idn2, n2))
+    r1 = _recon(idn, p1) - _recon(idn, n1)
+    # Squaring is common in LayerNorm. Reuse the same reconstruction instead of
+    # running the temporal neuron a second time for an identical tensor.
+    if x1 is x2 and idn2 is idn:
+        r2 = r1
+    else:
+        p2, n2 = torch.relu(x2), torch.relu(-x2)
+        r2 = _recon(idn2, p2) - _recon(idn2, n2)
+    return r1 * r2
 
 
 @torch.no_grad()

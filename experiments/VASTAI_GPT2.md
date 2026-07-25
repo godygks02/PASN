@@ -34,6 +34,19 @@ of all 12 observed GELU ranges, and LayerNorm primitives use the combined retain
 calibration rows and the fitting cache rather than being optimized from scratch
 for every block.
 
+Full spiking LayerNorm evaluation is expensive. For the first PASN-vs-MBE
+comparison, isolate the operation where the backends differ and batch four
+WikiText blocks on the GPU:
+
+```bash
+python experiments/gpt2_wikitext.py --backend pasn --model gpt2 --epochs 300 \
+  --convert-ops activation --eval-batch-size 4
+```
+
+The evaluator prints processed blocks, throughput, and ETA. Use
+`--limit-blocks 10` for a quick end-to-end check before a full run. Increase
+`--eval-batch-size` until GPU memory is well utilized; reduce it after an OOM.
+
 The script loads WikiText-2 from its canonical Hugging Face repository ID,
 `Salesforce/wikitext`. This avoids the invalid unnamespaced `hf://datasets/wikitext`
 URI produced by recent `datasets` / `huggingface_hub` combinations when the legacy

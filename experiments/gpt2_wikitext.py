@@ -17,6 +17,7 @@ import argparse
 import math
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -32,21 +33,41 @@ WIKITEXT_CONFIG = "wikitext-2-raw-v1"
 
 
 @torch.no_grad()
-def perplexity(model, ids, block, device, limit_blocks=None):
+def perplexity(model, ids, block, device, limit_blocks=None, batch_size=1,
+               progress_every=10, label="eval"):
     model.eval()
     nll, ntok, nb = 0.0, 0, 0
+    chunks = []
     for i in range(0, ids.numel() - 1, block):
         chunk = ids[i:i + block + 1]
-        if chunk.numel() < 2:
+        if chunk.numel() == block + 1:
+            chunks.append(chunk)
+        if limit_blocks and len(chunks) >= limit_blocks:
             break
-        inp = chunk[:-1].unsqueeze(0).to(device)
-        tgt = chunk[1:].unsqueeze(0).to(device)
+    total = len(chunks)
+    started = time.perf_counter()
+    for start in range(0, total, batch_size):
+        group = chunks[start:start + batch_size]
+        inp = torch.stack([chunk[:-1] for chunk in group]).to(device)
+        tgt = torch.stack([chunk[1:] for chunk in group]).to(device)
         logits = model(inp).logits
         loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)),
                                tgt.reshape(-1), reduction="sum")
-        nll += float(loss); ntok += tgt.numel(); nb += 1
-        if limit_blocks and nb >= limit_blocks:
-            break
+        nll += float(loss)
+        ntok += tgt.numel()
+        nb += len(group)
+        if (
+            progress_every
+            and (nb == total or nb % progress_every < len(group))
+        ):
+            elapsed = time.perf_counter() - started
+            rate = nb / max(elapsed, 1e-9)
+            eta = (total - nb) / max(rate, 1e-9)
+            print(
+                f"  [{label}] blocks {nb}/{total}  "
+                f"{rate:.2f} blocks/s  ETA {eta / 60:.1f} min",
+                flush=True,
+            )
     return math.exp(nll / max(ntok, 1))
 
 
@@ -80,11 +101,22 @@ def main():
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--limit-blocks", type=int, default=None)
     ap.add_argument(
+        "--eval-batch-size", type=int, default=None,
+        help="WikiText blocks evaluated together (default: 4 on CUDA, 1 on CPU)",
+    )
+    ap.add_argument("--progress-every", type=int, default=10)
+    ap.add_argument(
+        "--convert-ops", choices=["both", "activation", "layernorm"],
+        default="both",
+        help="conversion scope; activation isolates the PASN-vs-MBE contribution",
+    )
+    ap.add_argument(
         "--fit-device", choices=["auto", "cpu", "cuda"], default="auto",
         help="device for MBE/PASN calibration fitting (default: model device)",
     )
     args = ap.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    eval_batch_size = args.eval_batch_size or (4 if device == "cuda" else 1)
 
     if args.smoke:
         model, ids, calib, block = build_smoke()
@@ -100,7 +132,11 @@ def main():
                  for i in range(0, 8 * args.block, args.block)]
         block = args.block
 
-    ppl_ann = perplexity(model, ids, block, device, args.limit_blocks)
+    ppl_ann = perplexity(
+        model, ids, block, device, args.limit_blocks,
+        batch_size=eval_batch_size, progress_every=args.progress_every,
+        label="ANN",
+    )
     print(f"ANN ({args.model}) perplexity = {ppl_ann:.4f}")
 
     if args.backend != "none":
@@ -111,8 +147,15 @@ def main():
                                fit_device=None if args.fit_device == "auto"
                                else args.fit_device,
                                verbose_fits=True)
-        convert_gpt2(model, calib, cfg=cfg, verbose=True)
-        ppl_snn = perplexity(model, ids, block, device, args.limit_blocks)
+        only = {
+            "activation" if args.convert_ops == "activation" else "layernorm"
+        } if args.convert_ops != "both" else None
+        convert_gpt2(model, calib, cfg=cfg, only=only, verbose=True)
+        ppl_snn = perplexity(
+            model, ids, block, device, args.limit_blocks,
+            batch_size=eval_batch_size, progress_every=args.progress_every,
+            label=f"SNN-{args.backend}",
+        )
         drop = 100.0 * (ppl_snn - ppl_ann) / ppl_ann
         print(f"SNN ({args.backend}) perplexity = {ppl_snn:.4f}   "
               f"(delta {drop:+.2f}%)")
