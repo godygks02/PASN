@@ -1,12 +1,35 @@
 # PASN: Prefix-Adaptive Spiking Neuron
 
+## 0. Positioning (read first)
+
+PASN is proposed as a **distinct training-free ANN→SNN conversion neuron**, not as
+an incremental improvement over the MBE neuron. It combines two ingredients:
+(1) **multi-basis exponential-decay temporal encoding** — the substrate introduced
+by MBE (Wang et al., AAAI-26) — and (2) a **deterministic floating-point-prefix
+router** that partitions the input domain into power-of-two (binade) ranges, each
+served by its own local basis bank.
+
+We do **not** claim to beat MBE, and we do not rely on our own MBE reimplementation
+as the baseline: our reimplementation reproduces MBE's *function-approximation*
+numbers (Table X) but does **not** reproduce its near-lossless downstream
+conversion, because a single global multi-basis neuron has a structural near-zero
+accuracy floor on GELU (it cannot resolve the near-zero curvature and the mid-range
+tail simultaneously — see the reproduction notes). Instead, PASN is **evaluated
+against the MBE paper's published benchmark numbers** (Tab. 1–4), on the same
+models/datasets, using our own reproduced ANN baselines.
+
+The ``R=1`` reduction (a one-bank PASN equals a single multi-basis neuron) is kept
+as a *structural relationship* to the multi-basis family, not as an improvement
+claim. Our internal MBE-vs-PASN function-approximation experiments are **ablations**
+that isolate the contribution of the prefix-routed local banks over a single global
+bank of the same substrate.
+
 ## 1. Method Overview
 
-PASN is a range-adaptive extension of the Multi-Basis Encoding (MBE) neuron.
-An MBE neuron uses one global set of temporal spiking bases for the entire input
-domain. PASN retains the same MBE dynamics but organizes the bases into multiple
-range-specialized banks. A deterministic prefix router selects one bank for
-each input, and only the bases in that bank are executed.
+PASN organizes multi-basis temporal spiking bases into multiple range-specialized
+local banks. A deterministic prefix router selects one bank per input, and only the
+bases in that bank are executed. (A single global multi-basis bank — one bank for
+the whole domain — is the ``R=1`` special case.)
 
 The structural difference is:
 

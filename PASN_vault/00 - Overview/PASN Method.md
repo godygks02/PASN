@@ -3,14 +3,23 @@ tags: [overview, pasn, method]
 updated: 2026-07-25
 ---
 
-# PASN Method (우리가 만들 개선안)
+# PASN Method (multi-basis + prefix local bank를 결합한 별개 뉴런)
 
-원문: `PASN_method.md` (프로젝트 루트).
+원문: `PASN_method.md` (프로젝트 루트, §0 Positioning 먼저 읽기).
+
+## 포지셔닝 (2026-07-25 확정)
+PASN은 **"MBE 개선판"이 아니라, multi-basis 시간부호화(MBE substrate) + 결정적 FP-prefix
+로컬 뱅크를 결합한 별개의 training-free 변환 뉴런**으로 제안한다. 이유: 우리 MBE 재현은
+함수근사(Table X)는 재현하나 **downstream near-lossless는 재현 못 함**(전역 multi-basis는
+0 근처 GELU 곡률+중간 꼬리를 동시에 못 잡는 구조적 해상도 바닥 → GPT-2서 +254%). 따라서
+**MBE 논문의 published 표(Tab.1–4)를 기준선**으로, 동일 모델·데이터·우리 재현 ANN으로 비교.
+"MBE를 이겼다" 주장 안 함. R=1=단일 multi-basis 뉴런은 "개선"이 아니라 multi-basis 계열과의
+구조적 관계. 우리 MBE-vs-PASN 함수근사 비교는 prefix 뱅크 기여를 격리하는 **내부 ablation**.
 
 ## 아이디어
-MBE는 전체 입력 도메인에 **하나의 전역 basis 뱅크**를 쓴다. PASN은 같은 MBE 동역학을
-유지하되 basis를 **범위별 특화 뱅크(range-specialized banks)** 여러 개로 나누고,
-**결정적 prefix 라우터**가 입력마다 뱅크 하나를 선택한다.
+전역 단일 multi-basis 뱅크는 도메인 전체를 하나로 처리한다. PASN은 basis를 **범위별 특화
+뱅크** 여러 개로 나누고, **결정적 prefix 라우터**가 입력마다 뱅크 하나를 선택한다. (전역
+단일 뱅크 = R=1 특수경우.)
 
 ```
 MBE : x → (전역 basis 뱅크) → 출력
