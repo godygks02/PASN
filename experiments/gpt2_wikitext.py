@@ -114,6 +114,14 @@ def main():
         "--fit-device", choices=["auto", "cpu", "cuda"], default="auto",
         help="device for MBE/PASN calibration fitting (default: model device)",
     )
+    # Budget knobs for iso-storage / iso-spike fairness sweeps. MBE signed GELU
+    # stores 2*n_basis_act bases; PASN stores ~(#binades)*pasn_n_local.
+    ap.add_argument("--n-basis-act", type=int, default=6,
+                    help="MBE bases per activation (signed GELU uses 2x this)")
+    ap.add_argument("--pasn-n-local", type=int, default=2,
+                    help="PASN bases per binade bank")
+    ap.add_argument("--pasn-e-min", type=int, default=-3,
+                    help="PASN smallest binade exponent (near-zero resolution)")
     args = ap.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     eval_batch_size = args.eval_batch_size or (4 if device == "cuda" else 1)
@@ -143,7 +151,9 @@ def main():
         n = make_spikable(model)
         print(f"marked {n} GELU activations; converting (backend={args.backend}) ...")
         cfg = cv.ConvertConfig(epochs=args.epochs, backend=args.backend,
-                               spike_mult=True, pasn_n_local=2, pasn_e_min=-3,
+                               spike_mult=True, n_basis_act=args.n_basis_act,
+                               pasn_n_local=args.pasn_n_local,
+                               pasn_e_min=args.pasn_e_min,
                                fit_device=None if args.fit_device == "auto"
                                else args.fit_device,
                                verbose_fits=True)
