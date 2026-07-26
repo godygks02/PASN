@@ -128,15 +128,18 @@ def run_fn(name, epochs, n_shared_list, seeds, rows, per_bank):
             name, dom, e_min=e_min, e_max=e_max, n_local=2, n_near0=4,
             epochs=epochs, seed=sd),
     }
-    for N in n_shared_list:
-        specs[f"MBE-PASN-S N={N}"] = lambda sd, N=N: build_mbe_pasn_s(
-            name, dom, e_min=e_min, e_max=e_max, n_shared=N, n_steps=16,
-            epochs=epochs, seed=sd)
+    # Both alpha placements: measured to select a frontier position, not a winner.
+    for ai, short in (("uniform", "u"), ("logspread", "L")):
+        for N in n_shared_list:
+            specs[f"MBE-PASN-S N={N} a={short}"] = (
+                lambda sd, N=N, ai=ai: build_mbe_pasn_s(
+                    name, dom, e_min=e_min, e_max=e_max, n_shared=N, n_steps=16,
+                    epochs=epochs, seed=sd, alpha_init=ai))
 
     results = {tag: _median_build(b, seeds, xte, yte) for tag, b in specs.items()}
     banks = bank_samples(results["MBE-PASN n_loc=2"]["model"].router, dom, m=1500)
 
-    print(f"\n{'model':20s} {'MSE(med)':>10s} {'[lo, hi]':>19s} {'spikes/in':>10s} "
+    print(f"\n{'model':22s} {'MSE(med)':>10s} {'[lo, hi]':>19s} {'spikes/in':>10s} "
           f"{'params':>7s} {'max|jump|':>10s} {'build s':>8s}")
     print("-" * 90)
     for tag, r in results.items():
@@ -149,7 +152,7 @@ def run_fn(name, epochs, n_shared_list, seeds, rows, per_bank):
                          mse_hi=r["mse_hi"], spikes=c["spikes"], params=p,
                          max_jump=jump, build_s=r["secs"]))
         span = f"[{r['mse_lo']:.1e}, {r['mse_hi']:.1e}]"
-        print(f"{tag:20s} {r['mse']:10.2e} {span:>19s} {c['spikes']:10.2f} "
+        print(f"{tag:22s} {r['mse']:10.2e} {span:>19s} {c['spikes']:10.2f} "
               f"{p:7d} {jump:10.2e} {r['secs']:8.1f}")
 
         with torch.no_grad():
@@ -160,11 +163,11 @@ def run_fn(name, epochs, n_shared_list, seeds, rows, per_bank):
     # -- the decisive table -------------------------------------------------
     tags = [t for t in specs if not t.startswith("MBE N=")]
     print(f"\nper-bank MSE  ({name})")
-    print(f"{'bank':12s} " + " ".join(f"{t:>20s}" for t in tags))
-    print("-" * (13 + 21 * len(tags)))
+    print(f"{'bank':12s} " + " ".join(f"{t:>22s}" for t in tags))
+    print("-" * (13 + 23 * len(tags)))
     for label, _ in banks:
         vals = per_bank[(name, label)]
-        cells = " ".join(f"{vals[t]:20.2e}" for t in tags)
+        cells = " ".join(f"{vals[t]:22.2e}" for t in tags)
         star = "  *" if (name in ("gelu", "silu") and label == "neg e=-1") else ""
         print(f"{label:12s} {cells}{star}")
     if name in ("gelu", "silu"):

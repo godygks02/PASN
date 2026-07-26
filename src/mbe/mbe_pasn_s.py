@@ -176,27 +176,52 @@ class MBEPASNSNeuron(nn.Module):
 # --------------------------------------------------------------------------
 
 def _sample_bank(router: PrefixRouter, bi: int, domain: tuple[float, float],
-                 m: int, device, generator=None) -> torch.Tensor | None:
-    """Uniform samples inside routed range ``bi`` **clamped to the domain**.
+                 m: int, device) -> torch.Tensor | None:
+    """Midpoint grid over routed range ``bi``, **clamped to the domain**.
 
     ``None`` when the range lies entirely outside the calibrated domain -- such a
     bank is unreachable and must not contribute training samples (fitting it would
     evaluate the target outside its valid range; see
     :meth:`mbe_pasn.PrefixRouter.reachable`).
+
+    A *grid*, not a random draw: the target is a known deterministic function on a
+    known interval, so a stratified grid has strictly lower discrepancy than
+    sampling -- and it removes the calibration set's seed dependence. That
+    dependence was the dominant source of run-to-run spread (the shape-parameter
+    init is deterministic and the readout is closed-form, so a random draw was the
+    only thing the seed actually changed: 34x MSE spread on GELU at N=2).
     """
     span = router.reachable(bi, domain[0], domain[1])
     if span is None:
         return None
     a, b = span
-    r = torch.rand(m, generator=generator, device=device)
-    return r * (b - a) + a
+    step = (b - a) / m
+    return a + step * (torch.arange(m, device=device, dtype=torch.float32) + 0.5)
+
+
+def uniform_alpha(n_shared: int) -> list:
+    """Leading thresholds that split ``rho in [0,1)`` at even quantiles.
+
+    A global MBE log-spreads ``alpha_v`` over ``[2^-spread, 1]`` because the
+    target's curvature concentrates at one end of its domain
+    (:func:`functions.curvature_alpha`). A *routed* residual is different: ``rho``
+    is ~uniform on ``[0,1)`` in **every** bank and each ``g_v`` is smooth there, so
+    a basis whose leading threshold sits near 0 fires at almost every step and its
+    feature is nearly constant in ``rho`` -- it carries no information.
+
+    Measured on GELU with the log-spread init: ``N=4`` gave per-basis firing rates
+    ``[0.88, 0.17, 0.71, 0.95]`` (effectively 1-2 useful bases) and an MSE *worse*
+    than ``N=2``. Even quantiles keep every basis informative.
+    """
+    return [(n_shared - n) / (n_shared + 1) for n in range(n_shared)]
 
 
 def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
                      e_max: int | None = None, n_shared: int = 4,
                      n_steps: int = 16, epochs: int = 300,
                      m_per_bank: int = 800, seed: int = 0,
-                     normalize_banks: bool = True, verbose: bool = False,
+                     normalize_banks: bool = True, alpha_init: str = "uniform",
+                     restarts: int = 1, verbose: bool = False,
                      device: torch.device | str = "cpu") -> MBEPASNSNeuron:
     """Build + fit an MBE-PASN-S neuron for target ``name`` on ``domain``.
 
@@ -213,6 +238,21 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
     small banks inherit a placement tuned for someone else. Normalising equalises
     each range's contribution, i.e. the shared basis is fitted for uniform
     *relative* accuracy. Pass ``False`` for the ablation.
+
+    ``alpha_init`` selects a *position on the accuracy-energy frontier*, not a
+    strict improvement. ``"uniform"`` places the leading thresholds at even quantiles
+    of ``rho`` (see :func:`uniform_alpha`) -- far fewer spikes (GELU N=2: 3.7 vs 15.2
+    per input) and it repairs the ``N=4`` pathology, and on SiLU it dominates
+    log-spread outright at N=2 and N=4. ``"logspread"`` keeps a global MBE's
+    placement and reaches lower MSE at the high-spike end (GELU N=8: 5.7e-6 at 89.6
+    spikes vs 4.7e-5 at 47.1). Report both.
+
+    ``restarts`` (default 1, i.e. off): fits this many times from jittered shape
+    inits and keeps the lowest **calibration** loss. Measured to *hurt* -- selecting
+    on the calibration grid picks fits that place staircase breakpoints to nail grid
+    midpoints while drifting between them (GELU N=8 test MSE 4.7e-5 -> 1.3e-4), and
+    the jitter reintroduces the seed dependence the grid removed. Kept for the
+    ablation; raising it needs an offset selection grid, not the fitting grid.
     """
     from .fit import fit_model
 
@@ -221,9 +261,8 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
     fn, _ = functions.REGISTRY[name]
     router = PrefixRouter(domain[0], domain[1], e_min=e_min, e_max=e_max)
 
-    g = torch.Generator(device=device).manual_seed(seed)
     parts = {bi: p for bi in range(router.n_banks)
-             if (p := _sample_bank(router, bi, domain, m_per_bank, device, g))
+             if (p := _sample_bank(router, bi, domain, m_per_bank, device))
              is not None}
     if not parts:
         raise ValueError(f"no routed range intersects domain {domain}")
@@ -241,19 +280,40 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
         idx = router.route(xs)
         ys = ys / scale[idx]
 
-    # Identity normalisation: the routed affine already maps the input to rho.
-    cfg = MBEConfig(n_basis=n_shared, n_steps=n_steps, x_min=0.0, x_scale=1.0,
-                    alpha_v=1.0, use_bias=False)
-    core = MBENeuron(cfg).to(device)
-    W = torch.zeros(router.n_banks, n_shared + 1, device=device)
-    model = MBEPASNSNeuron(router, core, W).to(device)
-    res = fit_model(model, xs, ys, seed=seed, epochs=epochs)
+    av = uniform_alpha(n_shared) if alpha_init == "uniform" else 1.0
+    losses = []
+    best = None
+    for k in range(max(restarts, 1)):
+        torch.manual_seed(seed + 1000 * k)
+        # Identity normalisation: the routed affine already maps the input to rho.
+        cfg = MBEConfig(n_basis=n_shared, n_steps=n_steps, x_min=0.0, x_scale=1.0,
+                        alpha_v=av, use_bias=False)
+        core = MBENeuron(cfg).to(device)
+        # Restart 0 is the principled init; later restarts jitter it in log space.
+        # Without this a restart is a no-op: the shape parameters are initialised
+        # deterministically (alpha_v list + linspace tau) and the only random
+        # tensor, the readout w, is overwritten by the closed-form solve on the
+        # first step -- so every "restart" produced a byte-identical model.
+        if k > 0:
+            with torch.no_grad():
+                for p in (core.log_alpha_v, core.log_tau_r, core.log_tau_vth,
+                          core.log_tau_d, core.log_dt):
+                    if p.requires_grad or p.is_floating_point():
+                        p.add_(torch.randn_like(p) * 0.3)
+        W = torch.zeros(router.n_banks, n_shared + 1, device=device)
+        cand = MBEPASNSNeuron(router, core, W).to(device)
+        res = fit_model(cand, xs, ys, seed=seed, epochs=epochs)
+        losses.append(res.mse)
+        if best is None or res.mse < best[1]:
+            best = (cand, res.mse)
+    model, cal_mse = best
     if normalize_banks:
         with torch.no_grad():
             model.W.mul_(scale.unsqueeze(1))       # undo the per-bank rescaling
     if verbose:
         tag = "relative" if normalize_banks else "absolute"
         print(f"    shared N={n_shared} T={n_steps} over {router.n_banks} banks: "
-              f"pooled {tag} mse={res.mse:.2e}  params={model.num_learnable()}",
-              flush=True)
+              f"pooled {tag} mse={cal_mse:.2e} (restarts "
+              f"{', '.join(f'{l:.1e}' for l in losses)})  "
+              f"params={model.num_learnable()}", flush=True)
     return model
