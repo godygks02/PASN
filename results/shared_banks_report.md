@@ -221,28 +221,36 @@ the forward pass (`spiking_cost_report`) rather than by hand-derived multipliers
 | backend | forward rel\|err\| | GELU spk/in | **TOTAL spk/in** | act% | LN% | softmax% | matmul% |
 |---|---|---|---|---|---|---|---|
 | mbe | 2.02e‑2 | 33.6 | 1597 | 16.9 | 27.3 | 35.9 | 20.0 |
-| mbe_pasn | 6.37e‑3 | 11.4 | 1267 | 7.2 | 25.8 | 45.2 | 21.7 |
-| **mbe_pasn_s** | **3.65e‑3** | 14.8 | 1491 | 8.0 | 33.2 | 38.4 | 20.4 |
-| pasn (SAR) | 8.82e‑3 | **2.82** | **795** | 2.8 | 14.7 | 72.0 | 10.5 |
+| mbe_pasn | 6.37e‑3 | 11.4 | **955** | 9.6 | 34.3 | 27.2 | 28.9 |
+| **mbe_pasn_s** | **3.85e‑3** | 14.8 | 1177 | 10.1 | 42.0 | 22.0 | 25.9 |
+| pasn (SAR) | 8.76e‑3 | **2.82** | **291** | 7.8 | 40.3 | 23.3 | 28.6 |
 
 The shared basis has the lowest network-level error of the four, so the 1‑D advantage
 carries. (`mbe_pasn` moved from an earlier 5.06e‑3 because of the domain-clamping fix,
 not noise: its outermost bank is now fitted on `[2, 2.18]`, where inputs actually
 occur, rather than on `[2, 4)`.)
 
-**But the activation is only 2.8–16.9% of the spike budget**, so every per-activation
-spike figure quoted before this measurement — including the ones in the tables above —
-was a fraction of the energy, not the energy. Two consequences:
+**The activation is only 7.8–16.9% of the spike budget**, so every per-activation spike
+figure quoted before this measurement was a fraction of the energy, not the energy.
+Acting on that changed the totals substantially. Routing Softmax's primitives as well
+(it was global MBE in every backend until then, and the largest single consumer at
+36–72%) cut the totals by **1.27–2.7×** at essentially no accuracy cost:
 
-* **Softmax is the largest single consumer (36–72%) and has no routed variant**, so it
-  is identical global MBE in all four backends. That caps what routing can win on the
-  total: mbe → pasn is **2.0×** (not the 12× the activation column suggests),
-  mbe → mbe_pasn **1.26×**, and mbe → mbe_pasn_s only **1.07×** despite its activation
-  being 2.3× cheaper.
-* **The FP-multiply identities are where the spikes are.** LayerNorm (15–33%) and the
-  attention matmuls (10–22%) each rival or exceed the activation. On the toy,
-  `mbe_pasn_s`'s LayerNorm identities are 14% *more* expensive than plain MBE's; on
-  GPT‑2 they are 2.6× cheaper (below). The identity is not a solved sub-problem.
+| backend | TOTAL, global‑MBE softmax | TOTAL, routed softmax | vs plain MBE |
+|---|---|---|---|
+| mbe_pasn | 1267 | **955** | 1.67× fewer |
+| mbe_pasn_s | 1491 | **1177** | 1.36× fewer |
+| pasn | 795 | **291** | **5.5× fewer** |
+
+`MBE_inv` is the one primitive routing cannot help: its argument is already an IEEE
+mantissa in `[0.5, 1)` — a single binade — so the exponent router has exactly one
+reachable range and reduces to a global neuron. The op's own `frexp` split has done
+that work. Only a mantissa-prefix router could subdivide it.
+
+**The FP-multiply identities are now where the spikes are.** LayerNorm is the largest
+share in all three routed backends (34–42%) and the attention matmuls are 26–29%, both
+well above the activation. That, not further activation tuning, is where the next
+energy work is.
 
 GPT‑2 Stage 1 converts GELU + LayerNorm only (HF computes attention functionally, so
 there is nothing to hook), and there LayerNorm dominates outright:
@@ -276,10 +284,11 @@ selection rather than shipped.
    parity-fixed mantissa of the variance, which is computed inside the spiking op
    rather than held during calibration, so that one primitive still falls back to range
    width. The identities and the activation do get measured weights.
-4. **Softmax has no routed variant** — it is global MBE in every backend and the single
-   largest spike consumer where it is converted. Now that the cost is measured, this is
-   the highest-value energy work left, ahead of any further activation tuning. Its
-   primitives (`exp2`, `inv`, identity) are already in the registry, so it is wiring.
+4. **LayerNorm's identities are the largest remaining consumer** (34–42% of the routed
+   backends' spikes), and the identity operands span many decades, so everything below
+   `2^pasn_e_min` collapses into one near-zero bank. A deeper `pasn_e_min` for the
+   identity primitives is the obvious lever and is already a knob — it is left at the
+   shared value so the routed backends stay comparable at one router setting.
 5. **On a real model, attention is never spiked.** `gpt2_convert` marks only GELU and
    LayerNorm; HF computes QK^T and attn×V functionally, so there is no `MatMulAA` to
    hook. Every real-model number so far has exact FP attention — only the toy exercises

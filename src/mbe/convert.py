@@ -148,12 +148,17 @@ class _Range:
     hi: float = float("-inf")
     absmax: float = 0.0
     sample: torch.Tensor | None = None
+    # Size of the last axis. The sample is flattened, so this is what lets a
+    # reduction op (softmax over ``dim=-1``) reshape it back into rows and replay its
+    # own decomposition to recover each primitive's real argument distribution.
+    width: int = 0
 
     def update(self, t: torch.Tensor, keep: int):
         t = t.detach()
         self.lo = min(self.lo, float(t.min()))
         self.hi = max(self.hi, float(t.max()))
         self.absmax = max(self.absmax, float(t.abs().max()))
+        self.width = max(self.width, int(t.shape[-1]) if t.dim() else 0)
         have = 0 if self.sample is None else self.sample.numel()
         if have < keep:
             # Calibration may run on CUDA, but primitive fitting is intentionally
@@ -310,6 +315,7 @@ def _shared_fit_slots(model: nn.Module, recorder: CalibrationRecorder) -> dict:
             hi=max(slot.hi for _, slot in group),
             absmax=max(slot.absmax for _, slot in group),
             sample=torch.cat(samples),
+            width=width,
         )
         for name, _ in group:
             overrides[name] = [shared]
@@ -414,6 +420,47 @@ def _routed_primitive(name, domain, e_min, e_max, cfg: ConvertConfig,
     )
 
 
+def _routed_softmax(mod, slot, cfg: ConvertConfig, fit_device):
+    """Routed Softmax primitives, each fitted on its argument's real distribution.
+
+    The three primitives do not see the logits -- they see what the op's own
+    decomposition feeds them, so this replays that decomposition on the calibration
+    sample: ``frac = frac(x_m log2 e)`` for ``MBE_exp``, the ``frexp`` mantissa of the
+    row sum for ``MBE_inv``, and the two product operands for the identity.
+
+    Note ``MBE_inv`` gains nothing from routing **by construction**: its argument is
+    already an IEEE mantissa in ``[0.5, 1)``, a single binade, so the exponent router
+    has one reachable range and reduces to a plain global neuron. The exponent split
+    inside the op has done that work already. Only a mantissa-prefix router could
+    subdivide it further.
+
+    The identity's operands (``e^x`` and ``1/S``, both in ``(0, 1]``) span many decades,
+    so everything below ``2^pasn_e_min`` collapses into the single near-zero bank; a
+    deeper ``pasn_e_min`` is what would buy accuracy there. It is left at the shared
+    value so the routed backends stay comparable at one router setting.
+    """
+    logits, w = slot.sample, slot.width
+    frac = mant = operands = None
+    if logits is not None and w > 1 and logits.numel() >= w:
+        rows = logits[: (logits.numel() // w) * w].reshape(-1, w)
+        z = (rows - rows.max(dim=-1, keepdim=True).values) * math.log2(math.e)
+        z_floor = torch.floor(z)
+        frac = (z - z_floor).reshape(-1)
+        exp_x = torch.ldexp(torch.exp2(z - z_floor), z_floor.to(torch.int64))
+        m_, e_ = torch.frexp(exp_x.sum(dim=-1, keepdim=True))
+        mant = m_.reshape(-1)
+        inv_S = torch.ldexp(1.0 / m_, -e_).expand_as(exp_x)
+        operands = torch.cat([exp_x.reshape(-1), inv_S.reshape(-1)])
+
+    e_lo, e_hi = _erange(0.0, 1.0, cfg.pasn_e_min)
+    exp_n = _routed_primitive("exp2", (0.0, 1.0), e_lo, e_hi, cfg, fit_device,
+                              sample=frac)
+    inv_n = _routed_primitive("inv", (0.5, 1.0), -1, 0, cfg, fit_device,
+                              sample=mant)
+    idn = _routed_identity(1.0, cfg, fit_device, sample=operands)
+    return so.SpikingSoftmax(exp_n, inv_n, idn, spike_mult=cfg.spike_mult)
+
+
 def _routed_identity(hi, cfg: ConvertConfig, fit_device, sample=None):
     """Prefix-routed identity over ``[0, hi]`` for the spike-driven multiply.
 
@@ -446,12 +493,15 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
         return _SpikingActModule(act)
 
     if kind == "softmax":
-        sm = so.build_softmax(
-            slots[0].sample, dim=mod.dim,
-            n_basis=cfg.n_basis_sm, n_steps=cfg.n_steps,
-            epochs=cfg.epochs, seed=cfg.seed,
-            spike_mult=cfg.spike_mult, device=fit_device
-        )
+        if cfg.backend in _ROUTED_BACKENDS:
+            sm = _routed_softmax(mod, slots[0], cfg, fit_device)
+        else:
+            sm = so.build_softmax(
+                slots[0].sample, dim=mod.dim,
+                n_basis=cfg.n_basis_sm, n_steps=cfg.n_steps,
+                epochs=cfg.epochs, seed=cfg.seed,
+                spike_mult=cfg.spike_mult, device=fit_device
+            )
         return _SpikingSoftmaxModule(sm, mod.dim)
 
     if kind == "layernorm":

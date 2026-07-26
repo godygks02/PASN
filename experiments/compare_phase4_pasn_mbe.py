@@ -75,9 +75,11 @@ def main():
               f"{pct.get('softmax', 0):8.1f}% {pct.get('matmul', 0):7.1f}%")
     print("\nTOTAL spk/in counts every spiking primitive per element of the model's "
           "input, measured by instrumenting the forward pass -- the GELU column is a "
-          "fraction of it. Softmax has no routed variant, so it is identical MBE in "
-          "all four; mbe_pasn / mbe_pasn_s / pasn share the router and differ only in "
-          "what a bank contains.")
+          "fraction of it. Every op (activation, LayerNorm, Softmax, matmul) is routed "
+          "in the three routed backends; they share the router and differ only in what "
+          "a bank contains. Softmax's MBE_inv is the exception: its argument is already "
+          "an IEEE mantissa in [0.5,1), one binade, so routing reduces to a global "
+          "neuron there by construction.")
 
 
 if __name__ == "__main__":

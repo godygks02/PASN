@@ -404,6 +404,42 @@ def test_convert_pasn_backend_installs_pasn_neurons():
     assert costs and all(c["spikes"] <= 6 for c in costs.values())
 
 
+def test_routed_softmax_fits_each_primitive_on_its_own_argument():
+    """A routed Softmax must route all three primitives, and each must be fitted on
+    the argument the op actually feeds it -- not on the logits. MBE_inv is the
+    documented exception: its argument is an IEEE mantissa in [0.5,1), a single
+    binade, so the exponent router has one reachable range there by construction."""
+    import copy
+    from mbe import convert as cv
+    from mbe.toy import make_toy, make_inputs
+    D = 8
+    ann = make_toy(seed=0, d_model=D, n_heads=2, n_layers=1)
+    calib = make_inputs(2, batch=4, seq=8, d_model=D, seed=1)
+    snn = copy.deepcopy(ann)
+    rec = cv.calibrate(snn, calib)
+    # the reduction axis must be recorded, or the argument distributions are
+    # unrecoverable from the flattened sample
+    assert rec.ranges["blocks.0.attn.softmax"][0].width > 1
+    cv.convert(snn, rec, cfg=cv.ConvertConfig(
+        backend="mbe_pasn_s", epochs=40, spike_mult=True, pasn_e_min=-3,
+        pasn_s_n_shared=2, pasn_s_restarts=1))
+    sm = snn.get_submodule("blocks.0.attn.softmax").sm
+    for neuron in (sm.exp, sm.inv, sm.idn):
+        assert isinstance(neuron, MBEPASNSNeuron), type(neuron)
+    reach = lambda n, dom: sum(  # noqa: E731
+        1 for bi in range(n.router.n_banks) if n.router.reachable(bi, *dom))
+    assert reach(sm.exp, (0.0, 1.0)) > 1        # frac spans several binades
+    assert reach(sm.idn, (0.0, 1.0)) > 1        # operands span several binades
+    assert reach(sm.inv, (0.5, 1.0)) == 1       # mantissa is one binade
+    test = make_inputs(1, batch=4, seq=8, d_model=D, seed=7)[0]
+    with torch.no_grad():
+        out = snn(test)
+        assert torch.isfinite(out).all()
+    # routing softmax must cut its share of the spike budget, not just move it
+    rep = cv.spiking_cost_report(snn, test)
+    assert rep["by_kind"]["softmax"] < 0.5 * rep["total_spikes"]
+
+
 def test_spiking_cost_report_counts_every_primitive():
     """The activation is a fraction of a converted Transformer's spikes: each
     LayerNorm, Softmax and activation*activation matmul runs its own MBE_Id for the
