@@ -583,6 +583,152 @@ def convert(model: nn.Module, recorder: CalibrationRecorder,
 # Cost metrics (fair comparison: accuracy is not enough when N differs)
 # --------------------------------------------------------------------------
 
+def _spiking_primitives(model: nn.Module) -> list:
+    """Every spiking neuron a converted model actually executes.
+
+    ``[(name, op_kind, neuron)]``. The activation is one neuron per module, but each
+    LayerNorm / Softmax / activation*activation matmul runs *several*: the
+    spike-driven FP multiply reconstructs each operand through its own ``MBE_Id``.
+    Counting only the activations (as :func:`activation_cost_report` does) therefore
+    reports a fraction of the spikes a converted Transformer emits.
+
+    ``spike_mult=False`` disables exactly the identity-based multiplies, so those
+    primitives are excluded when it is off; ``rsqrt`` / ``exp`` / ``inv`` run either
+    way. Neurons shared by object identity are listed once.
+    """
+    out, seen = [], set()
+
+    def add(name, kind, neuron):
+        if neuron is not None and id(neuron) not in seen:
+            seen.add(id(neuron))
+            out.append((name, kind, neuron))
+
+    for name, mod in model.named_modules():
+        if isinstance(mod, _SpikingActModule):
+            add(f"{name}", "activation", mod.act.neuron)
+        elif isinstance(mod, _SpikingLayerNormModule):
+            add(f"{name}.rsqrt", "layernorm", mod.ln.rsqrt)
+            if mod.ln.spike_mult:
+                add(f"{name}.id_dev", "layernorm", mod.ln.id_dev)
+                add(f"{name}.id_istd", "layernorm", mod.ln.id_istd)
+        elif isinstance(mod, _SpikingSoftmaxModule):
+            add(f"{name}.exp", "softmax", mod.sm.exp)
+            add(f"{name}.inv", "softmax", mod.sm.inv)
+            if mod.sm.spike_mult:
+                add(f"{name}.idn", "softmax", mod.sm.idn)
+        elif isinstance(mod, _SpikingMatMulModule):
+            if mod.spike_mult:
+                add(f"{name}.idn", "matmul", mod.idn)
+                add(f"{name}.idn2", "matmul", mod.idn2)
+    return out
+
+
+@torch.no_grad()
+def spiking_cost_report(model: nn.Module, batch) -> dict:
+    """Total spike cost of a converted model, measured by instrumenting a forward.
+
+    Every primitive's ``forward`` and ``reconstruct`` is wrapped for one pass through
+    ``batch``, and each call contributes ``mean spikes per element x elements``. The
+    invocation counts are therefore *measured*, not derived: a signed FP multiply
+    reconstructs four operand halves, a LayerNorm squares and then normalises, a
+    softmax reduces over one axis -- multipliers that are easy to get wrong by hand.
+
+    Returns ``primitives`` (per neuron: kind, spikes, elements, calls,
+    spikes/element), ``by_kind`` (spikes summed per op kind), ``total_spikes``, and
+    ``spikes_per_input`` = total spikes divided by the number of elements in the
+    model's own input tensor -- spikes per token for a language model, spikes per
+    input activation for the toy Transformer. That last figure is the one comparable
+    across backends; a per-activation figure is not a total.
+    """
+    from .metrics import neuron_cost
+
+    prims = _spiking_primitives(model)
+    if not prims:
+        return dict(primitives={}, by_kind={}, total_spikes=0.0,
+                    spikes_per_input=0.0, input_elements=0)
+
+    tally = {name: dict(kind=kind, spikes=0.0, elements=0, calls=0)
+             for name, kind, _ in prims}
+    busy = {"flag": False}
+    saved = []
+
+    def instrument(name, neuron):
+        entry = tally[name]
+
+        def wrap(fn):
+            def inner(x, *a, **k):
+                # Re-entrancy guard: the cost query below must not be counted.
+                if torch.is_tensor(x) and x.numel() and not busy["flag"]:
+                    busy["flag"] = True
+                    try:
+                        entry["spikes"] += (neuron_cost(neuron, x)["spikes"]
+                                            * x.numel())
+                        entry["elements"] += x.numel()
+                        entry["calls"] += 1
+                    finally:
+                        busy["flag"] = False
+                return fn(x, *a, **k)
+            return inner
+
+        # Both entry points the ops use. ``SignedMBENeuron`` has no ``reconstruct``
+        # (it is only ever an activation, never a multiply operand), so patch what
+        # exists and restore exactly that.
+        for attr in ("forward", "reconstruct"):
+            orig = getattr(neuron, attr, None)
+            if orig is None:
+                continue
+            saved.append((neuron, attr, orig))
+            setattr(neuron, attr, wrap(orig))
+
+    for name, _, neuron in prims:
+        instrument(name, neuron)
+    try:
+        device = _module_device(model)
+        b = _batch_to_device(batch, device)
+        was_training = model.training
+        model.eval()
+        if isinstance(b, dict):
+            model(**b)
+            n_in = next(iter(b.values())).numel()
+        elif isinstance(b, (tuple, list)):
+            model(*b)
+            n_in = b[0].numel()
+        else:
+            model(b)
+            n_in = b.numel()
+        model.train(was_training)
+    finally:
+        for neuron, attr, orig in saved:
+            try:
+                delattr(neuron, attr)          # drop the instance shadow entirely
+            except AttributeError:
+                setattr(neuron, attr, orig)
+
+    by_kind: dict[str, float] = {}
+    for name, e in tally.items():
+        e["spikes_per_element"] = e["spikes"] / max(e["elements"], 1)
+        by_kind[e["kind"]] = by_kind.get(e["kind"], 0.0) + e["spikes"]
+    total = sum(by_kind.values())
+    return dict(primitives=tally, by_kind=by_kind, total_spikes=total,
+                spikes_per_input=total / max(n_in, 1), input_elements=n_in)
+
+
+def format_spiking_cost_report(rep: dict, label: str = "") -> str:
+    """Printable breakdown of :func:`spiking_cost_report`."""
+    tag = f" {label}" if label else ""
+    if not rep.get("primitives"):
+        return f"[spikes{tag}] no spiking primitives"
+    lines = [f"[spikes{tag}] total={rep['total_spikes']:.3e} over "
+             f"{rep['input_elements']} model-input elements  ->  "
+             f"{rep['spikes_per_input']:.2f} spikes per input element"]
+    total = max(rep["total_spikes"], 1e-30)
+    for kind, s in sorted(rep["by_kind"].items(), key=lambda kv: -kv[1]):
+        n = sum(1 for e in rep["primitives"].values() if e["kind"] == kind)
+        lines.append(f"    {kind:10s} {s / total * 100:5.1f}%  "
+                     f"{s:.3e} spikes over {n} primitive(s)")
+    return "\n".join(lines)
+
+
 @torch.no_grad()
 def activation_cost_report(model: nn.Module, batch, keep: int = 20_000) -> dict:
     """Per-activation cost of a converted model, measured on a real ``batch``.
@@ -591,6 +737,10 @@ def activation_cost_report(model: nn.Module, batch, keep: int = 20_000) -> dict:
     input, and returns ``{module_name: neuron_cost(...)}`` (stored / active bases,
     timesteps, spikes per input). Because MBE and PASN store different numbers of
     bases, these let the comparison be made at matched cost, not just accuracy.
+
+    **Activations only** -- this is not a total. Use :func:`spiking_cost_report` for
+    the model's whole spike cost; the FP-multiply identities inside LayerNorm,
+    Softmax and the attention matmuls are not counted here.
     """
     from .metrics import neuron_cost
     acts = [(n, m) for n, m in model.named_modules()
@@ -637,4 +787,4 @@ def format_cost_report(costs: dict, label: str = "") -> str:
     tag = f" {label}" if label else ""
     return (f"[cost{tag}] activations={n}  T={steps}  "
             f"stored bases/act={stored}  active bases/input={active:.2f}  "
-            f"spikes/input={spikes:.2f}")
+            f"activation spikes/input={spikes:.2f}")

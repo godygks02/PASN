@@ -404,6 +404,33 @@ def test_convert_pasn_backend_installs_pasn_neurons():
     assert costs and all(c["spikes"] <= 6 for c in costs.values())
 
 
+def test_spiking_cost_report_counts_every_primitive():
+    """The activation is a fraction of a converted Transformer's spikes: each
+    LayerNorm, Softmax and activation*activation matmul runs its own MBE_Id for the
+    spike-driven multiply. A report that counts only activations understates energy."""
+    from mbe import convert as cv
+    _, snn, test = _convert_tiny(spike_mult=True)
+    rep = cv.spiking_cost_report(snn, test)
+    kinds = set(rep["by_kind"])
+    assert kinds == {"activation", "layernorm", "softmax", "matmul"}, kinds
+    # every primitive must actually have been invoked, and the total must exceed the
+    # activation share by a wide margin
+    assert all(e["calls"] > 0 and e["elements"] > 0
+               for e in rep["primitives"].values())
+    assert rep["total_spikes"] > 3 * rep["by_kind"]["activation"]
+    assert rep["spikes_per_input"] > 0
+    # by_kind must sum to the total, and instrumentation must be fully removed
+    assert abs(sum(rep["by_kind"].values()) - rep["total_spikes"]) < 1e-6
+    act = snn.get_submodule("blocks.0.act").act.neuron
+    assert "forward" not in vars(act), "forward wrapper left installed"
+    assert "reconstruct" not in vars(act), "reconstruct wrapper left installed"
+    # spike_mult=False removes exactly the identity-based multiplies
+    _, exact, _ = _convert_tiny(spike_mult=False)
+    rep2 = cv.spiking_cost_report(exact, test)
+    assert "matmul" not in rep2["by_kind"]
+    assert rep2["total_spikes"] < rep["total_spikes"]
+
+
 def test_phase4_spike_path_matches_exact_wiring():
     """The spike-driven FP-mult path must add little over exact reconstruction --
     if it doesn't, the outer-product / matmul wiring is wrong (not just the fit)."""

@@ -243,6 +243,12 @@ def main():
         sample_batch = ids[:block].unsqueeze(0)
         costs = cv.activation_cost_report(model, sample_batch)
         print(cv.format_cost_report(costs, label=args.backend), flush=True)
+        # Whole-model spike cost. The line above is activations only; the FP-multiply
+        # identities inside LayerNorm (and attention, once it is converted) are not
+        # in it, so it is not an energy total.
+        print(cv.format_spiking_cost_report(
+            cv.spiking_cost_report(model, sample_batch), label=args.backend),
+            flush=True)
         ppl_snn = eval_ppl(f"SNN-{args.backend}")
         drop = 100.0 * (ppl_snn - ppl_ann) / ppl_ann
         print(f"SNN ({args.backend}) perplexity = {ppl_snn:.4f}   "

@@ -214,19 +214,46 @@ the toy activation the near-zero binades carry 2.3–2.9× the weight width woul
 them and the outer ones 0.02–0.3× (total-variation distance 0.44 from width weighting)
 — so a spike budget stated under width weights is not the budget the network spends.
 
-Toy Transformer (2 layers, d=16), all four backends at the same router:
+Toy Transformer (2 layers, d=16), all four backends at the same router. `TOTAL` counts
+**every** spiking primitive per element of the model's input, measured by instrumenting
+the forward pass (`spiking_cost_report`) rather than by hand-derived multipliers:
 
-| backend | forward rel\|err\| | GELU spikes/in |
-|---|---|---|
-| mbe | 2.02e‑2 | 33.6 |
-| mbe_pasn | 6.37e‑3 | 11.4 |
-| **mbe_pasn_s** | **3.65e‑3** | 14.8 |
-| pasn (SAR) | 8.82e‑3 | **2.82** |
+| backend | forward rel\|err\| | GELU spk/in | **TOTAL spk/in** | act% | LN% | softmax% | matmul% |
+|---|---|---|---|---|---|---|---|
+| mbe | 2.02e‑2 | 33.6 | 1597 | 16.9 | 27.3 | 35.9 | 20.0 |
+| mbe_pasn | 6.37e‑3 | 11.4 | 1267 | 7.2 | 25.8 | 45.2 | 21.7 |
+| **mbe_pasn_s** | **3.65e‑3** | 14.8 | 1491 | 8.0 | 33.2 | 38.4 | 20.4 |
+| pasn (SAR) | 8.82e‑3 | **2.82** | **795** | 2.8 | 14.7 | 72.0 | 10.5 |
 
 The shared basis has the lowest network-level error of the four, so the 1‑D advantage
 carries. (`mbe_pasn` moved from an earlier 5.06e‑3 because of the domain-clamping fix,
 not noise: its outermost bank is now fitted on `[2, 2.18]`, where inputs actually
 occur, rather than on `[2, 4)`.)
+
+**But the activation is only 2.8–16.9% of the spike budget**, so every per-activation
+spike figure quoted before this measurement — including the ones in the tables above —
+was a fraction of the energy, not the energy. Two consequences:
+
+* **Softmax is the largest single consumer (36–72%) and has no routed variant**, so it
+  is identical global MBE in all four backends. That caps what routing can win on the
+  total: mbe → pasn is **2.0×** (not the 12× the activation column suggests),
+  mbe → mbe_pasn **1.26×**, and mbe → mbe_pasn_s only **1.07×** despite its activation
+  being 2.3× cheaper.
+* **The FP-multiply identities are where the spikes are.** LayerNorm (15–33%) and the
+  attention matmuls (10–22%) each rival or exceed the activation. On the toy,
+  `mbe_pasn_s`'s LayerNorm identities are 14% *more* expensive than plain MBE's; on
+  GPT‑2 they are 2.6× cheaper (below). The identity is not a solved sub-problem.
+
+GPT‑2 Stage 1 converts GELU + LayerNorm only (HF computes attention functionally, so
+there is nothing to hook), and there LayerNorm dominates outright:
+
+| backend | activation spk/in | TOTAL spk/in | act% | LN% | Δppl |
+|---|---|---|---|---|---|
+| mbe | 29.5 | 28 301 | 26.7 | 73.3 | +0.00% |
+| **mbe_pasn_s** | **5.8** | **9 347** | 15.8 | 84.2 | −0.01% |
+
+3.03× fewer total spikes, driven by the routed identities inside LayerNorm rather than
+by the activation.
 
 GPT‑2 smoke with a 20-spike budget: Δppl −0.00%, and the budget visibly does work —
 a 1.39e‑6 candidate at 24.3 spikes is rejected for a 1.78e‑6 one at 15.1, and
@@ -249,7 +276,22 @@ selection rather than shipped.
    parity-fixed mantissa of the variance, which is computed inside the spiking op
    rather than held during calibration, so that one primitive still falls back to range
    width. The identities and the activation do get measured weights.
-4. **Still no real downstream number.** Everything above is 1-D approximation plus a
-   toy Transformer and a random-weight GPT-2 smoke test. The backend is wired, so the
+4. **Softmax has no routed variant** — it is global MBE in every backend and the single
+   largest spike consumer where it is converted. Now that the cost is measured, this is
+   the highest-value energy work left, ahead of any further activation tuning. Its
+   primitives (`exp2`, `inv`, identity) are already in the registry, so it is wiring.
+5. **On a real model, attention is never spiked.** `gpt2_convert` marks only GELU and
+   LayerNorm; HF computes QK^T and attn×V functionally, so there is no `MatMulAA` to
+   hook. Every real-model number so far has exact FP attention — only the toy exercises
+   the spike-driven matmul.
+6. **Weight×input is deliberately not approximated, and should not be.** A binary spike
+   times a stored weight is a gated accumulate: with `x_i = Σ_{n,t} a_{n,t} s_{i,n,t}`,
+   `(Wx)_j = Σ_{n,t} a_{n,t} (Σ_i W_ji s_{i,n,t})`, an exact rearrangement whose inner
+   sum needs no multiplier. The implementation decodes to a real value and calls
+   `nn.Linear`, which is mathematically identical — so accuracy is unaffected, but the
+   accumulate-only form is never demonstrated and the energy table will rest on the
+   algebra rather than on a measured operation count.
+7. **Still no real downstream number.** Everything above is 1-D approximation plus a toy
+   Transformer and a random-weight GPT-2 smoke test. The backend is wired, so the
    remaining step is the actual run: GPT‑2 × WikiText‑2 on vast.ai, ranking these
    operating points by Δperplexity per spike (ANN baseline 34.52 already measured).

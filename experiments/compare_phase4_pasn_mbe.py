@@ -47,7 +47,7 @@ def convert_backend(model, calib, backend, epochs):
             if isinstance(mod, cv._SpikingActModule)]
     sp = [spikes_per_input(m.get_submodule(n).act.neuron, rec.ranges[n][0].sample)
           for n in acts]
-    return m, sum(sp) / len(sp)
+    return m, sum(sp) / len(sp), cv.spiking_cost_report(m, calib[0])
 
 
 def main():
@@ -59,16 +59,25 @@ def main():
     with torch.no_grad():
         ann = model(test)
     print(f"toy: {n_layers} layers, d={D}   ANN mean|y|={ann.abs().mean():.4f}\n")
-    print(f"{'backend':10s} {'fwd rel|err|':>13s} {'GELU spikes/in':>15s}")
-    print("-" * 42)
+    print(f"{'backend':10s} {'fwd rel|err|':>13s} {'GELU spk/in':>12s} "
+          f"{'TOTAL spk/in':>13s} {'act%':>6s} {'LN%':>6s} {'softmax%':>9s} "
+          f"{'matmul%':>8s}")
+    print("-" * 76)
     for backend in ["mbe", "mbe_pasn", "mbe_pasn_s", "pasn"]:
-        m, act_spikes = convert_backend(model, calib, backend, epochs=200)
+        m, act_spikes, rep = convert_backend(model, calib, backend, epochs=200)
         with torch.no_grad():
             out = m(test)
-        print(f"{backend:10s} {rel_err(out, ann):13.3e} {act_spikes:15.3f}")
-    print("\n(The routed backends should lower the forward error and/or the GELU "
-          "spike cost -- the activation was the dominant Phase-4 error source. "
-          "mbe_pasn and pasn share the router, so they differ only in the encoder.)")
+        tot = max(rep["total_spikes"], 1e-30)
+        pct = {k: 100.0 * v / tot for k, v in rep["by_kind"].items()}
+        print(f"{backend:10s} {rel_err(out, ann):13.3e} {act_spikes:12.3f} "
+              f"{rep['spikes_per_input']:13.2f} "
+              f"{pct.get('activation', 0):5.1f}% {pct.get('layernorm', 0):5.1f}% "
+              f"{pct.get('softmax', 0):8.1f}% {pct.get('matmul', 0):7.1f}%")
+    print("\nTOTAL spk/in counts every spiking primitive per element of the model's "
+          "input, measured by instrumenting the forward pass -- the GELU column is a "
+          "fraction of it. Softmax has no routed variant, so it is identical MBE in "
+          "all four; mbe_pasn / mbe_pasn_s / pasn share the router and differ only in "
+          "what a bank contains.")
 
 
 if __name__ == "__main__":
