@@ -299,6 +299,32 @@ def test_mbe_pasn_s_costs_one_shared_basis_set():
     assert neuron_params(m) == 5 * N + R * (N + 1)
 
 
+def test_mbe_pasn_s_respects_a_spike_budget():
+    """Selection must honour a spike budget: min-MSE alone always takes the
+    expensive end of the candidate pool, and spikes are the energy currency."""
+    from mbe.mbe_pasn_s import pareto_front
+    dom = (-8.0, 8.0)
+    free = build_mbe_pasn_s("silu", dom, e_min=-2, e_max=4, n_shared=[2, 4],
+                            epochs=40)
+    tight = build_mbe_pasn_s("silu", dom, e_min=-2, e_max=4, n_shared=[2, 4],
+                             epochs=40, spike_budget=8.0)
+    x = (torch.randn(3000) * 3.0).clamp(*dom)
+    # the budgeted build must be cheaper, and the unbudgeted one must be the
+    # pool's most accurate candidate
+    assert tight.mean_spikes(x) < free.mean_spikes(x)
+    chosen = [c for c in free.selection_trace if c["chosen"]][0]
+    assert chosen["mse"] == min(c["mse"] for c in free.selection_trace)
+    # every chosen candidate under a budget must have been marked feasible
+    tc = [c for c in tight.selection_trace if c["chosen"]][0]
+    assert tc["spikes"] <= 8.0 and tc["feasible"]
+    # the frontier is non-dominated and ordered by spikes
+    front = pareto_front(free.selection_trace)
+    assert front and all(front[i]["spikes"] <= front[i + 1]["spikes"]
+                         for i in range(len(front) - 1))
+    assert all(front[i]["mse"] > front[i + 1]["mse"]
+               for i in range(len(front) - 1))
+
+
 def test_convert_pasn_backend_installs_pasn_neurons():
     """backend="pasn" must reach every routed conversion point (activation,
     LayerNorm primitives, activation*activation matmul identities) -- otherwise a

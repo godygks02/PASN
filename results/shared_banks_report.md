@@ -159,23 +159,67 @@ it shares no point with what was fitted. Both properties were necessary:
 
 ---
 
+## Spike-aware selection: one build, the whole frontier
+
+Selection scores **(MSE, spikes) under the same width weights**, so a candidate's
+accuracy and its energy are measured against each other consistently. `n_shared`
+accepts a list, so the candidate pool spans the axis that dominates spike cost, and
+`spike_budget` keeps the most accurate candidate that fits (returning the cheapest and
+reporting `UNSATISFIABLE` if none do — it never silently overspends).
+
+One build of SiLU with `n_shared=[2,4,8]` (18 candidates, ~3 min) yields the frontier
+directly from `model.selection_trace`:
+
+| N | init / restart | MSE | spikes/in | params |
+|---|---|---|---|---|
+| 2 | uniform / r0 | 1.01e‑4 | **3.90** | **49** |
+| 2 | logspread / r2 | 6.29e‑5 | 15.3 | **49** |
+| 4 | uniform / r0 | 2.27e‑5 | 17.6 | 85 |
+| **2** | **uniform / r2** | **6.32e‑6** | 22.2 | **49** |
+| 8 | uniform / r0 | 4.95e‑6 | 52.8 | 157 |
+| 8 | uniform / r2 | 2.53e‑6 | 64.7 | 157 |
+| 8 | logspread / r2 | **1.97e‑6** | 101.9 | 157 |
+
+Budgets are honoured, and the offset-grid metric tracks an independent uniform test
+draw closely (6.32e‑6 → 6.78e‑6; 1.97e‑6 → 1.94e‑6), which is what licenses using it
+for selection at all:
+
+| budget | test MSE | measured spikes | params |
+|---|---|---|---|
+| 4 | 9.61e‑5 | 3.90 | 49 |
+| 8 | 9.61e‑5 | 3.90 | 49 |
+| 16 | 5.99e‑5 | 15.3 | 49 |
+| 32 | 6.78e‑6 | 22.1 | 49 |
+| none | 1.94e‑6 | 101.7 | 157 |
+
+Two things this settles:
+
+* **The 3.9-spike operating point is recoverable on request** rather than lost to
+  min-MSE selection. It is 3.4× cheaper than flat MBE-PASN's cheapest point (13.1) at
+  2.4× worse MSE and 3.7× less memory — a corner of the frontier flat cannot reach at
+  any N.
+* **Restarts beat extra bases.** `N=2 uniform/r2` reaches 6.32e‑6 at 22.2 spikes with
+  **49** parameters, better than every N=4 candidate and within 3× of the best N=8 at
+  a third of the memory and a fifth of the spikes. Spending the search budget on
+  restarts is cheaper than spending it on bases.
+
+---
+
 ## Remaining
 
-1. **Selection is accuracy-only, and it buys accuracy with spikes.** SiLU N=2 goes
-   from 9.6e‑5 at **3.9 spikes/input** (`restarts=1`) to 6.8e‑6 at 22.1
-   (`restarts=3`). The 3.9-spike point is one flat cannot reach at any N, and it is
-   lost by default. Since energy is the headline axis, selection should be
-   spike-aware — keep the (MSE, spikes) Pareto set, or minimise MSE subject to a spike
-   budget. One function, `selection_loss`, is the only thing to change.
+1. **The width weights still encode "uniform over the domain".** That is the right
+   proxy for the reported 1-D metric, but a spike budget expressed under it is not the
+   budget a real network sees — activations concentrate near zero. Calibration already
+   measures the per-range visit probabilities; passing them in makes both the fit and
+   the budget distribution-aware. This is the same hook for both.
 2. **Unreachable ranges are still stored and counted.** The router's binade grid does
    not align with a calibrated domain (2 of 13 ranges for GELU, 2 of 4 for 1/√x). They
    are left unfitted — previously they were fitted outside the target's valid range and
    held **NaN** parameters, invisible because no input routes there — but pruning them
    would reduce both variants' memory.
-3. **The width weights are where a real distribution belongs.** They currently encode
-   "uniform over the domain". Calibration measures the actual per-range visit
-   probabilities; passing those in makes both the fit and the selection
-   distribution-aware, which is what the downstream conversion actually needs.
+3. **Per-bank MSE in the raw sweep log is absolute, not relative.** Large-|x| ranges
+   carry larger |f|, so their absolute MSE is larger for uninteresting reasons; read
+   those columns as relative error before concluding which range is hard.
 4. **No downstream number yet.** All of this is 1-D approximation. `convert.py` needs
    an `S` backend before GPT-2 × WikiText-2 can rank these operating points by what
    matters — Δperplexity per spike.

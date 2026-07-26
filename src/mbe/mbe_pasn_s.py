@@ -141,14 +141,33 @@ class MBEPASNSNeuron(nn.Module):
 
     # -- cost introspection ------------------------------------------------
     @torch.no_grad()
-    def firing_rate(self, x: torch.Tensor) -> float:
+    def spike_counts(self, x: torch.Tensor) -> torch.Tensor:
+        """Spikes emitted **per input element**, same shape as ``x``.
+
+        Element-wise rather than averaged, so a cost can be taken under a weighting
+        (see the width-weighted selection metric in :func:`build_mbe_pasn_s`).
+        """
+        cfg = self.core.cfg
         _, rho = self._route(x.reshape(-1))
-        return self.core.firing_rate(rho)
+        _, r, vth = self.core._kernels()
+        u = rho.unsqueeze(1).expand(-1, cfg.n_basis).contiguous()
+        cnt = torch.zeros_like(rho)
+        for t in range(cfg.n_steps):
+            s = (u - vth[t] >= 0).to(u.dtype)
+            cnt = cnt + s.sum(dim=1)
+            u = u - s * r[t]
+        return cnt.reshape(x.shape)
 
     @torch.no_grad()
     def mean_spikes(self, x: torch.Tensor) -> float:
+        if x.numel() == 0:
+            return 0.0
+        return float(self.spike_counts(x).mean())
+
+    @torch.no_grad()
+    def firing_rate(self, x: torch.Tensor) -> float:
         cfg = self.core.cfg
-        return self.firing_rate(x) * cfg.n_basis * cfg.n_steps
+        return self.mean_spikes(x) / (cfg.n_basis * cfg.n_steps)
 
     @torch.no_grad()
     def stored_bases(self) -> int:
@@ -222,11 +241,12 @@ def uniform_alpha(n_shared: int) -> list:
 
 
 def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
-                     e_max: int | None = None, n_shared: int = 4,
+                     e_max: int | None = None, n_shared: int | list = 4,
                      n_steps: int = 16, epochs: int = 300,
                      m_per_bank: int = 800, seed: int = 0,
                      normalize_banks: bool = True, alpha_init: str = "auto",
-                     restarts: int = 3, verbose: bool = False,
+                     restarts: int = 3, spike_budget: float | None = None,
+                     verbose: bool = False,
                      device: torch.device | str = "cpu") -> MBEPASNSNeuron:
     """Build + fit an MBE-PASN-S neuron for target ``name`` on ``domain``.
 
@@ -260,9 +280,24 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
     grid midpoints while drifting between them). Cost is linear: ``2 * restarts``
     fits with ``alpha_init="auto"``.
 
+    ``spike_budget``: maximum mean spikes per input. Candidates over budget are
+    discarded and the most accurate survivor is kept; if none fit, the cheapest
+    candidate is returned (and reported). **Selection is otherwise accuracy-only, and
+    accuracy is bought with spikes** -- on SiLU the candidate pool spans 9.6e-5 at 3.9
+    spikes to 6.8e-6 at 22.1, and min-MSE always takes the expensive end. Since spikes
+    are the energy currency, pass a budget whenever energy matters.
+
+    ``n_shared`` accepts a list, in which case every value is a candidate. This is
+    what makes a budget useful: the spike cost is dominated by ``N``, so a pool at one
+    ``N`` cannot span much of the frontier.
+
     ``seed`` does **not** affect the result: the calibration grids, the threshold
     placement, the restart jitter and the readout solve are all deterministic. It is
     accepted for interface parity with the other builders.
+
+    The returned neuron carries ``selection_trace``: every candidate's
+    ``(n_shared, alpha_init, restart, mse, spikes, params, feasible, chosen)`` on the
+    offset grid, so the caller can plot the frontier from a single build.
     """
     from .fit import fit_model
 
@@ -316,18 +351,24 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
     ])
 
     @torch.no_grad()
-    def selection_loss(cand) -> float:
-        """Width-weighted squared error on the offset grid."""
-        return float(((cand(xsel) - ysel).pow(2) * sel_w).sum())
+    def score(cand) -> tuple:
+        """Width-weighted (squared error, spikes per input) on the offset grid.
 
-    candidates = ([("uniform", uniform_alpha(n_shared)), ("logspread", 1.0)]
-                  if alpha_init == "auto"
-                  else [(alpha_init,
-                         uniform_alpha(n_shared) if alpha_init == "uniform"
-                         else 1.0)])
+        ``sel_w`` sums to one, so both are expectations under the same distribution
+        the MSE column reports -- the accuracy and the energy of a candidate are
+        measured against each other consistently.
+        """
+        mse = float(((cand(xsel) - ysel).pow(2) * sel_w).sum())
+        spikes = float((cand.spike_counts(xsel) * sel_w).sum())
+        return mse, spikes
 
-    scored, best = [], None
-    for ai, av in candidates:
+    n_list = [n_shared] if isinstance(n_shared, int) else list(n_shared)
+    inits = ["uniform", "logspread"] if alpha_init == "auto" else [alpha_init]
+    candidates = [(n, ai, uniform_alpha(n) if ai == "uniform" else 1.0)
+                  for n in n_list for ai in inits]
+
+    trace = []
+    for n_basis, ai, av in candidates:
         for k in range(max(restarts, 1)):
             # Jitter is keyed on the restart index *only*, never on ``seed``. Its
             # job is to explore basins, not to be random, and keying it on the seed
@@ -335,7 +376,7 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
             # than no restarts at all while one lucky seed looked 7x better.
             torch.manual_seed(1000 * k)
             # Identity normalisation: the routed affine already maps input to rho.
-            cfg = MBEConfig(n_basis=n_shared, n_steps=n_steps, x_min=0.0,
+            cfg = MBEConfig(n_basis=n_basis, n_steps=n_steps, x_min=0.0,
                             x_scale=1.0, alpha_v=av, use_bias=False)
             core = MBENeuron(cfg).to(device)
             # Restart 0 is the principled init; later restarts jitter it in log
@@ -348,21 +389,53 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
                     for p in (core.log_alpha_v, core.log_tau_r, core.log_tau_vth,
                               core.log_tau_d, core.log_dt):
                         p.add_(torch.randn_like(p) * 0.3)
-            W = torch.zeros(router.n_banks, n_shared + 1, device=device)
+            W = torch.zeros(router.n_banks, n_basis + 1, device=device)
             cand = MBEPASNSNeuron(router, core, W).to(device)
             fit_model(cand, xs, ys, seed=0, epochs=epochs)
             if normalize_banks:
                 with torch.no_grad():
                     cand.W.mul_(scale.unsqueeze(1))   # undo the per-bank rescaling
-            loss = selection_loss(cand)
-            scored.append((f"{ai}/r{k}", loss))
-            if best is None or loss < best[1]:
-                best = (cand, loss, ai)
-    model, sel_loss, chosen = best
+            mse, spikes = score(cand)
+            trace.append(dict(model=cand, n_shared=n_basis, alpha_init=ai,
+                              restart=k, mse=mse, spikes=spikes,
+                              params=cand.num_learnable(),
+                              feasible=spike_budget is None
+                              or spikes <= spike_budget, chosen=False))
+
+    feasible = [c for c in trace if c["feasible"]]
+    if feasible:
+        pick = min(feasible, key=lambda c: c["mse"])
+    else:
+        # Budget unsatisfiable at any candidate: return the cheapest, don't pretend.
+        pick = min(trace, key=lambda c: c["spikes"])
+    pick["chosen"] = True
+    model = pick["model"]
+    model.selection_trace = [{k: v for k, v in c.items() if k != "model"}
+                             for c in trace]
     if verbose:
         tag = "relative" if normalize_banks else "absolute"
-        print(f"    shared N={n_shared} T={n_steps} over {router.n_banks} banks: "
-              f"chose {chosen} ({tag}, offset-grid loss {sel_loss:.2e}; "
-              f"{', '.join(f'{t}={l:.1e}' for t, l in scored)})  "
-              f"params={model.num_learnable()}", flush=True)
+        budget = ("none" if spike_budget is None
+                  else f"{spike_budget:g}"
+                       f"{'' if feasible else ' (UNSATISFIABLE)'}")
+        print(f"    shared T={n_steps} over {router.n_banks} banks, {tag} fit, "
+              f"spike budget {budget}: chose N={pick['n_shared']} "
+              f"{pick['alpha_init']}/r{pick['restart']} -> mse={pick['mse']:.2e} "
+              f"spikes={pick['spikes']:.2f} params={pick['params']}", flush=True)
+        for c in trace:
+            print(f"      {'*' if c['chosen'] else ' '} N={c['n_shared']} "
+                  f"{c['alpha_init']:9s}/r{c['restart']} mse={c['mse']:.2e} "
+                  f"spikes={c['spikes']:6.2f}"
+                  f"{'' if c['feasible'] else '  over budget'}", flush=True)
     return model
+
+
+def pareto_front(trace: list) -> list:
+    """Candidates from a ``selection_trace`` that no other candidate beats on both
+    accuracy and spikes. Use to report the frontier rather than one operating point."""
+    out = []
+    for c in trace:
+        if not any(o is not c and o["mse"] <= c["mse"] and o["spikes"] <= c["spikes"]
+                   and (o["mse"] < c["mse"] or o["spikes"] < c["spikes"])
+                   for o in trace):
+            out.append(c)
+    return sorted(out, key=lambda c: c["spikes"])
