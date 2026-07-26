@@ -20,10 +20,18 @@ import torch
 def neuron_cost(neuron, x: torch.Tensor) -> dict:
     from .signed import SignedMBENeuron
     from .mbe_pasn import MBEPASNNeuron
+    from .mbe_pasn_s import MBEPASNSNeuron
     from .pasn import PASNNeuron
 
     if isinstance(neuron, PASNNeuron):
         return neuron.cost(x)
+
+    if isinstance(neuron, MBEPASNSNeuron):
+        # One shared basis set runs for every input, so the spike accounting is
+        # that of a single global MBE neuron of the same (N, T): routing is free.
+        cfg = neuron.core.cfg
+        return dict(stored=neuron.stored_bases(), active=cfg.n_basis,
+                    steps=cfg.n_steps, spikes=neuron.mean_spikes(x))
 
     if isinstance(neuron, MBEPASNNeuron):
         steps = neuron.bank_mods[0].cfg.n_steps
@@ -69,4 +77,6 @@ def neuron_params(neuron) -> int:
         return int(neuron.W.numel())
     if isinstance(neuron, MBEPASNNeuron):
         return int(sum(b.num_learnable() for b in neuron.bank_mods))
-    return int(neuron.num_learnable())   # MBE and signed-MBE
+    # MBE, signed-MBE and MBE-PASN-S all report their own learnable count
+    # (MBE-PASN-S: 5N shared shape parameters + R(N+1) routed readout).
+    return int(neuron.num_learnable())

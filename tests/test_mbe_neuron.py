@@ -19,6 +19,7 @@ from mbe import (  # noqa: E402
 from mbe.mbe_pasn import (  # noqa: E402
     PrefixRouter as MBEPrefixRouter, MBEPASNNeuron, build_mbe_pasn,
 )
+from mbe.mbe_pasn_s import MBEPASNSNeuron, build_mbe_pasn_s  # noqa: E402
 
 
 def test_forward_shape_and_finiteness():
@@ -248,6 +249,54 @@ def test_phase4_conversion_replaces_only_nonlinearities():
     assert snn.get_submodule("blocks.0.act").act.neuron.w.dtype == torch.float64
     assert snn.get_submodule("blocks.0.attn.softmax").sm.exp.w.dtype == torch.float64
     assert snn.get_submodule("blocks.0.ln1").ln.rsqrt.w.dtype == torch.float64
+
+
+# -- MBE-PASN-S (shared basis set, prefix-routed readout) ------------------
+
+def test_mbe_pasn_s_reduces_to_the_baseline_neuron():
+    """A single routed range must be bit-identical to a plain MBENeuron carrying
+    the same shape parameters and readout -- the shared-basis variant changes only
+    which readout is selected, never the dynamics."""
+    torch.manual_seed(0)
+    N = 3
+    router = MBEPrefixRouter(1.0, 2.0, e_min=0, e_max=1)   # near0 + mag e=0
+    core = MBENeuron(MBEConfig(n_basis=N, n_steps=16, x_min=0.0, x_scale=1.0,
+                               use_bias=False))
+    ref = MBENeuron(MBEConfig(n_basis=N, n_steps=16, x_min=1.0, x_scale=1.0,
+                              use_bias=False))
+    ref.load_state_dict(core.state_dict())
+    W = torch.zeros(router.n_banks, N + 1)
+    W[1, :N] = ref.w                       # bank 1 gets the reference readout
+    s = MBEPASNSNeuron(router, core, W)
+    x = torch.rand(400) + 1.0              # all in [1,2) -> routed to bank 1
+    with torch.no_grad():
+        assert torch.equal(s(x), ref(x))
+
+
+def test_mbe_pasn_s_reconstruct_is_the_spike_sum():
+    """reconstruct() must be the pure spike-sum form of forward() (so the neuron is
+    a valid operand for the spike-driven FP multiply), with the intensity matrix
+    selected by the router."""
+    m = build_mbe_pasn_s("invsqrt", (0.5, 2.0), e_min=-2, e_max=1, n_shared=3,
+                         epochs=40, seed=0)
+    x = torch.rand(500) * 1.5 + 0.5
+    with torch.no_grad():
+        assert (m.reconstruct(x) - m(x)).abs().max() < 1e-5
+
+
+def test_mbe_pasn_s_costs_one_shared_basis_set():
+    """The cost meter must credit the design: one basis set stored and executed
+    regardless of the number of ranges, memory = 5N + R(N+1)."""
+    from mbe.metrics import neuron_cost, neuron_params
+    N = 3
+    m = build_mbe_pasn_s("invsqrt", (0.5, 2.0), e_min=-2, e_max=1, n_shared=N,
+                         epochs=40, seed=0)
+    R = m.router.n_banks
+    x = torch.rand(2000) * 1.5 + 0.5
+    c = neuron_cost(m, x)
+    assert c["stored"] == N and c["active"] == N        # not R*N
+    assert c["spikes"] <= N * c["steps"]
+    assert neuron_params(m) == 5 * N + R * (N + 1)
 
 
 def test_convert_pasn_backend_installs_pasn_neurons():

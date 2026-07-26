@@ -9,6 +9,8 @@ from .fit import fit_function, fit_model, solve_readout, FitResult
 from .pasn import PrefixRouter, PASNNeuron, build_pasn, sar_encode
 # MBE-PASN (the MBE-improvement variant: prefix banks of MBE neurons).
 from .mbe_pasn import MBEPASNNeuron, build_mbe_pasn
+# MBE-PASN-S (shared MBE basis set, prefix-routed readout).
+from .mbe_pasn_s import MBEPASNSNeuron, build_mbe_pasn_s
 # Unified cost metrics across all neuron types.
 from .metrics import neuron_cost, spikes_per_input
 
@@ -31,6 +33,9 @@ __all__ = [
     # MBE-PASN
     "MBEPASNNeuron",
     "build_mbe_pasn",
+    # MBE-PASN-S
+    "MBEPASNSNeuron",
+    "build_mbe_pasn_s",
     # metrics
     "neuron_cost",
     "spikes_per_input",

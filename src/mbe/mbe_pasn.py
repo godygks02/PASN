@@ -69,6 +69,31 @@ class PrefixRouter:
     def n_banks(self) -> int:
         return len(self.banks)
 
+    def bank_interval(self, bi: int) -> tuple[float, float]:
+        """The ``x``-space interval bank ``bi`` is responsible for."""
+        spec = self.banks[bi]
+        if spec["kind"] == "near0":
+            return -self.near0_span, self.near0_span
+        e, s = spec["e"], spec["sign"]
+        lo, hi = 2.0 ** e, 2.0 ** (e + 1)
+        return (lo, hi) if s > 0 else (-hi, -lo)
+
+    def reachable(self, bi: int, lo: float, hi: float,
+                  eps: float = 1e-12) -> tuple[float, float] | None:
+        """Intersection of bank ``bi``'s interval with the calibration domain
+        ``[lo, hi]``, or ``None`` when the bank cannot be reached.
+
+        The router's binade grid does not align with an arbitrary calibrated
+        domain, so some banks lie entirely outside it (e.g. the signed near-zero
+        bank for a positive-only domain such as ``1/sqrt(x)`` on ``[0.5, 2]``).
+        Fitting those on their nominal interval evaluates the target outside its
+        valid range -- which produced NaN parameters, harmless only because no
+        input ever routes there. Callers must use this to clamp or skip.
+        """
+        a, b = self.bank_interval(bi)
+        a, b = max(a, lo), min(b, hi)
+        return None if b - a <= eps else (a, b)
+
     @torch.no_grad()
     def route(self, x_flat: torch.Tensor) -> torch.Tensor:
         """Bank index (LongTensor) for each element of a 1-D tensor."""
@@ -215,13 +240,26 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
     fn, _ = functions.REGISTRY[name]
     router = PrefixRouter(domain[0], domain[1], e_min=e_min, e_max=e_max)
     banks: list[MBENeuron] = []
-    for spec in router.banks:
+    for bi, spec in enumerate(router.banks):
+        # Clamp every fit to the calibrated domain; banks the domain never reaches
+        # are kept (the router indexes into this list) but left unfitted.
+        span = router.reachable(bi, domain[0], domain[1])
+        if span is None:
+            cap = n_near0 if spec["kind"] == "near0" else n_local
+            banks.append(MBENeuron(MBEConfig(
+                n_basis=cap, n_steps=n_steps, x_min=0.0, x_scale=1.0)).to(device))
+            if verbose:
+                print(f"    bank {bi:2d}/{router.n_banks - 1:2d} "
+                      f"{'unreachable':16s} (outside {domain})", flush=True)
+            continue
+        a, b = span
         if spec["kind"] == "near0":
-            span, sign, flo, fhi = router.near0_span, None, -router.near0_span, router.near0_span
+            sign, flo, fhi = None, a, b
             cap = n_near0
         else:
-            s, e = spec["sign"], spec["e"]
-            sign, flo, fhi = s, 2.0 ** e, 2.0 ** (e + 1)     # magnitude binade
+            s = spec["sign"]
+            sign = s
+            flo, fhi = min(abs(a), abs(b)), max(abs(a), abs(b))  # magnitude feed
             cap = n_local
         if adaptive:
             bank, mse = _fit_bank_adaptive(fn, sign, flo, fhi, target_mse,
