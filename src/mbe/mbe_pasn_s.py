@@ -176,8 +176,8 @@ class MBEPASNSNeuron(nn.Module):
 # --------------------------------------------------------------------------
 
 def _sample_bank(router: PrefixRouter, bi: int, domain: tuple[float, float],
-                 m: int, device) -> torch.Tensor | None:
-    """Midpoint grid over routed range ``bi``, **clamped to the domain**.
+                 m: int, device, offset: float = 0.5) -> torch.Tensor | None:
+    """Grid over routed range ``bi``, **clamped to the domain**.
 
     ``None`` when the range lies entirely outside the calibrated domain -- such a
     bank is unreachable and must not contribute training samples (fitting it would
@@ -190,13 +190,18 @@ def _sample_bank(router: PrefixRouter, bi: int, domain: tuple[float, float],
     dependence was the dominant source of run-to-run spread (the shape-parameter
     init is deterministic and the readout is closed-form, so a random draw was the
     only thing the seed actually changed: 34x MSE spread on GELU at N=2).
+
+    ``offset`` positions the samples inside each cell: ``0.5`` is the midpoint grid
+    used for fitting, ``0.25`` an offset grid used only for *selecting* between
+    candidates. Two grids with the same step and different in-cell offsets share no
+    point, so selecting on the second cannot reward fitting the first's midpoints.
     """
     span = router.reachable(bi, domain[0], domain[1])
     if span is None:
         return None
     a, b = span
     step = (b - a) / m
-    return a + step * (torch.arange(m, device=device, dtype=torch.float32) + 0.5)
+    return a + step * (torch.arange(m, device=device, dtype=torch.float32) + offset)
 
 
 def uniform_alpha(n_shared: int) -> list:
@@ -220,8 +225,8 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
                      e_max: int | None = None, n_shared: int = 4,
                      n_steps: int = 16, epochs: int = 300,
                      m_per_bank: int = 800, seed: int = 0,
-                     normalize_banks: bool = True, alpha_init: str = "uniform",
-                     restarts: int = 1, verbose: bool = False,
+                     normalize_banks: bool = True, alpha_init: str = "auto",
+                     restarts: int = 3, verbose: bool = False,
                      device: torch.device | str = "cpu") -> MBEPASNSNeuron:
     """Build + fit an MBE-PASN-S neuron for target ``name`` on ``domain``.
 
@@ -239,20 +244,22 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
     each range's contribution, i.e. the shared basis is fitted for uniform
     *relative* accuracy. Pass ``False`` for the ablation.
 
-    ``alpha_init`` selects a *position on the accuracy-energy frontier*, not a
-    strict improvement. ``"uniform"`` places the leading thresholds at even quantiles
-    of ``rho`` (see :func:`uniform_alpha`) -- far fewer spikes (GELU N=2: 3.7 vs 15.2
-    per input) and it repairs the ``N=4`` pathology, and on SiLU it dominates
-    log-spread outright at N=2 and N=4. ``"logspread"`` keeps a global MBE's
-    placement and reaches lower MSE at the high-spike end (GELU N=8: 5.7e-6 at 89.6
-    spikes vs 4.7e-5 at 47.1). Report both.
+    ``alpha_init``: which leading-threshold placement to use for the shared bases.
+    ``"uniform"`` puts them at even quantiles of ``rho`` (see :func:`uniform_alpha`);
+    ``"logspread"`` keeps a global MBE's placement. Neither wins outright -- measured
+    across four targets they select different points on the accuracy-energy frontier
+    (uniform is far cheaper, e.g. GELU N=2: 3.7 vs 15.2 spikes, and repairs the N=4
+    pathology; log-spread reaches lower MSE at the high-spike end). ``"auto"``
+    (default) fits both and keeps the better one, so the choice is no longer a
+    per-target hand-tune.
 
-    ``restarts`` (default 1, i.e. off): fits this many times from jittered shape
-    inits and keeps the lowest **calibration** loss. Measured to *hurt* -- selecting
-    on the calibration grid picks fits that place staircase breakpoints to nail grid
-    midpoints while drifting between them (GELU N=8 test MSE 4.7e-5 -> 1.3e-4), and
-    the jitter reintroduces the seed dependence the grid removed. Kept for the
-    ablation; raising it needs an offset selection grid, not the fitting grid.
+    ``restarts``: fits per candidate init, from jittered shape parameters (restart 0
+    is always the principled init). The **selection grid is what makes these work**:
+    scored on the *fitting* grid the very same restarts made things worse (GELU N=8
+    test MSE 4.7e-5 -> 1.3e-4, since a fit can place staircase breakpoints to nail
+    grid midpoints while drifting between them); scored on the disjoint offset grid
+    they improve test MSE 2.5-14x (SiLU N=2 9.6e-5 -> 6.8e-6). Cost is linear:
+    ``2 * restarts`` fits with ``alpha_init="auto"``.
     """
     from .fit import fit_model
 
@@ -261,59 +268,94 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
     fn, _ = functions.REGISTRY[name]
     router = PrefixRouter(domain[0], domain[1], e_min=e_min, e_max=e_max)
 
-    parts = {bi: p for bi in range(router.n_banks)
-             if (p := _sample_bank(router, bi, domain, m_per_bank, device))
-             is not None}
-    if not parts:
-        raise ValueError(f"no routed range intersects domain {domain}")
-    xs = torch.cat(list(parts.values()))
-    ys = fn(xs)
+    def grid(offset):
+        parts = {bi: p for bi in range(router.n_banks)
+                 if (p := _sample_bank(router, bi, domain, m_per_bank, device,
+                                       offset)) is not None}
+        if not parts:
+            raise ValueError(f"no routed range intersects domain {domain}")
+        return parts
+
+    fit_parts = grid(0.5)                       # midpoints: what we fit on
+    xs = torch.cat(list(fit_parts.values()))
+    ys_true = fn(xs)
+    sel_parts = grid(0.25)                      # offset: what we select on
+    xsel = torch.cat(list(sel_parts.values()))
+    ysel = fn(xsel)
 
     scale = torch.ones(router.n_banks, device=device)
     if normalize_banks:
-        for bi, part in parts.items():
+        for bi, part in fit_parts.items():
             yv = fn(part)
             # Centre-free scale: the readout's DC term absorbs any offset, so only
             # the spread of the target over the range has to be equalised.
             s = float((yv - yv.mean()).abs().max())
             scale[bi] = s if s > 1e-12 else 1.0
-        idx = router.route(xs)
-        ys = ys / scale[idx]
+    ys = ys_true / scale[router.route(xs)] if normalize_banks else ys_true
 
-    av = uniform_alpha(n_shared) if alpha_init == "uniform" else 1.0
-    losses = []
-    best = None
-    for k in range(max(restarts, 1)):
-        torch.manual_seed(seed + 1000 * k)
-        # Identity normalisation: the routed affine already maps the input to rho.
-        cfg = MBEConfig(n_basis=n_shared, n_steps=n_steps, x_min=0.0, x_scale=1.0,
-                        alpha_v=av, use_bias=False)
-        core = MBENeuron(cfg).to(device)
-        # Restart 0 is the principled init; later restarts jitter it in log space.
-        # Without this a restart is a no-op: the shape parameters are initialised
-        # deterministically (alpha_v list + linspace tau) and the only random
-        # tensor, the readout w, is overwritten by the closed-form solve on the
-        # first step -- so every "restart" produced a byte-identical model.
-        if k > 0:
-            with torch.no_grad():
-                for p in (core.log_alpha_v, core.log_tau_r, core.log_tau_vth,
-                          core.log_tau_d, core.log_dt):
-                    if p.requires_grad or p.is_floating_point():
+    # Selection weights. The grid puts the *same* number of points in every range
+    # regardless of its width, so a plain mean over it over-weights the narrow
+    # near-zero binades. Weighting each range by its width makes the offset-grid
+    # loss an unbiased estimate of the metric actually reported (MSE under a uniform
+    # draw over the domain) -- and it must be that metric, not the per-range
+    # relative loss the *fit* uses: selecting on the relative loss picked the worse
+    # candidate on 3 of 12 configurations (SiLU N=4 by 18x), because a model can win
+    # on error averaged across ranges while losing on error averaged across inputs.
+    # (When a real activation distribution is available, these weights are where its
+    # measured per-range visit probabilities belong.)
+    spans = {bi: router.reachable(bi, domain[0], domain[1]) for bi in sel_parts}
+    total_w = sum(b - a for a, b in spans.values())
+    sel_w = torch.cat([
+        torch.full((p.numel(),),
+                   (spans[bi][1] - spans[bi][0]) / total_w / p.numel(),
+                   device=device)
+        for bi, p in sel_parts.items()
+    ])
+
+    @torch.no_grad()
+    def selection_loss(cand) -> float:
+        """Width-weighted squared error on the offset grid."""
+        return float(((cand(xsel) - ysel).pow(2) * sel_w).sum())
+
+    candidates = ([("uniform", uniform_alpha(n_shared)), ("logspread", 1.0)]
+                  if alpha_init == "auto"
+                  else [(alpha_init,
+                         uniform_alpha(n_shared) if alpha_init == "uniform"
+                         else 1.0)])
+
+    scored, best = [], None
+    for ai, av in candidates:
+        for k in range(max(restarts, 1)):
+            torch.manual_seed(seed + 1000 * k)
+            # Identity normalisation: the routed affine already maps input to rho.
+            cfg = MBEConfig(n_basis=n_shared, n_steps=n_steps, x_min=0.0,
+                            x_scale=1.0, alpha_v=av, use_bias=False)
+            core = MBENeuron(cfg).to(device)
+            # Restart 0 is the principled init; later restarts jitter it in log
+            # space. Without this a restart is a no-op: the shape parameters are
+            # initialised deterministically (alpha_v list + linspace tau) and the
+            # only random tensor, the readout w, is overwritten by the closed-form
+            # solve on the first step -- every "restart" was byte-identical.
+            if k > 0:
+                with torch.no_grad():
+                    for p in (core.log_alpha_v, core.log_tau_r, core.log_tau_vth,
+                              core.log_tau_d, core.log_dt):
                         p.add_(torch.randn_like(p) * 0.3)
-        W = torch.zeros(router.n_banks, n_shared + 1, device=device)
-        cand = MBEPASNSNeuron(router, core, W).to(device)
-        res = fit_model(cand, xs, ys, seed=seed, epochs=epochs)
-        losses.append(res.mse)
-        if best is None or res.mse < best[1]:
-            best = (cand, res.mse)
-    model, cal_mse = best
-    if normalize_banks:
-        with torch.no_grad():
-            model.W.mul_(scale.unsqueeze(1))       # undo the per-bank rescaling
+            W = torch.zeros(router.n_banks, n_shared + 1, device=device)
+            cand = MBEPASNSNeuron(router, core, W).to(device)
+            fit_model(cand, xs, ys, seed=seed, epochs=epochs)
+            if normalize_banks:
+                with torch.no_grad():
+                    cand.W.mul_(scale.unsqueeze(1))   # undo the per-bank rescaling
+            loss = selection_loss(cand)
+            scored.append((f"{ai}/r{k}", loss))
+            if best is None or loss < best[1]:
+                best = (cand, loss, ai)
+    model, sel_loss, chosen = best
     if verbose:
         tag = "relative" if normalize_banks else "absolute"
         print(f"    shared N={n_shared} T={n_steps} over {router.n_banks} banks: "
-              f"pooled {tag} mse={cal_mse:.2e} (restarts "
-              f"{', '.join(f'{l:.1e}' for l in losses)})  "
+              f"chose {chosen} ({tag}, offset-grid loss {sel_loss:.2e}; "
+              f"{', '.join(f'{t}={l:.1e}' for t, l in scored)})  "
               f"params={model.num_learnable()}", flush=True)
     return model

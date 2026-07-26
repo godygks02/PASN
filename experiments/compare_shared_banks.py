@@ -128,13 +128,12 @@ def run_fn(name, epochs, n_shared_list, seeds, rows, per_bank):
             name, dom, e_min=e_min, e_max=e_max, n_local=2, n_near0=4,
             epochs=epochs, seed=sd),
     }
-    # Both alpha placements: measured to select a frontier position, not a winner.
-    for ai, short in (("uniform", "u"), ("logspread", "L")):
-        for N in n_shared_list:
-            specs[f"MBE-PASN-S N={N} a={short}"] = (
-                lambda sd, N=N, ai=ai: build_mbe_pasn_s(
-                    name, dom, e_min=e_min, e_max=e_max, n_shared=N, n_steps=16,
-                    epochs=epochs, seed=sd, alpha_init=ai))
+    # The method as built: alpha placement and restart both chosen on the offset
+    # grid. The a=u / a=L ablation lives in the report's history section.
+    for N in n_shared_list:
+        specs[f"MBE-PASN-S N={N}"] = lambda sd, N=N: build_mbe_pasn_s(
+            name, dom, e_min=e_min, e_max=e_max, n_shared=N, n_steps=16,
+            epochs=epochs, seed=sd)
 
     results = {tag: _median_build(b, seeds, xte, yte) for tag, b in specs.items()}
     banks = bank_samples(results["MBE-PASN n_loc=2"]["model"].router, dom, m=1500)
