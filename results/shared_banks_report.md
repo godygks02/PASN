@@ -205,21 +205,51 @@ Two things this settles:
 
 ---
 
+## Network level: wired into the conversion framework
+
+`backend="mbe_pasn_s"` reaches every routed conversion point, and because the builder
+now runs inside `convert.py` it receives each primitive's real calibration sample, so
+selection weights ranges by **measured visit probability** rather than range width. On
+the toy activation the near-zero binades carry 2.3–2.9× the weight width would give
+them and the outer ones 0.02–0.3× (total-variation distance 0.44 from width weighting)
+— so a spike budget stated under width weights is not the budget the network spends.
+
+Toy Transformer (2 layers, d=16), all four backends at the same router:
+
+| backend | forward rel\|err\| | GELU spikes/in |
+|---|---|---|
+| mbe | 2.02e‑2 | 33.6 |
+| mbe_pasn | 6.37e‑3 | 11.4 |
+| **mbe_pasn_s** | **3.65e‑3** | 14.8 |
+| pasn (SAR) | 8.82e‑3 | **2.82** |
+
+The shared basis has the lowest network-level error of the four, so the 1‑D advantage
+carries. (`mbe_pasn` moved from an earlier 5.06e‑3 because of the domain-clamping fix,
+not noise: its outermost bank is now fitted on `[2, 2.18]`, where inputs actually
+occur, rather than on `[2, 4)`.)
+
+GPT‑2 smoke with a 20-spike budget: Δppl −0.00%, and the budget visibly does work —
+a 1.39e‑6 candidate at 24.3 spikes is rejected for a 1.78e‑6 one at 15.1, and
+catastrophic log-spread identity candidates (MSE 4.5, 24.7) are filtered out by
+selection rather than shipped.
+
+---
+
 ## Remaining
 
-1. **The width weights still encode "uniform over the domain".** That is the right
-   proxy for the reported 1-D metric, but a spike budget expressed under it is not the
-   budget a real network sees — activations concentrate near zero. Calibration already
-   measures the per-range visit probabilities; passing them in makes both the fit and
-   the budget distribution-aware. This is the same hook for both.
-2. **Unreachable ranges are still stored and counted.** The router's binade grid does
+1. **Unreachable ranges are still stored and counted.** The router's binade grid does
    not align with a calibrated domain (2 of 13 ranges for GELU, 2 of 4 for 1/√x). They
    are left unfitted — previously they were fitted outside the target's valid range and
    held **NaN** parameters, invisible because no input routes there — but pruning them
    would reduce both variants' memory.
-3. **Per-bank MSE in the raw sweep log is absolute, not relative.** Large-|x| ranges
+2. **Per-bank MSE in the raw sweep log is absolute, not relative.** Large-|x| ranges
    carry larger |f|, so their absolute MSE is larger for uninteresting reasons; read
    those columns as relative error before concluding which range is hard.
-4. **No downstream number yet.** All of this is 1-D approximation. `convert.py` needs
-   an `S` backend before GPT-2 × WikiText-2 can rank these operating points by what
-   matters — Δperplexity per spike.
+3. **The LayerNorm rsqrt primitive gets no measured weights.** Its argument is the
+   parity-fixed mantissa of the variance, which is computed inside the spiking op
+   rather than held during calibration, so that one primitive still falls back to range
+   width. The identities and the activation do get measured weights.
+4. **Still no real downstream number.** Everything above is 1-D approximation plus a
+   toy Transformer and a random-weight GPT-2 smoke test. The backend is wired, so the
+   remaining step is the actual run: GPT‑2 × WikiText‑2 on vast.ai, ranking these
+   operating points by Δperplexity per spike (ANN baseline 34.52 already measured).
