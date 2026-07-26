@@ -1,11 +1,17 @@
-"""Phase 4, MBE-converted vs PASN-converted toy Transformer.
+"""Phase 4, three-way converted toy Transformer: MBE vs MBE-PASN vs PASN.
 
-Converts the same toy Transformer twice -- once with MBE neurons for the
-activation + activation*activation matmuls, once with PASN (FP-prefix binade)
-neurons -- and compares the forward error vs the full-precision ANN together with
-the spike cost of the dominant nonlinearity (the GELU activation). Softmax /
-LayerNorm primitives are held identical (MBE) in both, so the comparison isolates
-the network-level effect of the high-value PASN swaps. All CPU.
+Converts the same toy Transformer once per neuron backend and compares the
+forward error vs the full-precision ANN together with the spike cost of the
+dominant nonlinearity (the GELU activation):
+
+  * ``mbe``      -- one global MBE neuron per primitive,
+  * ``mbe_pasn`` -- FP-prefix binade banks of MBE neurons,
+  * ``pasn``     -- the same router, successive-approximation (SAR) banks.
+
+The backend drives the activation, the LayerNorm primitives and the
+activation*activation matmul identities; Softmax has no routed variant and stays
+MBE in all three, so it contributes an identical error floor. ``mbe_pasn`` and
+``pasn`` share ``pasn_e_min``, so their difference isolates the encoder. All CPU.
 
 Usage:  python experiments/compare_phase4_pasn_mbe.py
 """
@@ -32,7 +38,8 @@ def convert_backend(model, calib, backend, epochs):
     m = copy.deepcopy(model)
     rec = cv.calibrate(m, calib)
     cfg = cv.ConvertConfig(epochs=epochs, spike_mult=True, backend=backend,
-                           pasn_n_local=2, pasn_e_min=-3)
+                           pasn_n_local=2, pasn_e_min=-3,
+                           pasn_T=6, pasn_order=2)
     cv.convert(m, rec, cfg=cfg)
     # mean GELU-activation spikes across every activation module (all layers)
     acts = [n for n, mod in m.named_modules()
@@ -53,13 +60,14 @@ def main():
     print(f"toy: {n_layers} layers, d={D}   ANN mean|y|={ann.abs().mean():.4f}\n")
     print(f"{'backend':10s} {'fwd rel|err|':>13s} {'GELU spikes/in':>15s}")
     print("-" * 42)
-    for backend in ["mbe", "mbe_pasn"]:
+    for backend in ["mbe", "mbe_pasn", "pasn"]:
         m, act_spikes = convert_backend(model, calib, backend, epochs=200)
         with torch.no_grad():
             out = m(test)
         print(f"{backend:10s} {rel_err(out, ann):13.3e} {act_spikes:15.3f}")
-    print("\n(PASN should lower the forward error and/or the GELU spike cost -- the "
-          "activation was the dominant Phase-4 error source.)")
+    print("\n(The routed backends should lower the forward error and/or the GELU "
+          "spike cost -- the activation was the dominant Phase-4 error source. "
+          "mbe_pasn and pasn share the router, so they differ only in the encoder.)")
 
 
 if __name__ == "__main__":

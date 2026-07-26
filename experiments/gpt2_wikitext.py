@@ -135,7 +135,7 @@ def build_smoke():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--backend", choices=["none", "mbe", "mbe_pasn"],
+    ap.add_argument("--backend", choices=["none", "mbe", "mbe_pasn", "pasn"],
                     default="none")
     ap.add_argument("--model", default="gpt2")
     ap.add_argument("--smoke", action="store_true")
@@ -157,13 +157,18 @@ def main():
         help="device for MBE/PASN calibration fitting (default: model device)",
     )
     # Budget knobs for iso-storage / iso-spike fairness sweeps. MBE signed GELU
-    # stores 2*n_basis_act bases; PASN stores ~(#binades)*pasn_n_local.
+    # stores 2*n_basis_act bases; mbe_pasn stores ~(#binades)*pasn_n_local.
     ap.add_argument("--n-basis-act", type=int, default=6,
                     help="MBE bases per activation (signed GELU uses 2x this)")
     ap.add_argument("--pasn-n-local", type=int, default=2,
-                    help="PASN bases per binade bank")
+                    help="mbe_pasn: MBE bases per binade bank")
     ap.add_argument("--pasn-e-min", type=int, default=-3,
-                    help="PASN smallest binade exponent (near-zero resolution)")
+                    help="smallest binade exponent (near-zero resolution); "
+                         "shared by mbe_pasn and pasn so only the encoder differs")
+    ap.add_argument("--pasn-T", type=int, default=6,
+                    help="pasn: SAR bits per bank (spike budget)")
+    ap.add_argument("--pasn-order", type=int, default=2,
+                    help="pasn: per-bank readout polynomial order")
     ap.add_argument("--eval-mode", choices=["sliding", "block"], default="sliding",
                     help="sliding = canonical HF window ppl (matches the paper); "
                          "block = fast non-overlapping (over-estimates ppl)")
@@ -211,6 +216,8 @@ def main():
                                spike_mult=True, n_basis_act=args.n_basis_act,
                                pasn_n_local=args.pasn_n_local,
                                pasn_e_min=args.pasn_e_min,
+                               pasn_T=args.pasn_T,
+                               pasn_order=args.pasn_order,
                                fit_device=None if args.fit_device == "auto"
                                else args.fit_device,
                                verbose_fits=True)

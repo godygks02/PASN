@@ -250,6 +250,38 @@ def test_phase4_conversion_replaces_only_nonlinearities():
     assert snn.get_submodule("blocks.0.ln1").ln.rsqrt.w.dtype == torch.float64
 
 
+def test_convert_pasn_backend_installs_pasn_neurons():
+    """backend="pasn" must reach every routed conversion point (activation,
+    LayerNorm primitives, activation*activation matmul identities) -- otherwise a
+    "PASN" run silently falls back to plain MBE and the comparison is meaningless.
+    Shares the router (pasn_e_min) with mbe_pasn so only the encoder differs."""
+    import copy
+    from mbe import convert as cv
+    from mbe.toy import make_toy, make_inputs
+    D = 8
+    ann = make_toy(seed=0, d_model=D, n_heads=2, n_layers=1)
+    calib = make_inputs(2, batch=4, seq=8, d_model=D, seed=1)
+    snn = copy.deepcopy(ann)
+    rec = cv.calibrate(snn, calib)
+    cv.convert(snn, rec, cfg=cv.ConvertConfig(backend="pasn", spike_mult=True,
+                                              pasn_e_min=-3, pasn_T=6,
+                                              pasn_order=2))
+    act = snn.get_submodule("blocks.0.act").act.neuron
+    ln = snn.get_submodule("blocks.0.ln1").ln
+    qk = snn.get_submodule("blocks.0.attn.qk")
+    for neuron in (act, ln.rsqrt, ln.id_dev, ln.id_istd, qk.idn, qk.idn2):
+        assert isinstance(neuron, PASNNeuron), type(neuron)
+    assert act.T == 6 and act.order == 2
+    assert act.router.e_min == -3
+    # forward must stay finite and the cost meter must handle the routed neuron
+    test = make_inputs(1, batch=4, seq=8, d_model=D, seed=7)[0]
+    with torch.no_grad():
+        out = snn(test)
+    assert torch.isfinite(out).all()
+    costs = cv.activation_cost_report(snn, test)
+    assert costs and all(c["spikes"] <= 6 for c in costs.values())
+
+
 def test_phase4_spike_path_matches_exact_wiring():
     """The spike-driven FP-mult path must add little over exact reconstruction --
     if it doesn't, the outer-product / matmul wiring is wrong (not just the fit)."""
