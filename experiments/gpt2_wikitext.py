@@ -112,15 +112,23 @@ def perplexity_sliding(model, ids, device, max_length, stride,
     return math.exp(nll_sum / max(ntok, 1))
 
 
-def load_wikitext_ids(tokenizer, split="test"):
+def load_wikitext_ids(tokenizer, split="test", drop_blank: bool = False):
+    """Tokenised WikiText split.
+
+    Defaults to the canonical recipe, ``"\\n\\n".join(ds["text"])`` with blank lines
+    **kept** -- the same text every published GPT-2 WikiText perplexity is measured on.
+    Dropping blank lines (the previous behaviour, kept behind ``drop_blank``) changes the
+    token stream and inflates perplexity, which is why our earlier GPT-2 baseline read
+    34.52 where the literature reports the high 20s.
+    """
     from datasets import load_dataset
     # Use the canonical namespaced repository ID. The legacy shorthand
     # ``"wikitext"`` is resolved by some datasets releases to an invalid
     # ``hf://datasets/wikitext@...`` URI; recent huggingface_hub parsers require
     # repository IDs in ``namespace/name`` form.
     ds = load_dataset(WIKITEXT_DATASET_ID, WIKITEXT_CONFIG, split=split)
-    text = "\n\n".join(t for t in ds["text"] if t.strip())
-    return tokenizer(text, return_tensors="pt").input_ids[0]
+    texts = (t for t in ds["text"] if t.strip()) if drop_blank else ds["text"]
+    return tokenizer("\n\n".join(texts), return_tensors="pt").input_ids[0]
 
 
 def build_smoke():
@@ -138,8 +146,13 @@ def main():
     ap.add_argument("--backend",
                     choices=["none", "mbe", "mbe_pasn", "mbe_pasn_s", "pasn"],
                     default="none")
-    ap.add_argument("--model", default="gpt2")
+    # The paper's NLG table (Tab. 3) is GPT-2 346M = gpt2-medium at T=16:
+    # ANN 22.34 ppl on WikiText-2, their conversion 22.69 (+0.35%). Compare there.
+    ap.add_argument("--model", default="gpt2-medium")
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--drop-blank-lines", action="store_true",
+                    help="pre-fix behaviour: drop blank lines before joining the "
+                         "WikiText split (changes the token stream and inflates ppl)")
     ap.add_argument("--block", type=int, default=512)
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--limit-blocks", type=int, default=None)
@@ -196,8 +209,8 @@ def main():
         from transformers import GPT2LMHeadModel, GPT2TokenizerFast
         tok = GPT2TokenizerFast.from_pretrained(args.model)
         model = GPT2LMHeadModel.from_pretrained(args.model).to(device).eval()
-        ids = load_wikitext_ids(tok, "test")
-        cids = load_wikitext_ids(tok, "train")[: 64 * args.block]
+        ids = load_wikitext_ids(tok, "test", args.drop_blank_lines)
+        cids = load_wikitext_ids(tok, "train", args.drop_blank_lines)[: 64 * args.block]
         calib = [cids[i:i + args.block].unsqueeze(0)
                  for i in range(0, 8 * args.block, args.block)]
         block = args.block
@@ -214,7 +227,8 @@ def main():
                                   progress_every=args.progress_every, label=label)
 
     ppl_ann = eval_ppl("ANN")
-    print(f"ANN ({args.model}) perplexity = {ppl_ann:.4f}  "
+    which = "smoke: tiny random GPT-2" if args.smoke else args.model
+    print(f"ANN ({which}) perplexity = {ppl_ann:.4f}  "
           f"[eval={args.eval_mode}, ctx={max_length}, stride={args.stride}]")
 
     if args.backend != "none":
