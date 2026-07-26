@@ -39,7 +39,8 @@ def convert_backend(model, calib, backend, epochs):
     rec = cv.calibrate(m, calib)
     cfg = cv.ConvertConfig(epochs=epochs, spike_mult=True, backend=backend,
                            pasn_n_local=2, pasn_e_min=-3,
-                           pasn_T=6, pasn_order=2)
+                           pasn_T=6, pasn_order=2,
+                           pasn_s_n_shared=2, pasn_s_restarts=2)
     cv.convert(m, rec, cfg=cfg)
     # mean GELU-activation spikes across every activation module (all layers)
     acts = [n for n, mod in m.named_modules()
@@ -60,7 +61,7 @@ def main():
     print(f"toy: {n_layers} layers, d={D}   ANN mean|y|={ann.abs().mean():.4f}\n")
     print(f"{'backend':10s} {'fwd rel|err|':>13s} {'GELU spikes/in':>15s}")
     print("-" * 42)
-    for backend in ["mbe", "mbe_pasn", "pasn"]:
+    for backend in ["mbe", "mbe_pasn", "mbe_pasn_s", "pasn"]:
         m, act_spikes = convert_backend(model, calib, backend, epochs=200)
         with torch.no_grad():
             out = m(test)

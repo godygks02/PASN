@@ -135,7 +135,8 @@ def build_smoke():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--backend", choices=["none", "mbe", "mbe_pasn", "pasn"],
+    ap.add_argument("--backend",
+                    choices=["none", "mbe", "mbe_pasn", "mbe_pasn_s", "pasn"],
                     default="none")
     ap.add_argument("--model", default="gpt2")
     ap.add_argument("--smoke", action="store_true")
@@ -169,6 +170,13 @@ def main():
                     help="pasn: SAR bits per bank (spike budget)")
     ap.add_argument("--pasn-order", type=int, default=2,
                     help="pasn: per-bank readout polynomial order")
+    ap.add_argument("--pasn-s-n-shared", nargs="+", type=int, default=[4],
+                    help="mbe_pasn_s: candidate shared-basis counts")
+    ap.add_argument("--pasn-s-spike-budget", type=float, default=None,
+                    help="mbe_pasn_s: cap on mean spikes/input, measured under the "
+                         "calibration distribution")
+    ap.add_argument("--pasn-s-restarts", type=int, default=3,
+                    help="mbe_pasn_s: fits per candidate init")
     ap.add_argument("--eval-mode", choices=["sliding", "block"], default="sliding",
                     help="sliding = canonical HF window ppl (matches the paper); "
                          "block = fast non-overlapping (over-estimates ppl)")
@@ -218,6 +226,11 @@ def main():
                                pasn_e_min=args.pasn_e_min,
                                pasn_T=args.pasn_T,
                                pasn_order=args.pasn_order,
+                               pasn_s_n_shared=(args.pasn_s_n_shared[0]
+                                                if len(args.pasn_s_n_shared) == 1
+                                                else args.pasn_s_n_shared),
+                               pasn_s_spike_budget=args.pasn_s_spike_budget,
+                               pasn_s_restarts=args.pasn_s_restarts,
                                fit_device=None if args.fit_device == "auto"
                                else args.fit_device,
                                verbose_fits=True)

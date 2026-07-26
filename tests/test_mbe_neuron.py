@@ -325,6 +325,53 @@ def test_mbe_pasn_s_respects_a_spike_budget():
                for i in range(len(front) - 1))
 
 
+def test_convert_mbe_pasn_s_backend_uses_measured_range_weights():
+    """backend="mbe_pasn_s" must reach every routed primitive, and the builder must
+    receive the real calibration sample -- otherwise its spike budget is expressed
+    under a uniform draw over the domain rather than what the network spends."""
+    import copy
+    from mbe import convert as cv
+    from mbe.toy import make_toy, make_inputs
+    from mbe.mbe_pasn_s import range_weights_from_sample
+    D = 8
+    ann = make_toy(seed=0, d_model=D, n_heads=2, n_layers=1)
+    calib = make_inputs(2, batch=4, seq=8, d_model=D, seed=1)
+    snn = copy.deepcopy(ann)
+    rec = cv.calibrate(snn, calib)
+    # captured before conversion: the op modules are replaced in place
+    act_slot = cv._shared_fit_slots(snn, rec)["blocks.0.act"][0]
+    cv.convert(snn, rec, cfg=cv.ConvertConfig(
+        backend="mbe_pasn_s", spike_mult=True, pasn_e_min=-3, epochs=40,
+        pasn_s_n_shared=[2, 4], pasn_s_restarts=1, pasn_s_spike_budget=12.0))
+    act = snn.get_submodule("blocks.0.act").act.neuron
+    ln = snn.get_submodule("blocks.0.ln1").ln
+    qk = snn.get_submodule("blocks.0.attn.qk")
+    for neuron in (act, ln.rsqrt, ln.id_dev, ln.id_istd, qk.idn, qk.idn2):
+        assert isinstance(neuron, MBEPASNSNeuron), type(neuron)
+    # budget honoured, and the chosen candidate came from the multi-N pool
+    chosen = [c for c in act.selection_trace if c["chosen"]][0]
+    assert chosen["spikes"] <= 12.0
+    assert {c["n_shared"] for c in act.selection_trace} == {2, 4}
+    # The builder must have received a real distribution, not the two-endpoint
+    # histogram the shared-activation path used to hand it. Activations concentrate
+    # near zero, so the measured per-range probabilities must be far from the
+    # range-width weighting that stands in when no sample is available.
+    x = act_slot.sample
+    assert x.numel() > 100, "activation sample was reduced to its endpoints"
+    dom = (float(x.min()), float(x.max()))
+    w = range_weights_from_sample(act.router, dom, x)
+    assert w is not None
+    spans = {bi: act.router.reachable(bi, *dom) for bi in w}
+    spans = {bi: s for bi, s in spans.items() if s is not None}
+    total = sum(b - a for a, b in spans.values())
+    tv = 0.5 * sum(abs(w[bi] - (spans[bi][1] - spans[bi][0]) / total)
+                   for bi in spans)
+    assert tv > 0.2, f"measured weights indistinguishable from width weights ({tv=})"
+    test = make_inputs(1, batch=4, seq=8, d_model=D, seed=7)[0]
+    with torch.no_grad():
+        assert torch.isfinite(snn(test)).all()
+
+
 def test_convert_pasn_backend_installs_pasn_neurons():
     """backend="pasn" must reach every routed conversion point (activation,
     LayerNorm primitives, activation*activation matmul identities) -- otherwise a

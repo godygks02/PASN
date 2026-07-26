@@ -246,7 +246,7 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
                      m_per_bank: int = 800, seed: int = 0,
                      normalize_banks: bool = True, alpha_init: str = "auto",
                      restarts: int = 3, spike_budget: float | None = None,
-                     verbose: bool = False,
+                     sample: torch.Tensor | None = None, verbose: bool = False,
                      device: torch.device | str = "cpu") -> MBEPASNSNeuron:
     """Build + fit an MBE-PASN-S neuron for target ``name`` on ``domain``.
 
@@ -291,6 +291,14 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
     what makes a budget useful: the spike cost is dominated by ``N``, so a pool at one
     ``N`` cannot span much of the frontier.
 
+    ``sample``: real inputs from calibration. Selection then weights each range by its
+    **measured visit probability** instead of by range width. This matters for the
+    budget above all: width weights answer "spikes under a uniform draw over the
+    domain", but a network's activations concentrate near zero, so a budget expressed
+    under uniform weighting is not the budget the network actually spends. Pass the
+    calibration sample and the budget becomes the quantity that ends up in the energy
+    estimate.
+
     ``seed`` does **not** affect the result: the calibration grids, the threshold
     placement, the restart jitter and the readout solve are all deterministic. It is
     accepted for interface parity with the other builders.
@@ -332,21 +340,31 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
     ys = ys_true / scale[router.route(xs)] if normalize_banks else ys_true
 
     # Selection weights. The grid puts the *same* number of points in every range
-    # regardless of its width, so a plain mean over it over-weights the narrow
-    # near-zero binades. Weighting each range by its width makes the offset-grid
-    # loss an unbiased estimate of the metric actually reported (MSE under a uniform
-    # draw over the domain) -- and it must be that metric, not the per-range
-    # relative loss the *fit* uses: selecting on the relative loss picked the worse
-    # candidate on 3 of 12 configurations (SiLU N=4 by 18x), because a model can win
-    # on error averaged across ranges while losing on error averaged across inputs.
-    # (When a real activation distribution is available, these weights are where its
-    # measured per-range visit probabilities belong.)
+    # regardless of how often that range occurs, so a plain mean over it over-weights
+    # the narrow near-zero binades. Weighting per range makes the offset-grid loss an
+    # unbiased estimate of the metric that matters -- and it must be an *absolute*
+    # metric, not the per-range relative loss the fit uses: selecting on the relative
+    # loss picked the worse candidate on 3 of 12 configurations (SiLU N=4 by 18x),
+    # because a model can win on error averaged across ranges while losing on error
+    # averaged across inputs.
+    #
+    # With a calibration ``sample`` the weights are measured visit probabilities, so
+    # both the error and the spike count are expectations under the distribution the
+    # network actually feeds this neuron. Without one they fall back to range width,
+    # i.e. a uniform draw over the domain -- the right proxy for the reported 1-D
+    # numbers, but not for a spike budget.
     spans = {bi: router.reachable(bi, domain[0], domain[1]) for bi in sel_parts}
-    total_w = sum(b - a for a, b in spans.values())
+    measured = (range_weights_from_sample(router, domain, sample)
+                if sample is not None and sample.numel() else None)
+    if measured is None:
+        raw = {bi: (b - a) for bi, (a, b) in spans.items()}
+    else:
+        raw = {bi: measured.get(bi, 0.0) for bi in spans}
+        if sum(raw.values()) <= 0:
+            raw = {bi: (b - a) for bi, (a, b) in spans.items()}
+    total_w = sum(raw.values())
     sel_w = torch.cat([
-        torch.full((p.numel(),),
-                   (spans[bi][1] - spans[bi][0]) / total_w / p.numel(),
-                   device=device)
+        torch.full((p.numel(),), raw[bi] / total_w / p.numel(), device=device)
         for bi, p in sel_parts.items()
     ])
 
@@ -417,8 +435,9 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
         budget = ("none" if spike_budget is None
                   else f"{spike_budget:g}"
                        f"{'' if feasible else ' (UNSATISFIABLE)'}")
+        wsrc = "measured" if measured is not None else "range-width"
         print(f"    shared T={n_steps} over {router.n_banks} banks, {tag} fit, "
-              f"spike budget {budget}: chose N={pick['n_shared']} "
+              f"{wsrc} weights, spike budget {budget}: chose N={pick['n_shared']} "
               f"{pick['alpha_init']}/r{pick['restart']} -> mse={pick['mse']:.2e} "
               f"spikes={pick['spikes']:.2f} params={pick['params']}", flush=True)
         for c in trace:
@@ -427,6 +446,23 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
                   f"spikes={c['spikes']:6.2f}"
                   f"{'' if c['feasible'] else '  over budget'}", flush=True)
     return model
+
+
+@torch.no_grad()
+def range_weights_from_sample(router: PrefixRouter, domain: tuple[float, float],
+                             sample: torch.Tensor) -> dict | None:
+    """Per-range visit probabilities measured from real inputs.
+
+    ``None`` if the sample is empty. Ranges the domain cannot reach are omitted.
+    """
+    idx = router.route(sample.reshape(-1).to(torch.float32))
+    counts = {bi: float((idx == bi).sum())
+              for bi in range(router.n_banks)
+              if router.reachable(bi, domain[0], domain[1]) is not None}
+    total = sum(counts.values())
+    if total <= 0:
+        return None
+    return {bi: c / total for bi, c in counts.items()}
 
 
 def pareto_front(trace: list) -> list:

@@ -28,6 +28,7 @@ import torch.nn as nn
 from . import functions
 from . import spiking_ops as so
 from .mbe_pasn import build_mbe_pasn
+from .mbe_pasn_s import build_mbe_pasn_s
 from .pasn import build_pasn
 
 
@@ -275,15 +276,21 @@ def _shared_fit_slots(model: nn.Module, recorder: CalibrationRecorder) -> dict:
             key = (tuple(mod.normalized_shape), float(mod.eps))
             ln_groups.setdefault(key, []).append((name, slots[0]))
 
-    # One activation fit on the union of ranges observed across all blocks.
+    # One activation fit on the union of ranges observed across all blocks. The
+    # endpoints are appended so ``sample.min()/.max()`` still give that union, but the
+    # retained rows are kept: a routed backend selects its operating point from the
+    # *distribution* of activations, and reducing the sample to two endpoints (as this
+    # did) hands it a two-point histogram at the one site that matters most.
     for group in act_groups.values():
         lo = min(slot.lo for _, slot in group)
         hi = max(slot.hi for _, slot in group)
+        pooled = [slot.sample for _, slot in group if slot.sample is not None]
+        pooled.append(torch.tensor([lo, hi], dtype=torch.float32))
         shared = _Range(
             lo=lo,
             hi=hi,
             absmax=max(abs(lo), abs(hi)),
-            sample=torch.tensor([lo, hi], dtype=torch.float32),
+            sample=torch.cat(pooled),
         )
         for name, _ in group:
             overrides[name] = [shared]
@@ -326,18 +333,25 @@ class ConvertConfig:
     margin: float = 0.05             # range padding for identity/activation fits
     # Neuron backend used consistently by activation and LayerNorm primitives
     # (and activation*activation matmul where a model exposes MatMulAA markers).
-    # "mbe"      = one global MBE neuron;
-    # "mbe_pasn" = FP-prefix binade banks of MBE neurons;
-    # "pasn"     = FP-prefix binade banks + successive-approximation (SAR) code.
+    # "mbe"        = one global MBE neuron;
+    # "mbe_pasn"   = FP-prefix binade banks of MBE neurons;
+    # "mbe_pasn_s" = one *shared* MBE basis set, FP-prefix selects the readout;
+    # "pasn"       = FP-prefix binade banks + successive-approximation (SAR) code.
     # GPT-2 Stage 1 converts GELU + LayerNorm only; functional attention/Softmax
     # stays exact.
     backend: str = "mbe"
-    # Router budget -- shared by both prefix-routed backends *on purpose*, so a
-    # mbe_pasn-vs-pasn run differs only in the encoder, not in the routing.
+    # Router budget -- shared by every prefix-routed backend *on purpose*, so a
+    # backend-vs-backend run differs only in the encoder, not in the routing.
     pasn_e_min: int = -3
     pasn_n_local: int = 2            # mbe_pasn: MBE bases per binade bank
     pasn_T: int = 6                  # pasn: SAR bits (spike budget) per bank
     pasn_order: int = 2              # pasn: per-bank readout polynomial order
+    # mbe_pasn_s: candidate bases (int or list) and an optional cap on mean spikes
+    # per input. The budget is measured under the *calibration* distribution, since
+    # the calibration sample is handed to the builder as range weights.
+    pasn_s_n_shared: int | list = 4
+    pasn_s_spike_budget: float | None = None
+    pasn_s_restarts: int = 3
     # None -> fit on the ANN's execution device (CUDA on vast.ai, CPU locally).
     fit_device: str | None = None
     verbose_fits: bool = False
@@ -359,24 +373,36 @@ def _erange(lo, hi, e_min):
     return e_min, max(int(math.ceil(math.log2(maxmag))), e_min + 1)
 
 
-# Backends whose neurons are prefix-routed banks. Both share the router
-# (``pasn_e_min``) and differ only in what each bank does: MBE bases (mbe_pasn)
-# vs a fixed SAR spike code + closed-form readout (pasn).
-_ROUTED_BACKENDS = ("mbe_pasn", "pasn")
+# Backends whose neurons are prefix-routed banks. All share the router
+# (``pasn_e_min``) and differ only in what a bank is: independent MBE bases
+# (mbe_pasn), one shared basis set with a routed readout (mbe_pasn_s), or a fixed
+# SAR spike code with a routed readout (pasn).
+_ROUTED_BACKENDS = ("mbe_pasn", "mbe_pasn_s", "pasn")
 
 
 def _routed_primitive(name, domain, e_min, e_max, cfg: ConvertConfig,
-                      fit_device, n_near0=None):
+                      fit_device, n_near0=None, sample=None):
     """Build one prefix-routed neuron for target ``name`` on ``domain``.
 
-    Dispatches on ``cfg.backend``; the router bounds are passed through
-    identically so ``mbe_pasn`` and ``pasn`` are compared at the same routing.
+    Dispatches on ``cfg.backend``; the router bounds are passed through identically
+    so the routed backends are compared at the same routing. ``sample`` is the real
+    calibration input for this primitive -- ``mbe_pasn_s`` uses it to weight its
+    candidate selection by measured per-range visit probabilities, which is what
+    makes its spike budget the spike count the network actually spends.
     """
     if cfg.backend == "pasn":
         # The SAR code needs no per-bank basis count: the budget is (T, order).
         return build_pasn(
             name, domain, e_min=e_min, e_max=e_max,
             T=cfg.pasn_T, order=cfg.pasn_order, seed=cfg.seed,
+            device=fit_device, verbose=cfg.verbose_fits,
+        )
+    if cfg.backend == "mbe_pasn_s":
+        return build_mbe_pasn_s(
+            name, domain, e_min=e_min, e_max=e_max,
+            n_shared=cfg.pasn_s_n_shared, n_steps=cfg.n_steps,
+            epochs=cfg.epochs, seed=cfg.seed, restarts=cfg.pasn_s_restarts,
+            spike_budget=cfg.pasn_s_spike_budget, sample=sample,
             device=fit_device, verbose=cfg.verbose_fits,
         )
     return build_mbe_pasn(
@@ -388,16 +414,16 @@ def _routed_primitive(name, domain, e_min, e_max, cfg: ConvertConfig,
     )
 
 
-def _routed_identity(hi, cfg: ConvertConfig, fit_device):
+def _routed_identity(hi, cfg: ConvertConfig, fit_device, sample=None):
     """Prefix-routed identity over ``[0, hi]`` for the spike-driven multiply.
 
-    Note both routed backends reconstruct the identity with a DC term in the
+    Note the routed backends reconstruct the identity with a DC term in the
     readout, so ``reconstruct`` is not the strictly bias-free spike sum that
     :func:`spiking_ops.calibrate_identity` builds for the plain MBE backend.
     """
     e_min, e_max = _erange(0.0, hi, cfg.pasn_e_min)
     return _routed_primitive("identity", (0.0, hi), e_min, e_max, cfg,
-                             fit_device)
+                             fit_device, sample=sample)
 
 
 def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
@@ -411,7 +437,7 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
             # +2 bases in the near-zero bank: it carries the GELU/SiLU bend.
             neuron = _routed_primitive(mod.kind, (lo, hi), e_min, e_max, cfg,
                                        fit_device,
-                                       n_near0=cfg.pasn_n_local + 2)
+                                       n_near0=cfg.pasn_n_local + 2, sample=s)
             return _SpikingActModule(so.SpikingActivation(neuron))
         act = so.build_activation(mod.kind, slots[0].sample,
                                   n_basis=cfg.n_basis_act, n_steps=cfg.n_steps,
@@ -439,11 +465,15 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
             dev_max = float(dev.abs().max()) * 1.1 + 1e-3
             var = (dev * dev).mean(dim=-1, keepdim=True) + mod.eps
             istd_max = float((1.0 / var.sqrt()).max()) * 1.1 + 1e-3
+            # The rsqrt argument is the (parity-fixed) mantissa of the variance, not
+            # a tensor we hold here, so it gets no measured weights.
             rsqrt = _routed_primitive(
                 "invsqrt", (0.5, 2.0), -2, 1, cfg, fit_device, n_near0=4
             )
-            id_dev = _routed_identity(dev_max, cfg, fit_device)
-            id_istd = _routed_identity(istd_max, cfg, fit_device)
+            id_dev = _routed_identity(dev_max, cfg, fit_device,
+                                      sample=dev.abs().reshape(-1))
+            id_istd = _routed_identity(istd_max, cfg, fit_device,
+                                       sample=(1.0 / var.sqrt()).reshape(-1))
             ln = so.SpikingLayerNorm(
                 rsqrt, id_dev, id_istd, eps=mod.eps,
                 spike_mult=cfg.spike_mult
@@ -461,8 +491,12 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
         hi_a = slots[0].absmax * (1.0 + cfg.margin) + 1e-6
         hi_b = slots[1].absmax * (1.0 + cfg.margin) + 1e-6
         if cfg.backend in _ROUTED_BACKENDS:
-            idn = _routed_identity(hi_a, cfg, fit_device)
-            idn2 = _routed_identity(hi_b, cfg, fit_device)
+            # Operands are split by polarity before reconstruction, so the identity
+            # sees magnitudes.
+            idn = _routed_identity(hi_a, cfg, fit_device,
+                                   sample=slots[0].sample.abs())
+            idn2 = _routed_identity(hi_b, cfg, fit_device,
+                                    sample=slots[1].sample.abs())
         else:
             idn = so.calibrate_identity(0.0, hi_a, n_basis=cfg.n_basis_mm,
                                         n_steps=cfg.n_steps, epochs=cfg.epochs,
