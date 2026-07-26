@@ -257,9 +257,12 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
     is always the principled init). The **selection grid is what makes these work**:
     scored on the *fitting* grid the very same restarts made things worse (GELU N=8
     test MSE 4.7e-5 -> 1.3e-4, since a fit can place staircase breakpoints to nail
-    grid midpoints while drifting between them); scored on the disjoint offset grid
-    they improve test MSE 2.5-14x (SiLU N=2 9.6e-5 -> 6.8e-6). Cost is linear:
-    ``2 * restarts`` fits with ``alpha_init="auto"``.
+    grid midpoints while drifting between them). Cost is linear: ``2 * restarts``
+    fits with ``alpha_init="auto"``.
+
+    ``seed`` does **not** affect the result: the calibration grids, the threshold
+    placement, the restart jitter and the readout solve are all deterministic. It is
+    accepted for interface parity with the other builders.
     """
     from .fit import fit_model
 
@@ -326,7 +329,11 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
     scored, best = [], None
     for ai, av in candidates:
         for k in range(max(restarts, 1)):
-            torch.manual_seed(seed + 1000 * k)
+            # Jitter is keyed on the restart index *only*, never on ``seed``. Its
+            # job is to explore basins, not to be random, and keying it on the seed
+            # turned restarts into a lottery: the median over 3 seeds was no better
+            # than no restarts at all while one lucky seed looked 7x better.
+            torch.manual_seed(1000 * k)
             # Identity normalisation: the routed affine already maps input to rho.
             cfg = MBEConfig(n_basis=n_shared, n_steps=n_steps, x_min=0.0,
                             x_scale=1.0, alpha_v=av, use_bias=False)
@@ -343,7 +350,7 @@ def build_mbe_pasn_s(name: str, domain: tuple[float, float], e_min: int = -2,
                         p.add_(torch.randn_like(p) * 0.3)
             W = torch.zeros(router.n_banks, n_shared + 1, device=device)
             cand = MBEPASNSNeuron(router, core, W).to(device)
-            fit_model(cand, xs, ys, seed=seed, epochs=epochs)
+            fit_model(cand, xs, ys, seed=0, epochs=epochs)
             if normalize_banks:
                 with torch.no_grad():
                     cand.W.mul_(scale.unsqueeze(1))   # undo the per-bank rescaling
