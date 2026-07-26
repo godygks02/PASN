@@ -404,6 +404,38 @@ def test_convert_pasn_backend_installs_pasn_neurons():
     assert costs and all(c["spikes"] <= 6 for c in costs.values())
 
 
+def test_identity_router_depth_is_independent_of_the_activation():
+    """pasn_id_e_min must deepen the router for the identity primitives only. Their
+    operands span many decades, unlike the activation's, so they want a different
+    depth; the activation must keep pasn_e_min so backends stay comparable."""
+    import copy
+    from mbe import convert as cv
+    from mbe.toy import make_toy, make_inputs
+    D = 8
+    ann = make_toy(seed=0, d_model=D, n_heads=2, n_layers=1)
+    calib = make_inputs(2, batch=4, seq=8, d_model=D, seed=1)
+
+    def build(id_e_min):
+        m = copy.deepcopy(ann)
+        rec = cv.calibrate(m, calib)
+        cv.convert(m, rec, cfg=cv.ConvertConfig(
+            backend="pasn", epochs=30, spike_mult=True, pasn_e_min=-3,
+            pasn_id_e_min=id_e_min))
+        return m
+
+    shallow, deep = build(None), build(-10)
+    for m in (shallow, deep):
+        assert torch.isfinite(m(make_inputs(1, batch=4, seq=8, d_model=D,
+                                            seed=7)[0])).all()
+    act_s = shallow.get_submodule("blocks.0.act").act.neuron
+    act_d = deep.get_submodule("blocks.0.act").act.neuron
+    assert act_s.router.e_min == act_d.router.e_min == -3, "activation must not move"
+    id_s = shallow.get_submodule("blocks.0.attn.qk").idn
+    id_d = deep.get_submodule("blocks.0.attn.qk").idn
+    assert id_s.router.e_min == -3 and id_d.router.e_min == -10
+    assert id_d.router.n_banks > id_s.router.n_banks
+
+
 def test_routed_softmax_fits_each_primitive_on_its_own_argument():
     """A routed Softmax must route all three primitives, and each must be fitted on
     the argument the op actually feeds it -- not on the logits. MBE_inv is the

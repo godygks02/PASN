@@ -349,6 +349,17 @@ class ConvertConfig:
     # Router budget -- shared by every prefix-routed backend *on purpose*, so a
     # backend-vs-backend run differs only in the encoder, not in the routing.
     pasn_e_min: int = -3
+    # Router depth for the *identity* primitives only (the spike-driven FP multiply's
+    # operand reconstructions inside LayerNorm / Softmax / activation*activation
+    # matmul). Their operands span many decades -- e^x, 1/S, x-mu, 1/std -- so with a
+    # single shared e_min everything below 2^e_min collapses into one near-zero bank,
+    # and those primitives are the largest spike consumers once Softmax is routed.
+    # Measured to saturate at -6 on the toy Transformer: going -3 -> -6 improves the
+    # forward error on all three routed backends (1.72x for pasn, 1.19x for mbe_pasn)
+    # while pasn's spikes drop 4.5%, and -10 / -14 buy nothing on any backend while
+    # growing identity storage linearly. All backends share the value, so they stay
+    # comparable; None falls back to pasn_e_min.
+    pasn_id_e_min: int | None = -6
     pasn_n_local: int = 2            # mbe_pasn: MBE bases per binade bank
     pasn_T: int = 6                  # pasn: SAR bits (spike budget) per bank
     pasn_order: int = 2              # pasn: per-bank readout polynomial order
@@ -464,11 +475,16 @@ def _routed_softmax(mod, slot, cfg: ConvertConfig, fit_device):
 def _routed_identity(hi, cfg: ConvertConfig, fit_device, sample=None):
     """Prefix-routed identity over ``[0, hi]`` for the spike-driven multiply.
 
+    Uses ``pasn_id_e_min`` when set: identity operands span many decades, so these
+    primitives benefit from a deeper router than the activation needs.
+
     Note the routed backends reconstruct the identity with a DC term in the
     readout, so ``reconstruct`` is not the strictly bias-free spike sum that
     :func:`spiking_ops.calibrate_identity` builds for the plain MBE backend.
     """
-    e_min, e_max = _erange(0.0, hi, cfg.pasn_e_min)
+    id_e_min = (cfg.pasn_e_min if cfg.pasn_id_e_min is None
+                else cfg.pasn_id_e_min)
+    e_min, e_max = _erange(0.0, hi, id_e_min)
     return _routed_primitive("identity", (0.0, hi), e_min, e_max, cfg,
                              fit_device, sample=sample)
 

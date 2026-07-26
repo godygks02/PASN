@@ -107,10 +107,13 @@ overstated: the absolute jump largely tracks the model's overall error.
 ### 4. Build cost is now a knob, not an advantage
 
 With `restarts=3` and both α candidates, S runs 6 fits and builds **1.7× slower** than
-flat's 13 (34 s vs 19 s on GELU) — reversing the earlier claim. What survives is the
-*scaling*: S needs `O(1)` surrogate-gradient fits and `O(R)` linear solves, flat needs
-`O(R)` gradient fits. At R=13 they are comparable; at R ≫ 13 (mantissa-prefix
-subdivision) only S is affordable. `restarts=1` builds in ~6 s, faster than flat.
+flat's 13 (34 s vs 19 s on GELU) — reversing the earlier claim. What survives in
+principle is the *scaling*: S needs `O(1)` surrogate-gradient fits and `O(R)` linear
+solves, flat needs `O(R)` gradient fits. But the identity-router sweep below reaches
+R ≈ 15 and finds the two still comparable in wall time (410 s vs 459 s), so **the
+crossover has not been observed** — at these depths S's measurable advantage is storage
+(2.2× less growth with depth), not build time. `restarts=1` builds in ~6 s, faster than
+flat.
 
 ---
 
@@ -221,9 +224,12 @@ the forward pass (`spiking_cost_report`) rather than by hand-derived multipliers
 | backend | forward rel\|err\| | GELU spk/in | **TOTAL spk/in** | act% | LN% | softmax% | matmul% |
 |---|---|---|---|---|---|---|---|
 | mbe | 2.02e‑2 | 33.6 | 1597 | 16.9 | 27.3 | 35.9 | 20.0 |
-| mbe_pasn | 6.37e‑3 | 11.4 | **955** | 9.6 | 34.3 | 27.2 | 28.9 |
-| **mbe_pasn_s** | **3.85e‑3** | 14.8 | 1177 | 10.1 | 42.0 | 22.0 | 25.9 |
-| pasn (SAR) | 8.76e‑3 | **2.82** | **291** | 7.8 | 40.3 | 23.3 | 28.6 |
+| mbe_pasn | 5.34e‑3 | 11.4 | 993 | 9.2 | 33.6 | 28.1 | 29.1 |
+| **mbe_pasn_s** | **3.60e‑3** | 14.8 | **841** | 14.1 | 30.1 | 22.8 | 32.9 |
+| pasn (SAR) | 5.10e‑3 | **2.82** | **278** | 8.1 | 41.9 | 22.3 | 27.7 |
+
+(Current defaults: routed Softmax, `pasn_e_min=-3`, `pasn_id_e_min=-6`. Against plain
+MBE that is **1.61× / 1.90× / 5.75×** fewer total spikes at 3.8–5.6× lower error.)
 
 The shared basis has the lowest network-level error of the four, so the 1‑D advantage
 carries. (`mbe_pasn` moved from an earlier 5.06e‑3 because of the domain-clamping fix,
@@ -249,8 +255,61 @@ that work. Only a mantissa-prefix router could subdivide it.
 
 **The FP-multiply identities are now where the spikes are.** LayerNorm is the largest
 share in all three routed backends (34–42%) and the attention matmuls are 26–29%, both
-well above the activation. That, not further activation tuning, is where the next
-energy work is.
+well above the activation.
+
+### How deep should the identity router be?
+
+The identity operands span many decades, so with one shared `e_min` everything below
+`2^e_min` collapses into a single near-zero bank. `pasn_id_e_min` gives the identity
+primitives their own depth (the activation stays at `pasn_e_min`); sweeping it
+(`experiments/sweep_identity_router.py`, toy Transformer):
+
+| backend | id_e_min | fwd rel\|err\| | TOTAL spk/in | identity params | build |
+|---|---|---|---|---|---|
+| **pasn** | −3 | 8.76e‑3 | 290 | 336 | 0.2 s |
+| | **−6** | **5.10e‑3** | **277** | 516 | 0.2 s |
+| | −10 | 5.02e‑3 | 277 | 756 | 0.3 s |
+| | −14 | 5.07e‑3 | 276 | 996 | 0.4 s |
+| **mbe_pasn_s** | −3 | 3.85e‑3 | 1177 | 536 | 295 s |
+| | **−6** | **3.60e‑3** | **839** | 716 | 330 s |
+| | −10 | 3.48e‑3 | 963 | 956 | 379 s |
+| | −14 | 3.63e‑3 | 1033 | 1196 | 459 s |
+| **mbe_pasn** | −3 | 6.37e‑3 | 953 | 1456 | 161 s |
+| | **−6** | **5.34e‑3** | 989 | 2236 | 230 s |
+| | −10 | 5.35e‑3 | 987 | 3276 | 318 s |
+| | −14 | 5.43e‑3 | 988 | 4316 | 410 s |
+
+**It saturates at −6 on every backend.** `−3 → −6` improves the forward error 1.72×
+(pasn), 1.19× (mbe_pasn) and 1.07× (mbe_pasn_s); `−10` and `−14` buy nothing anywhere
+while identity storage grows linearly (pasn 336 → 996, mbe_pasn 1456 → 4316). −6 is now
+the default.
+
+A hypothesis consistent with the saturation, not a proven mechanism: the FP multiply has
+its own reconstruction error floor (~1.9% relative for MBE), and `2^-6 ≈ 1.6%` of the
+operand range. Once the binades are finer than the error floor, extra banks cannot show
+up in the output.
+
+**The SAR neuron benefits most, as predicted.** `pasn` was expected to be weakest in the
+FP-multiply path, because its T-bit truncation puts a floor of `~2^-T` on *relative*
+error — and with a shallow identity router that truncation is relative to the whole
+operand range rather than to a binade. Deepening the identity router to −6 is exactly the
+fix, and it is: `pasn`'s forward error drops 8.76e‑3 → 5.10e‑3, which now **beats
+`mbe_pasn` (5.34e‑3) at 3.6× fewer total spikes** (278 vs 993). The earlier ordering,
+where the SAR neuron traded accuracy for spikes, was an artifact of the identity router
+being too shallow for it.
+
+Two honest caveats. For `mbe_pasn` the deeper router costs 3.7% *more* spikes and 1.5×
+the identity storage for a 1.19× error gain — marginal, not a clear win. And the
+`mbe_pasn_s` spike column is **uncontrolled**: no `spike_budget` was passed, so
+selection optimised accuracy alone and the spike cost rides along with whichever
+candidate won — which is why it is non-monotone (839 at −6, back to 963/1033 deeper).
+A spike-controlled version of this sweep would need the budget set.
+
+The build-time column does *not* support the earlier claim that a deep router is
+affordable only for the shared-basis variant. At R ≈ 15 per identity, `mbe_pasn`'s O(R)
+gradient fits (410 s) and `mbe_pasn_s`'s O(1) fits plus candidate scoring (459 s) are
+comparable; S's real advantage at this depth is storage (2.2× less growth), and the
+crossover in build time is beyond the range measured here.
 
 GPT‑2 Stage 1 converts GELU + LayerNorm only (HF computes attention functionally, so
 there is nothing to hook), and there LayerNorm dominates outright:
@@ -284,23 +343,26 @@ selection rather than shipped.
    parity-fixed mantissa of the variance, which is computed inside the spiking op
    rather than held during calibration, so that one primitive still falls back to range
    width. The identities and the activation do get measured weights.
-4. **LayerNorm's identities are the largest remaining consumer** (34–42% of the routed
-   backends' spikes), and the identity operands span many decades, so everything below
-   `2^pasn_e_min` collapses into one near-zero bank. A deeper `pasn_e_min` for the
-   identity primitives is the obvious lever and is already a knob — it is left at the
-   shared value so the routed backends stay comparable at one router setting.
-5. **On a real model, attention is never spiked.** `gpt2_convert` marks only GELU and
+4. **The identity spike cost has not actually been reduced.** Deeper identity routing
+   bought accuracy, and it saturates; the identities are still 34–42% (LayerNorm) plus
+   26–29% (matmul) of the budget. Reducing that needs either a spike-controlled sweep
+   (`spike_budget` through the identity primitives, which the plumbing now supports) or a
+   cheaper multiply than "reconstruct both operands through an MBE_Id".
+5. **`MBE_inv` cannot be helped by exponent routing** — its argument is already an IEEE
+   mantissa in `[0.5, 1)`. Asserted in the tests so it stays documented. This is the one
+   concrete motivation for a mantissa-prefix router.
+6. **On a real model, attention is never spiked.** `gpt2_convert` marks only GELU and
    LayerNorm; HF computes QK^T and attn×V functionally, so there is no `MatMulAA` to
    hook. Every real-model number so far has exact FP attention — only the toy exercises
    the spike-driven matmul.
-6. **Weight×input is deliberately not approximated, and should not be.** A binary spike
+7. **Weight×input is deliberately not approximated, and should not be.** A binary spike
    times a stored weight is a gated accumulate: with `x_i = Σ_{n,t} a_{n,t} s_{i,n,t}`,
    `(Wx)_j = Σ_{n,t} a_{n,t} (Σ_i W_ji s_{i,n,t})`, an exact rearrangement whose inner
    sum needs no multiplier. The implementation decodes to a real value and calls
    `nn.Linear`, which is mathematically identical — so accuracy is unaffected, but the
    accumulate-only form is never demonstrated and the energy table will rest on the
    algebra rather than on a measured operation count.
-7. **Still no real downstream number.** Everything above is 1-D approximation plus a toy
+8. **Still no real downstream number.** Everything above is 1-D approximation plus a toy
    Transformer and a random-weight GPT-2 smoke test. The backend is wired, so the
    remaining step is the actual run: GPT‑2 × WikiText‑2 on vast.ai, ranking these
    operating points by Δperplexity per spike (ANN baseline 34.52 already measured).
