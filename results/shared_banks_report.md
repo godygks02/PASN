@@ -12,126 +12,173 @@ python experiments/compare_shared_banks.py --fns gelu silu exp2 invsqrt --epochs
 ```
 (SNN env, CPU, T=16, same router `(e_min, e_max)` for both variants.)
 
-**Read the MSE column as a median of 3 seeds with its [min, max].** The
-surrogate-gradient fit is numerically chaotic on GELU/SiLU — a strong-Wolfe LBFGS
-line search amplifies thread-level reduction-order noise into order-of-magnitude
-swings — so single runs are not measurements. Flat is stable (±6%); S is not.
+`a=u` / `a=L` are the two leading-threshold placements: **u**niform quantiles of
+`rho` vs a global MBE's **L**og-spread (see below — this selects a frontier
+position, not a winner).
+
+**Every MBE-PASN-S row is exactly reproducible** (`[lo, hi]` collapses to a point
+over 3 seeds). Flat and global MBE still vary run to run because they calibrate on
+a random draw; S uses a midpoint grid.
 
 ---
 
 ## Aggregate
 
-| function | model | MSE (med) | [min, max] | spikes/in | params | max\|jump\| | build |
+| function | model | MSE | spikes/in | params | max\|jump\| | jump/RMSE | build |
 |---|---|---|---|---|---|---|---|
-| **gelu** | MBE N=8 (global) | 1.18e‑1 | — | 32.6 | 49 | — | 5.4 s |
-| | MBE‑PASN n_loc=2 | **1.52e‑5** | [1.5e‑5, 1.6e‑5] | 18.6 | 181 | 3.49e‑2 | 21.7 s |
-| | MBE‑PASN‑S N=2 | 2.42e‑5 | [1.0e‑5, 3.5e‑4] | **15.1** | **49** | 9.61e‑3 | 7.8 s |
-| | MBE‑PASN‑S N=4 | 1.04e‑3 | [6.8e‑4, 1.2e‑3] | 43.2 | 85 | 7.86e‑3 | 7.1 s |
-| | MBE‑PASN‑S N=8 | 1.67e‑5 | [8.8e‑6, 2.8e‑5] | 89.6 | 157 | **1.60e‑3** | 6.8 s |
-| **silu** | MBE N=8 (global) | 1.97e‑1 | — | 54.8 | 49 | — | 3.3 s |
-| | MBE‑PASN n_loc=2 | 4.15e‑5 | [4.1e‑5, 4.2e‑5] | **13.1** | 181 | 5.99e‑2 | 20.2 s |
-| | MBE‑PASN‑S N=2 | 1.02e‑4 | [5.5e‑5, 1.2e‑4] | 14.4 | **49** | 5.21e‑3 | 6.6 s |
-| | MBE‑PASN‑S N=4 | 5.13e‑4 | [3.7e‑4, 5.5e‑4] | 43.0 | 85 | 1.88e‑2 | 7.8 s |
-| | MBE‑PASN‑S N=8 | **6.88e‑7** | [6.8e‑7, 1.2e‑6] | 90.3 | 157 | **1.29e‑3** | 7.3 s |
-| **exp2** | MBE N=8 (global) | 1.55e‑5 | — | 64.5 | 49 | — | 3.5 s |
-| | MBE‑PASN n_loc=2 | 1.21e‑5 | [1.2e‑5, 1.6e‑5] | **12.7** | 77 | 5.69e‑3 | 9.0 s |
-| | MBE‑PASN‑S N=2 | 3.39e‑4 | [3.2e‑4, 4.2e‑4] | 17.3 | **25** | 2.47e‑2 | 3.7 s |
-| | MBE‑PASN‑S N=4 | 1.14e‑4 | [8.2e‑5, 1.4e‑4] | 45.3 | 45 | 4.59e‑3 | 4.5 s |
-| | MBE‑PASN‑S N=8 | **2.82e‑6** | [1.2e‑6, 4.4e‑6] | 98.6 | 85 | **8.71e‑5** | 4.8 s |
-| **invsqrt** | MBE N=8 (global) | 8.04e‑6 | — | 77.3 | 49 | — | 2.9 s |
-| | MBE‑PASN n_loc=2 | 2.20e‑5 | [2.1e‑5, 2.2e‑5] | **6.9** | 64 | 2.27e‑2 | 4.2 s |
-| | MBE‑PASN‑S N=2 | 1.74e‑5 | [1.3e‑5, 1.9e‑5] | 15.6 | **22** | 1.67e‑2 | 2.5 s |
-| | MBE‑PASN‑S N=4 | 7.20e‑6 | [6.6e‑6, 2.4e‑5] | 45.8 | 40 | 1.14e‑2 | 2.7 s |
-| | MBE‑PASN‑S N=8 | **1.68e‑7** | [1.4e‑7, 1.7e‑7] | 89.4 | 76 | **1.33e‑5** | 2.2 s |
+| **gelu** | MBE N=8 (global) | 1.18e‑1 | 32.6 | 49 | — | — | 4.9 s |
+| | MBE‑PASN n_loc=2 | 1.52e‑5 | 18.6 | 181 | 3.49e‑2 | 8.9 | 19.6 s |
+| | S N=2 a=u | 4.98e‑4 | **3.7** | 49 | 6.24e‑2 | 2.8 | 4.5 s |
+| | S N=4 a=u | 3.74e‑4 | 12.4 | 85 | 1.40e‑2 | 0.7 | 7.0 s |
+| | S N=8 a=u | 4.72e‑5 | 47.1 | 157 | 1.65e‑2 | 2.4 | 6.0 s |
+| | **S N=2 a=L** | **2.02e‑5** | 15.2 | **49** | 8.36e‑3 | 1.9 | 5.7 s |
+| | S N=4 a=L | 1.16e‑3 | 43.4 | 85 | 2.93e‑2 | 0.9 | 8.0 s |
+| | **S N=8 a=L** | **5.74e‑6** | 89.6 | 157 | **1.86e‑3** | **0.8** | 5.3 s |
+| **silu** | MBE N=8 (global) | 1.97e‑1 | 54.8 | 49 | — | — | 3.1 s |
+| | MBE‑PASN n_loc=2 | 4.15e‑5 | 13.1 | 181 | 5.99e‑2 | 9.3 | 18.6 s |
+| | **S N=2 a=u** | 9.61e‑5 | **3.9** | 49 | 4.88e‑2 | 5.0 | 4.9 s |
+| | **S N=4 a=u** | **2.47e‑5** | 17.5 | 85 | 9.15e‑3 | 1.8 | 6.4 s |
+| | S N=8 a=u | 5.04e‑6 | 52.7 | 157 | 7.97e‑3 | 3.5 | 5.4 s |
+| | S N=2 a=L | 1.55e‑4 | 14.8 | 49 | 1.17e‑2 | 0.9 | 6.3 s |
+| | S N=4 a=L | 4.41e‑4 | 42.8 | 85 | 7.51e‑3 | 0.4 | 6.5 s |
+| | **S N=8 a=L** | **3.85e‑6** | 90.5 | 157 | **1.38e‑3** | **0.7** | 5.5 s |
+| **exp2** | MBE N=8 (global) | 1.55e‑5 | 64.5 | 49 | — | — | 3.0 s |
+| | MBE‑PASN n_loc=2 | 1.21e‑5 | 12.7 | 77 | 5.69e‑3 | 1.6 | 8.4 s |
+| | S N=2 a=u | 1.59e‑5 | 12.7 | **25** | 6.76e‑3 | 1.7 | 3.1 s |
+| | **S N=4 a=u** | **6.21e‑6** | 13.7 | 45 | 1.22e‑2 | 4.9 | 3.4 s |
+| | S N=8 a=u | 4.65e‑6 | 42.6 | 85 | 9.85e‑3 | 4.6 | 3.3 s |
+| | S N=8 a=L | 5.48e‑6 | 98.9 | 85 | **4.47e‑4** | **0.2** | 2.9 s |
+| **invsqrt** | MBE N=8 (global) | 8.04e‑6 | 77.3 | 49 | — | — | 2.6 s |
+| | **MBE‑PASN n_loc=2** | 2.20e‑5 | **6.9** | 64 | 2.27e‑2 | 4.8 | 3.9 s |
+| | S N=2 a=u | 1.22e‑4 | 5.6 | **22** | 1.79e‑2 | 1.6 | 2.0 s |
+| | S N=2 a=L | 1.87e‑5 | 15.6 | 22 | 9.81e‑3 | 2.3 | 2.0 s |
+| | S N=4 a=L | 6.83e‑6 | 44.9 | 40 | 5.28e‑3 | 2.0 | 2.6 s |
+| | **S N=8 a=L** | **1.91e‑7** | 89.7 | 76 | **1.65e‑4** | **0.4** | 1.7 s |
+
+(`jump/RMSE` = worst boundary jump divided by the model's own RMS error — see §3.
+Dominated rows for exp2 with `a=L` at N=2/N=4 are omitted; they are in the JSON.)
 
 ---
 
 ## What the numbers say
 
-### 1. The answer to the question: **scale, mostly — but sharing costs spikes**
+### 1. The answer: **scale, mostly — but sharing is paid for in spikes**
 
-A shared basis set *can* serve every range, and at N=8 it serves them far better
-than independent banks: **60× lower MSE on SiLU, 131× on 1/√x, 4× on 2^x** than
-flat MBE-PASN, at *less* stored memory on GELU/SiLU (157 vs 181). So the per-range
-targets are not shape-incompatible.
+A shared basis set *can* serve every range, and at N=8 it beats independent banks
+by **2.6× on GELU, 11× on SiLU, 2× on 2^x, 115× on 1/√x**, at *less* stored memory
+on GELU/SiLU. So the per-range targets are not shape-incompatible.
 
-But the shared basis needs **more bases** to carry that vocabulary, and bases are
-spikes: S N=8 costs 5–13× the spikes of flat's N_j=2 banks. Independent banks need
-only 2 bases *because each is tuned to one narrow target*. That is the real
-exchange this experiment measures:
+But it needs more bases to carry that vocabulary, and bases are spikes. Independent
+banks need only 2 bases *because each is tuned to one narrow target*:
 
 > **Flat banks buy energy with memory; a shared basis buys memory with energy.**
 
-Neither dominates. It is a frontier, and it is a publishable frontier — but the
-earlier expectation that S would win on both axes at once was wrong.
+Neither is dominated on any function. This is a frontier, and the earlier
+expectation that S would win both axes at once was wrong.
 
-### 2. Where S is unambiguously the right choice: GELU / SiLU at fixed memory
+### 2. The useful operating points
 
-At **identical memory** to a global MBE N=8 (49 params), MBE-PASN-S N=2:
-
-| | global MBE N=8 | **MBE‑PASN‑S N=2** | gain |
+| | flat MBE‑PASN | best S at ≈ the same spikes | verdict |
 |---|---|---|---|
-| gelu MSE | 1.18e‑1 | 2.42e‑5 | **4900×** |
-| gelu spikes | 32.6 | 15.1 | **2.2× fewer** |
-| silu MSE | 1.97e‑1 | 1.02e‑4 | **1900×** |
-| silu spikes | 54.8 | 14.4 | **3.8× fewer** |
+| gelu | 1.52e‑5 / 18.6 / **181** | N=2 a=L: 2.02e‑5 / 15.2 / **49** | 1.3× worse MSE, 1.2× fewer spikes, **3.7× less memory** |
+| silu | 4.15e‑5 / 13.1 / **181** | N=4 a=u: **2.47e‑5** / 17.5 / **85** | **1.7× better MSE**, 1.3× more spikes, **2.1× less memory** |
+| exp2 | 1.21e‑5 / 12.7 / **77** | N=4 a=u: **6.21e‑6** / 13.7 / **45** | **1.95× better MSE**, 1.08× more spikes, **1.7× less memory** |
+| invsqrt | **2.20e‑5 / 6.9** / 64 | N=2 a=u: 1.22e‑4 / 5.6 / **22** | 5.5× worse MSE — flat clearly wins here |
 
-Strict domination on all three axes, on exactly the two nonlinearities a spiking
-Transformer needs. This is the clean claim; it does **not** extend to the smooth
-monotone primitives (on exp2 / invsqrt a global MBE N=8 is already good, and S N=2
-does not beat it on accuracy).
+Plus a genuinely new **low-energy** point that flat cannot reach: S N=2 a=u on SiLU
+is **9.61e‑5 at 3.9 spikes/input** — 3.4× fewer spikes than flat and comparable to
+the SAR-based PASN's ~3 spikes, but with MBE dynamics intact.
 
-### 3. Boundary continuity: S wins everywhere, for free
+**invsqrt is the honest counter-example**: its domain `[0.5, 2]` reaches only 2 of 4
+ranges, so there is almost nothing for routing to specialise and flat's per-bank
+dynamics win outright. Routing pays off in proportion to how many ranges the
+calibrated domain actually spans.
 
-| function | flat max\|jump\| | S N=8 max\|jump\| | ratio |
-|---|---|---|---|
-| gelu | 3.49e‑2 | 1.60e‑3 | 22× |
-| silu | 5.99e‑2 | 1.29e‑3 | 46× |
-| exp2 | 5.69e‑3 | 8.71e‑5 | 65× |
-| invsqrt | 2.27e‑2 | 1.33e‑5 | **1700×** |
+### 3. Boundary continuity — the previous claim was overstated
 
-No boundary constraint was imposed. Because adjacent ranges share the features and
-differ only in a linear readout, they cannot drift independently — the artifact
-largely disappears by construction. This **subsumes most of the value of the
-proposed boundary-constrained readout**: the constraint is now a refinement of an
-already-small residual, not a fix for a dominant error.
+The earlier report claimed a free 22–1700× reduction in the bank-boundary jump. That
+was measured only at S's high-accuracy configurations and **tracks the model's own
+error level** — a better fit has smaller jumps everywhere, boundaries included. At
+S N=2 a=u the absolute jump on GELU (6.24e‑2) is in fact *worse* than flat's
+(3.49e‑2).
+
+Normalising by each model's own RMS error gives the claim that survives:
+
+| function | flat jump/RMSE | S jump/RMSE (best‑MSE config) |
+|---|---|---|
+| gelu | 8.9 | **0.8** |
+| silu | 9.3 | **0.7** |
+| exp2 | 1.6 | **0.2** |
+| invsqrt | 4.8 | **0.4** |
+
+For flat banks the worst boundary jump is **~5–9× its own RMS error** — an artifact
+sticking well above the noise floor. For S it is **≤ 1×**, i.e. the boundary is not
+a special place. That is structural (adjacent ranges share features and differ only
+in a linear readout, so they cannot drift independently) and it does reduce a
+boundary-constrained readout from "fixes the dominant error" to "polishes a residual
+already at the noise floor" — but the honest statement is *relative*, not absolute.
 
 ### 4. Build cost: 1 gradient fit, not R
 
-S is **2.8–3.2× faster to build** on GELU/SiLU (21.7 s → 6.8 s) while covering the
-same ranges, because only the shared dynamics are fitted by gradient descent and
-each range is a linear solve. This is the structural property that makes a *deeper*
-router (mantissa-prefix subdivision, R ≫ 13) affordable — flat cannot pay O(R)
-surrogate-gradient fits.
+S builds **2.9–3.4× faster** on GELU/SiLU (19.6 s → 5.7 s) while covering the same
+ranges, because only the shared dynamics are fitted by gradient descent and each
+range is a linear solve. This is what makes a *deeper* router (mantissa-prefix
+subdivision, R ≫ 13) affordable — flat cannot pay O(R) surrogate-gradient fits.
 
 ---
 
-## Open problems (do not report S without these)
+## Two fixes this required (both diagnosed, not guessed)
 
-1. **N=4 is systematically worse than N=2 on GELU and SiLU** (1.04e‑3 vs 2.42e‑5;
-   5.13e‑4 vs 1.02e‑4), across all 3 seeds — not variance. It is monotone on
-   exp2/invsqrt, so the pathology is specific to the signed, non-monotone targets.
-   Prime suspect: the shared core initialises `alpha_v` with the default log-spread,
-   whereas a global neuron gets curvature-based placement via
-   `functions.curvature_alpha`. There is no per-range curvature to use for a shared
-   basis, so an equivalent initialiser has to be derived from the *pooled
-   normalised* problem.
-2. **Fit instability.** S N=2 on GELU spans [1.0e‑5, 3.5e‑4] over 3 seeds — 35×. The
-   best seed beats flat on all three axes; the median does not. Until this is
-   controlled, S's accuracy claims are not solid. Flat is stable, so this is a
-   property of the pooled fit, not of the neuron.
-3. **Per-bank normalisation is load-bearing.** Fitting the shared dynamics on raw
-   targets lets the largest binades dictate where the shared staircase puts its
-   steps (GELU tails grow as 2^e); normalising per range and folding the scale back
-   into the readout row (exact, since the readout is linear and per-range) gave a
-   **6× MSE improvement** on GELU. `normalize_banks=False` keeps the ablation.
-4. **Unreachable ranges are still counted in memory.** The router's binade grid does
-   not align with a calibrated domain, so some banks lie entirely outside it (2 of
-   13 for GELU; 2 of 4 for 1/√x). They are now left unfitted (previously they were
-   fitted outside the target's valid range and held **NaN** parameters — invisible
-   because no input routes there) but they are still stored and counted. Pruning
-   them would reduce both variants' memory.
-5. **Per-bank MSE is absolute, not relative.** Large-|x| ranges carry larger |f|, so
-   their absolute MSE is larger for uninteresting reasons. The per-bank tables in
-   the raw log should be read as relative error before drawing conclusions about
-   which range is "hard".
+### The `N=4` pathology was basis saturation
+
+`N=4` was systematically worse than `N=2` on GELU and SiLU across all seeds. Cause:
+the inherited `alpha_v` placement. A global MBE log-spreads the leading thresholds
+over `[2^-spread, 1]` because the target's curvature concentrates at one end of its
+domain. A *routed* residual is the opposite — `rho` is ~uniform on `[0,1)` in every
+bank and each `g_v` is smooth there — so a basis with a near-zero threshold fires at
+almost every step and its feature is nearly constant in `rho`. Measured per-basis
+firing rates at N=4 with log-spread: `[0.88, 0.17, 0.71, 0.95]`, i.e. 1–2 useful
+bases out of 4.
+
+`uniform_alpha()` splits `[0,1)` at even quantiles. N=4 MSE: GELU 1.16e‑3 → 3.74e‑4
+at 3.5× fewer spikes; SiLU 4.41e‑4 → **2.47e‑5** (18×) at 2.4× fewer spikes.
+
+`alpha_init` is kept as a knob because it **selects a frontier position, not a
+winner**: `uniform` gives the cheap end everywhere and wins outright on SiLU (N=2,
+N=4) and 2^x (all N); `logspread` wins on GELU (N=2, N=8) and 1/√x (all N). The
+choice is per-function and currently manual — an offset selection grid would
+automate it (see below).
+
+### The run-to-run spread was the random calibration draw, not the optimiser
+
+Up to 34× MSE spread across seeds. It was **not** the optimizer: the shape-parameter
+init is deterministic (`alpha_v` list + `linspace` for tau) and the readout is
+closed-form, so the seed only changed the random per-bank sample. Replacing it with
+a **midpoint grid** — strictly lower discrepancy for a known deterministic target on
+a known interval — makes the build exactly reproducible (spread 1.0× on every
+configuration, every function).
+
+Restarts are off by default. Before the fix a "restart" was a no-op (the only random
+tensor was the readout, which the closed-form solve overwrites on step 1). With
+jittered inits they measurably *hurt* (GELU N=8 test MSE 4.7e‑5 → 1.3e‑4): selecting
+on the fitting grid picks fits that place staircase breakpoints to nail grid
+midpoints while drifting between them, and the jitter reintroduces the seed
+dependence the grid removed.
+
+---
+
+## Remaining
+
+1. **`alpha_init` selection is manual per function.** Fit both (2 builds, ~10 s) and
+   select on an **offset** grid — the same discipline that makes restarts safe. This
+   would remove the last hand-tuned choice from the build.
+2. **Unreachable ranges are still stored and counted.** The router's binade grid does
+   not align with a calibrated domain (2 of 13 ranges for GELU, 2 of 4 for 1/√x).
+   They are now left unfitted — previously they were fitted outside the target's
+   valid range and held **NaN** parameters, invisible because no input routes there —
+   but pruning them would reduce both variants' memory.
+3. **Per-bank MSE in the raw log is absolute, not relative.** Large-|x| ranges carry
+   larger |f|, so their absolute MSE is larger for uninteresting reasons.
+4. **No downstream number yet.** All of the above is 1-D approximation. The
+   conversion framework has an `S` backend to gain before GPT-2 × WikiText-2 can rank
+   these operating points by what actually matters (Δperplexity per spike).
