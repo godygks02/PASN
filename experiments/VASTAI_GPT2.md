@@ -1,5 +1,11 @@
 # GPT-2 × WikiText-2 on vast.ai — run plan
 
+> **New session? Read [`P0.4_GPT2_HANDOFF.md`](P0.4_GPT2_HANDOFF.md) first.**
+> This file is the environment and eval recipe; the handoff carries the eleven
+> experiments' conclusions, the three decisions P0.4 has to settle, and the
+> traps already stepped in. The research notebook is not in git, so that file
+> is the only place those live.
+
 Goal: put our backends next to the **MBE paper's published Table 3**, not next to our
 own reimplementation.
 
