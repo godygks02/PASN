@@ -98,9 +98,20 @@ def _recon(idn: MBENeuron, x: torch.Tensor) -> torch.Tensor:
     return idn.reconstruct(x)
 
 
+def _routes_sign(idn) -> bool:
+    """True when the identity's own router reads the operand's sign.
+
+    A prefix router whose key range straddles zero puts each polarity in its own
+    bank, so the operand can be fed signed and the ``relu`` split is redundant.
+    """
+    router = getattr(idn, "router", None)
+    return bool(router is not None and getattr(router, "signed", False))
+
+
 @torch.no_grad()
 def spiking_multiply(idn: MBENeuron, x1: torch.Tensor, x2: torch.Tensor,
-                     signed: bool = True, idn2: MBENeuron | None = None) -> torch.Tensor:
+                     signed: bool | None = True,
+                     idn2: MBENeuron | None = None) -> torch.Tensor:
     """Approximate the element-wise product ``x1 * x2`` with spikes.
 
     Each operand is turned into a spike train by an ``MBE_Id`` (``idn`` for x1,
@@ -111,11 +122,16 @@ def spiking_multiply(idn: MBENeuron, x1: torch.Tensor, x2: torch.Tensor,
     ``recon(x1) * recon(x2)`` -- the bulk form used here
     (:func:`multiply_outer` builds the explicit ``D (x) S`` for verification).
 
-    ``signed``: MBE_Id maps non-negative inputs, so signed operands are split as
-    ``x = relu(x) - relu(-x)`` and the product expanded into four non-negative
-    reconstructions.
+    ``signed``: a plain MBE_Id maps non-negative inputs, so signed operands are
+    split as ``x = relu(x) - relu(-x)`` and the product expanded into four
+    non-negative reconstructions. ``signed=None`` asks instead -- an identity whose
+    router reads the sign takes the operand directly, halving the reconstructions
+    (the spike count is unchanged, since the two relu halves carry disjoint
+    elements; what halves is the number of invocations).
     """
     idn2 = idn2 or idn
+    if signed is None:
+        signed = not (_routes_sign(idn) and _routes_sign(idn2))
     if not signed:
         return _recon(idn, x1) * _recon(idn2, x2)
     p1, n1 = torch.relu(x1), torch.relu(-x1)
@@ -132,7 +148,8 @@ def spiking_multiply(idn: MBENeuron, x1: torch.Tensor, x2: torch.Tensor,
 
 @torch.no_grad()
 def spiking_matmul(idn: MBENeuron, A: torch.Tensor, B: torch.Tensor,
-                   signed: bool = True, idn2: MBENeuron | None = None) -> torch.Tensor:
+                   signed: bool | None = True,
+                   idn2: MBENeuron | None = None) -> torch.Tensor:
     """Spike-driven matrix product ``A @ B`` for activation*activation matmuls.
 
     A matmul ``C[i,j] = sum_k A[i,k] B[k,j]`` is a sum of element-wise products,
@@ -146,6 +163,8 @@ def spiking_matmul(idn: MBENeuron, A: torch.Tensor, B: torch.Tensor,
     ``x = relu(x) - relu(-x)`` split, expanding into four non-negative matmuls.
     """
     idn2 = idn2 or idn
+    if signed is None:                       # see :func:`spiking_multiply`
+        signed = not (_routes_sign(idn) and _routes_sign(idn2))
     if not signed:
         return _recon(idn, A) @ _recon(idn2, B)
     Ap, An = torch.relu(A), torch.relu(-A)
@@ -320,7 +339,7 @@ class SpikingLayerNorm(torch.nn.Module):
     @torch.no_grad()
     def _square_over_n(self, dev, n):
         if self.spike_mult:
-            sq = spiking_multiply(self.id_dev, dev, dev, signed=True)
+            sq = spiking_multiply(self.id_dev, dev, dev, signed=None)
         else:
             sq = dev * dev
         return sq.sum(dim=-1, keepdim=True) / n
@@ -340,7 +359,7 @@ class SpikingLayerNorm(torch.nn.Module):
         invstd = torch.ldexp(inv_sqrt_m, (-e // 2))         # * 2^(-E/2)
         invstd = invstd.expand_as(dev)
         if self.spike_mult:
-            normed = spiking_multiply(self.id_dev, dev, invstd, signed=True,
+            normed = spiking_multiply(self.id_dev, dev, invstd, signed=None,
                                       idn2=self.id_istd)
         else:
             normed = dev * invstd

@@ -1,0 +1,74 @@
+{
+ "기준 (β 없음, signed=True)": {
+  "err": 0.006523625925183296,
+  "total": 279.974609375,
+  "by_kind": {
+   "layernorm": 130.841796875,
+   "matmul": 69.080078125,
+   "softmax": 57.50390625,
+   "activation": 22.548828125
+  },
+  "calls": {
+   "layernorm": 35,
+   "matmul": 16,
+   "softmax": 8,
+   "activation": 2
+  },
+  "total_calls": 61,
+  "params": 794
+ },
+ "β 만": {
+  "err": 0.00579456239938736,
+  "total": 275.072265625,
+  "by_kind": {
+   "layernorm": 129.7734375,
+   "matmul": 68.7734375,
+   "softmax": 53.958984375,
+   "activation": 22.56640625
+  },
+  "calls": {
+   "layernorm": 35,
+   "matmul": 16,
+   "softmax": 8,
+   "activation": 2
+  },
+  "total_calls": 61,
+  "params": 1076
+ },
+ "signed 만": {
+  "err": 0.006056725513190031,
+  "total": 322.37109375,
+  "by_kind": {
+   "layernorm": 173.630859375,
+   "matmul": 68.833984375,
+   "softmax": 57.373046875,
+   "activation": 22.533203125
+  },
+  "calls": {
+   "layernorm": 25,
+   "matmul": 8,
+   "softmax": 8,
+   "activation": 2
+  },
+  "total_calls": 43,
+  "params": 1054
+ },
+ "β + signed (기본값)": {
+  "err": 0.005596027243882418,
+  "total": 318.466796875,
+  "by_kind": {
+   "layernorm": 172.869140625,
+   "matmul": 68.751953125,
+   "softmax": 54.26953125,
+   "activation": 22.576171875
+  },
+  "calls": {
+   "layernorm": 25,
+   "matmul": 8,
+   "softmax": 8,
+   "activation": 2
+  },
+  "total_calls": 43,
+  "params": 1336
+ }
+}

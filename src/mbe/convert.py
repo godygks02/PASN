@@ -114,7 +114,7 @@ class _SpikingMatMulModule(nn.Module):
     def forward(self, A, B):
         if not self.spike_mult:
             return A @ B
-        return so.spiking_matmul(self.idn, A, B, signed=True, idn2=self.idn2)
+        return so.spiking_matmul(self.idn, A, B, signed=None, idn2=self.idn2)
 
 
 # --------------------------------------------------------------------------
@@ -380,6 +380,31 @@ class ConvertConfig:
     # lands at 15-49% relative error on a real product (실험 10).
     pasn_id_tied: bool = True
     pasn_id_target_rel: float = 1e-2
+    # Build the routed identity over a *signed* domain so the router reads the
+    # operand's sign, letting the multiply skip the relu(x) - relu(-x) split and
+    # reconstruct two halves per product instead of four.
+    #
+    # OFF by default, measured. It does halve the invocations (toy: 61 -> 43
+    # total, matmul exactly 16 -> 8), but the identity then has to cover a signed
+    # domain, which costs 15% more spikes (280 -> 322) and 33% more stored
+    # parameters. The invocation saving is real but invisible to a spike count --
+    # it is latency and state updates. Turn on once the cost model prices those
+    # (P0.5); until then the spike/memory axes say no. (연구일지 실험 10, P0.2)
+    pasn_id_signed: bool = False
+    # Per-primitive router origin. The binade grid is anchored at zero, so a
+    # primitive whose argument never approaches zero gets one usable range: 1/S on
+    # [0.5, 1) is a single binade. Its curvature peaks at S=0.5, so routing on
+    # S - 0.5 re-expands exactly the hard end.
+    #
+    # OFF by default, measured. In isolation this was worth 13.6x (inv) and 8.3x
+    # (1/sqrt(x)) in iso-error spikes (실험 5) -- but in the network those
+    # primitives are the *small* part of their op. Softmax is exp2 + inv +
+    # identity and LayerNorm is rsqrt + two identities, with the identities
+    # dominating both, so the toy total moves 280 -> 275 (1.02x) while stored
+    # parameters grow 35% for the extra ranges. Amdahl, one level down. Set
+    # {"inv": 0.5, "invsqrt": 0.5} to re-enable. (P0.2)
+    pasn_beta: dict | None = field(default_factory=dict)
+    pasn_beta_binades: int = 6               # ranges to open up on the shifted key
     # Decoder order for the activation. Not used for the identity: the FP-multiply
     # factorisation needs the output to stay a spike sum (실험 6).
     pasn_readout_order: int = 2
@@ -410,6 +435,28 @@ def _erange(lo, hi, e_min):
     """(e_min, e_max) for a PASN router covering ``[lo, hi]``."""
     maxmag = max(abs(lo), abs(hi), 2.0 ** (e_min + 1))
     return e_min, max(int(math.ceil(math.log2(maxmag))), e_min + 1)
+
+
+#: The origins that helped in isolation: the point where the target is hardest,
+#: which is where the log-dense binades should sit. ``inv`` sees an IEEE mantissa
+#: in [0.5, 1) whose curvature 2/S^3 peaks at 0.5; ``invsqrt`` sees [0.5, 2) with
+#: the same peak. Activations bend at zero and stay there. Not a default -- see
+#: ``ConvertConfig.pasn_beta`` for why the network does not care.
+BETA_CURVATURE_PEAK = {"inv": 0.5, "invsqrt": 0.5}
+
+
+def _erange_beta(lo, hi, beta, n_binades):
+    """(e_min, e_max) in *key* space for a router shifted to ``beta``.
+
+    Shifting makes ``|t| = |x - beta|`` reach arbitrarily close to zero inside the
+    domain, so the number of usable binades is a choice rather than a property of
+    the domain -- take the top ``n_binades`` below the widest key.
+    """
+    mag = max(abs(lo - beta), abs(hi - beta))
+    if mag <= 0.0:
+        return -1, 0
+    e_max = int(math.ceil(math.log2(mag)))
+    return e_max - int(n_binades), e_max
 
 
 # Backends whose neurons are prefix-routed banks. All share the router
@@ -444,15 +491,21 @@ def _routed_primitive(name, domain, e_min, e_max, cfg: ConvertConfig,
             spike_budget=cfg.pasn_s_spike_budget, sample=sample,
             device=fit_device, verbose=cfg.verbose_fits,
         )
-    kw = dict(readout_order=cfg.pasn_readout_order)
+    kw = dict(readout_order=cfg.pasn_readout_order, near0=cfg.pasn_near0)
     kw.update(pasn_kw)
+    beta = (cfg.pasn_beta or {}).get(name, 0.0)
+    if beta:
+        # Re-derive the exponent bounds on the shifted key: the caller's bounds
+        # describe the grid anchored at zero, which is the thing beta replaces.
+        kw["beta"] = beta
+        e_min, e_max = _erange_beta(domain[0], domain[1], beta,
+                                    cfg.pasn_beta_binades)
     return build_mbe_pasn(
         name, domain, e_min=e_min, e_max=e_max,
         n_local=cfg.pasn_n_local,
         n_near0=n_near0 or cfg.pasn_n_local,
         n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
         budget=cfg.pasn_budget, target_mse=cfg.pasn_target_mse,
-        near0=cfg.pasn_near0,
         device=fit_device, verbose=cfg.verbose_fits, **kw,
     )
 
@@ -510,9 +563,14 @@ def _routed_identity(hi, cfg: ConvertConfig, fit_device, sample=None):
     """
     id_e_min = (cfg.pasn_e_min if cfg.pasn_id_e_min is None
                 else cfg.pasn_id_e_min)
-    e_min, e_max = _erange(0.0, hi, id_e_min)
+    # A signed domain lets the router read the operand's sign, so the multiply
+    # does not have to split it into relu halves. Tying keeps the cost flat: the
+    # sign rides in the per-bank scale sigma*2^e, which the router already has.
+    lo = -hi if cfg.pasn_id_signed else 0.0
+    e_min, e_max = _erange(lo, hi, id_e_min)
     return _routed_primitive(
-        "identity", (0.0, hi), e_min, e_max, cfg, fit_device, sample=sample,
+        "identity", (lo, hi), e_min, e_max, cfg, fit_device, sample=sample,
+        near0="signed" if cfg.pasn_id_signed else cfg.pasn_near0,
         # Homogeneous target + a product downstream: tie the banks and budget on
         # *relative* error. Order 1 -- the multiply factorises a spike sum only.
         tied=cfg.pasn_id_tied, target="relative",
