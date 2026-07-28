@@ -721,6 +721,66 @@ def _spiking_primitives(model: nn.Module) -> list:
 
 
 @torch.no_grad()
+def _install_cost_probe(name, neuron, tally, busy, saved):
+    """Patch a neuron's entry points so one invocation is tallied exactly once.
+
+    Both ``forward`` and ``reconstruct`` are patched, because the ops use both.
+    But some neurons implement one *in terms of* the other -- ``MBEPASNNeuron``
+    and ``MBEPASNSNeuron`` return ``self.forward(x)`` from ``reconstruct``, and
+    once patched that resolves to the wrapped forward. Tallying at every wrapped
+    entry therefore charged a routed reconstruct **twice**, while a plain
+    ``MBENeuron`` (whose ``reconstruct`` goes to ``spike_train`` /
+    ``intensities``, neither patched) was charged once. The bias fell entirely on
+    the routed backends, and the identity is 60-70% of a converted model's
+    spikes. A per-neuron depth counter fixes it: only the outermost entry counts,
+    and two *sequential* calls still count twice because the depth returns to 0
+    in between.
+    """
+    from .metrics import neuron_cost
+
+    entry = tally[name]
+    state = {"depth": 0}
+
+    def wrap(fn):
+        def inner(x, *a, **k):
+            outermost = state["depth"] == 0
+            state["depth"] += 1
+            try:
+                # ``busy`` additionally guards the cost query itself.
+                if (outermost and torch.is_tensor(x) and x.numel()
+                        and not busy["flag"]):
+                    busy["flag"] = True
+                    try:
+                        entry["spikes"] += (neuron_cost(neuron, x)["spikes"]
+                                            * x.numel())
+                        entry["elements"] += x.numel()
+                        entry["calls"] += 1
+                    finally:
+                        busy["flag"] = False
+                return fn(x, *a, **k)
+            finally:
+                state["depth"] -= 1
+        return inner
+
+    # ``SignedMBENeuron`` has no ``reconstruct`` (it is only ever an activation,
+    # never a multiply operand), so patch what exists and restore exactly that.
+    for attr in ("forward", "reconstruct"):
+        orig = getattr(neuron, attr, None)
+        if orig is None:
+            continue
+        saved.append((neuron, attr, orig))
+        setattr(neuron, attr, wrap(orig))
+
+
+def _remove_cost_probes(saved):
+    """Undo :func:`_install_cost_probe`, dropping the instance shadow entirely."""
+    for neuron, attr, orig in saved:
+        try:
+            delattr(neuron, attr)
+        except AttributeError:
+            setattr(neuron, attr, orig)
+
+
 def spiking_cost_report(model: nn.Module, batch) -> dict:
     """Total spike cost of a converted model, measured by instrumenting a forward.
 
@@ -749,36 +809,8 @@ def spiking_cost_report(model: nn.Module, batch) -> dict:
     busy = {"flag": False}
     saved = []
 
-    def instrument(name, neuron):
-        entry = tally[name]
-
-        def wrap(fn):
-            def inner(x, *a, **k):
-                # Re-entrancy guard: the cost query below must not be counted.
-                if torch.is_tensor(x) and x.numel() and not busy["flag"]:
-                    busy["flag"] = True
-                    try:
-                        entry["spikes"] += (neuron_cost(neuron, x)["spikes"]
-                                            * x.numel())
-                        entry["elements"] += x.numel()
-                        entry["calls"] += 1
-                    finally:
-                        busy["flag"] = False
-                return fn(x, *a, **k)
-            return inner
-
-        # Both entry points the ops use. ``SignedMBENeuron`` has no ``reconstruct``
-        # (it is only ever an activation, never a multiply operand), so patch what
-        # exists and restore exactly that.
-        for attr in ("forward", "reconstruct"):
-            orig = getattr(neuron, attr, None)
-            if orig is None:
-                continue
-            saved.append((neuron, attr, orig))
-            setattr(neuron, attr, wrap(orig))
-
     for name, _, neuron in prims:
-        instrument(name, neuron)
+        _install_cost_probe(name, neuron, tally, busy, saved)
     try:
         device = _module_device(model)
         b = _batch_to_device(batch, device)
@@ -795,11 +827,7 @@ def spiking_cost_report(model: nn.Module, batch) -> dict:
             n_in = b.numel()
         model.train(was_training)
     finally:
-        for neuron, attr, orig in saved:
-            try:
-                delattr(neuron, attr)          # drop the instance shadow entirely
-            except AttributeError:
-                setattr(neuron, attr, orig)
+        _remove_cost_probes(saved)
 
     by_kind: dict[str, float] = {}
     for name, e in tally.items():

@@ -11,76 +11,76 @@
   },
   "params": 1401,
   "id_params": 912,
-  "build_s": 45.02201200000127
+  "build_s": 41.73597370000789
  },
  {
   "label": "mbe_pasn (구: 실험1 이전)",
   "err": 0.005601685959845781,
-  "total": 741.64453125,
+  "total": 435.91015625,
   "by_kind": {
-   "layernorm": 324.005859375,
-   "matmul": 193.00390625,
-   "softmax": 116.56640625,
+   "layernorm": 162.861328125,
+   "matmul": 96.501953125,
+   "softmax": 68.478515625,
    "activation": 108.068359375
   },
   "params": 2767,
   "id_params": 2197,
-  "build_s": 265.1906028999947
+  "build_s": 253.32655189998331
  },
  {
   "label": "mbe_pasn (신, 항등원 r=1e-01)",
   "err": 0.06638568639755249,
-  "total": 104.0859375,
+  "total": 75.978515625,
   "by_kind": {
-   "layernorm": 32.0078125,
-   "matmul": 18.1796875,
-   "softmax": 31.37109375,
+   "layernorm": 17.03125,
+   "matmul": 9.08984375,
+   "softmax": 27.330078125,
    "activation": 22.52734375
   },
   "params": 794,
   "id_params": 400,
-  "build_s": 61.23074629998882
+  "build_s": 58.753746699978365
  },
  {
   "label": "mbe_pasn (신, 항등원 r=3e-02)",
   "err": 0.01867377571761608,
-  "total": 151.5078125,
+  "total": 99.58203125,
   "by_kind": {
-   "layernorm": 58.1484375,
-   "matmul": 31.7265625,
-   "softmax": 39.03515625,
+   "layernorm": 30.0859375,
+   "matmul": 15.86328125,
+   "softmax": 31.03515625,
    "activation": 22.59765625
   },
   "params": 794,
   "id_params": 400,
-  "build_s": 77.90782290001516
+  "build_s": 61.18556189999799
  },
  {
   "label": "mbe_pasn (신, 항등원 r=1e-02)",
   "err": 0.006523625925183296,
-  "total": 512.30859375,
+  "total": 279.974609375,
   "by_kind": {
-   "layernorm": 259.708984375,
-   "matmul": 138.16015625,
-   "softmax": 91.890625,
+   "layernorm": 130.841796875,
+   "matmul": 69.080078125,
+   "softmax": 57.50390625,
    "activation": 22.548828125
   },
   "params": 794,
   "id_params": 400,
-  "build_s": 69.39800889999606
+  "build_s": 73.58679889998166
  },
  {
   "label": "mbe_pasn (신, 항등원 r=3e-03)",
   "err": 0.0033280898351222277,
-  "total": 606.009765625,
+  "total": 326.734375,
   "by_kind": {
-   "layernorm": 309.63671875,
-   "matmul": 163.6328125,
-   "softmax": 110.208984375,
+   "layernorm": 155.8125,
+   "matmul": 81.81640625,
+   "softmax": 66.57421875,
    "activation": 22.53125
   },
   "params": 914,
   "id_params": 520,
-  "build_s": 63.09706279999227
+  "build_s": 68.15306029998465
  }
 ]

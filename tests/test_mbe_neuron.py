@@ -651,6 +651,44 @@ def test_spiking_cost_report_counts_every_primitive():
     assert rep2["total_spikes"] < rep["total_spikes"]
 
 
+def test_cost_report_counts_one_call_once():
+    """One invocation must be charged once, whatever entry point it came in by.
+
+    ``spiking_cost_report`` patches both ``forward`` and ``reconstruct``, and the
+    routed neurons implement ``reconstruct`` *as* ``self.forward`` -- which, once
+    patched, is the wrapped forward. Tallying at every wrapped entry charged a
+    routed reconstruct twice while a plain ``MBENeuron`` (whose ``reconstruct``
+    goes to ``spike_train``/``intensities``) was charged once, so the bias fell
+    entirely on the routed backends, and the identity is 60-70% of a converted
+    model's spikes.
+    """
+    from mbe import convert as cv
+    from mbe.mbe_pasn import build_mbe_pasn
+
+    routed = build_mbe_pasn("identity", (0.0, 4.0), e_min=-2, e_max=2,
+                            n_local=1, n_near0=1, n_steps=4, epochs=20,
+                            near0="single")
+    plain = MBENeuron(MBEConfig(n_basis=1, n_steps=4, x_min=0.0, x_scale=4.0,
+                                use_bias=False))
+    x = torch.rand(64) * 4.0
+
+    for neuron in (routed, plain):
+        for entry in ("forward", "reconstruct"):
+            tally = {"n": dict(kind="k", spikes=0.0, elements=0, calls=0)}
+            busy = {"flag": False}
+            saved = []
+            cv._install_cost_probe("n", neuron, tally, busy, saved)
+            try:
+                getattr(neuron, entry)(x)
+            finally:
+                cv._remove_cost_probes(saved)
+            assert tally["n"]["calls"] == 1, (
+                f"{type(neuron).__name__}.{entry} charged "
+                f"{tally['n']['calls']} times")
+            assert tally["n"]["elements"] == x.numel()
+        assert "forward" not in vars(neuron) and "reconstruct" not in vars(neuron)
+
+
 def test_phase4_spike_path_matches_exact_wiring():
     """The spike-driven FP-mult path must add little over exact reconstruction --
     if it doesn't, the outer-product / matmul wiring is wrong (not just the fit)."""
