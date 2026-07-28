@@ -67,14 +67,36 @@ Note the printed `blocks/s` for the SNN pass. Spiking LayerNorm runs 49 times pe
 with T=16, so the SNN eval is far slower than the ANN — use the rate to decide whether the
 full run is worth it or whether to stay at a few hundred windows.
 
-## Step 2 — the comparison (four runs)
+## Step 2 — the comparison
+
+> **Superseded for P0.4.** The five-backend sweep below was written before
+> `mbe_pasn` became the paper and `pasn` / `mbe_pasn_s` became ablations that are not
+> being developed. Run the matrix in **[`P0.4_GPT2_HANDOFF.md`](P0.4_GPT2_HANDOFF.md)
+> §4.2** instead — two backends, three scopes, and the `id_target` decision. The
+> commands here are still valid if you want a backend-vs-backend picture.
+
+The P0.4 form, with the matched baseline and the decision arm:
 
 ```bash
-M="--model gpt2-medium --epochs 300 --eval-batch-size 4"
+M="--model gpt2-medium --epochs 300 --eval-batch-size 4 --json results/gpt2_p04.json"
 
-python experiments/gpt2_wikitext.py --backend none        $M
-python experiments/gpt2_wikitext.py --backend mbe         $M
-python experiments/gpt2_wikitext.py --backend mbe_pasn    $M
+python experiments/gpt2_wikitext.py --backend none $M --tag ann
+# matched baseline -- readout order 2 + log-uniform identity draw, per handoff §4.2
+python experiments/gpt2_wikitext.py --backend mbe  $M --tag mbe-matched \
+    --mbe-readout-order 2 --mbe-id-logsample
+# the decision: both arms, r swept only on the relative one
+python experiments/gpt2_wikitext.py --backend mbe_pasn $M --tag pasn-abs \
+    --pasn-id-target absolute
+for r in 3e-3 1e-2 3e-2; do
+  python experiments/gpt2_wikitext.py --backend mbe_pasn $M --tag "pasn-rel-$r" \
+      --pasn-id-target relative --pasn-id-target-rel $r
+done
+```
+
+Add `--convert-ops {activation,layernorm,both}` to separate the scopes. The old
+five-backend sweep:
+
+```bash
 python experiments/gpt2_wikitext.py --backend mbe_pasn_s  $M --pasn-s-n-shared 2 4 --pasn-s-restarts 3
 python experiments/gpt2_wikitext.py --backend pasn        $M
 ```

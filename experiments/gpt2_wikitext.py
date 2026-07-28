@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import sys
@@ -26,10 +27,17 @@ import torch.nn.functional as F  # noqa: E402
 
 from mbe import convert as cv  # noqa: E402
 from mbe.gpt2_convert import make_spikable, convert_gpt2  # noqa: E402
+from mbe.metrics import neuron_params  # noqa: E402
 
 
 WIKITEXT_DATASET_ID = "Salesforce/wikitext"
 WIKITEXT_CONFIG = "wikitext-2-raw-v1"
+
+# ``ConvertConfig`` is the authority on every method decision (audit_defaults.py
+# checks it, not this file). Pull the CLI defaults from it so a flag left unset
+# means "whatever the audited default is" rather than a second copy that can
+# drift away from it.
+_DEF = cv.ConvertConfig()
 
 
 @torch.no_grad()
@@ -131,6 +139,53 @@ def load_wikitext_ids(tokenizer, split="test", drop_blank: bool = False):
     return tokenizer("\n\n".join(texts), return_tensors="pt").input_ids[0]
 
 
+def storage_report(model) -> dict:
+    """Stored cost of the converted primitives, on two axes.
+
+    ``params`` is ``neuron_params`` summed over the *unique* spiking primitives --
+    the same quantity the toy waterfall tables report, so a GPT-2 row is directly
+    comparable to them. ``bytes`` is the real state-dict footprint (parameters
+    **and** buffers): ``learn_tau=False`` moves the taus into buffers, which makes
+    the learnable count fall without anything actually being freed, so any memory
+    claim has to be made on this number instead.
+    """
+    prims = cv._spiking_primitives(model)
+    nbytes = 0
+    for _, _, neuron in prims:
+        nbytes += sum(t.numel() * t.element_size()
+                      for t in neuron.state_dict().values()
+                      if torch.is_tensor(t))
+    return dict(params=sum(neuron_params(n) for _, _, n in prims),
+                bytes=int(nbytes), primitives=len(prims))
+
+
+def write_record(path: str, rec: dict):
+    """Append one run to a JSON array, creating it on first use.
+
+    Sequential runs only -- the sweep is a shell loop over GPU evals, so a
+    read-modify-write is enough. If you ever run two of these at once, give each
+    its own ``--json`` path and merge afterwards.
+    """
+    rows = []
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                rows = json.load(f)
+            if not isinstance(rows, list):
+                rows = [rows]
+        except (json.JSONDecodeError, OSError) as e:
+            backup = f"{path}.bad"
+            print(f"[json] {path} is unreadable ({e}); moving it to {backup}")
+            os.replace(path, backup)
+            rows = []
+    rows.append(rec)
+    parent = os.path.dirname(os.path.abspath(path))
+    os.makedirs(parent, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(rows, f, ensure_ascii=False, indent=1)
+    print(f"[json] wrote record {len(rows)} to {path}")
+
+
 def build_smoke():
     from transformers import GPT2Config, GPT2LMHeadModel
     cfg = GPT2Config(n_layer=2, n_head=2, n_embd=32, n_positions=64, vocab_size=128)
@@ -172,13 +227,50 @@ def main():
     )
     # Budget knobs for iso-storage / iso-spike fairness sweeps. MBE signed GELU
     # stores 2*n_basis_act bases; mbe_pasn stores ~(#binades)*pasn_n_local.
-    ap.add_argument("--n-basis-act", type=int, default=6,
+    ap.add_argument("--n-basis-act", type=int, default=_DEF.n_basis_act,
                     help="MBE bases per activation (signed GELU uses 2x this)")
-    ap.add_argument("--pasn-n-local", type=int, default=2,
+    ap.add_argument("--n-basis-ln", type=int, default=_DEF.n_basis_ln,
+                    help="MBE bases per LayerNorm primitive; sweep together with "
+                         "--n-basis-act to give the mbe baseline its own frontier")
+    ap.add_argument("--pasn-n-local", type=int, default=_DEF.pasn_n_local,
                     help="mbe_pasn: MBE bases per binade bank")
-    ap.add_argument("--pasn-e-min", type=int, default=-3,
+    ap.add_argument("--pasn-e-min", type=int, default=_DEF.pasn_e_min,
                     help="smallest binade exponent (near-zero resolution); "
                          "shared by mbe_pasn and pasn so only the encoder differs")
+
+    # --- P0.4 decision knobs (§3 of P0.4_GPT2_HANDOFF.md) -------------------
+    # These exist in ConvertConfig but were not reachable from the command line,
+    # so the sweep that settles them could not be run.
+    ap.add_argument("--pasn-id-target", choices=["relative", "absolute"],
+                    default=_DEF.pasn_id_target,
+                    help="budget for the routed identity inside the spike-driven FP "
+                         "multiply. THE P0.4 decision: exp 10 measured 15-49%% "
+                         "relative error on a real product under an absolute budget, "
+                         "while P0.3 measured relative costing 0.81x spikes at "
+                         "iso-forward-error. Only dPPL settles it -- run both")
+    ap.add_argument("--pasn-id-target-rel", type=float,
+                    default=_DEF.pasn_id_target_rel,
+                    help="operating point r for --pasn-id-target=relative (ignored "
+                         "when absolute -- sweeping it there gives identical configs)")
+    ap.add_argument("--pasn-id-e-min", type=int, default=_DEF.pasn_id_e_min,
+                    help="router depth for the identity primitives only; their "
+                         "operands span many decades. -6 on the toy, unverified on "
+                         "GPT-2's activation distribution")
+    ap.add_argument("--pasn-readout-order", type=int,
+                    default=_DEF.pasn_readout_order,
+                    help="mbe_pasn activation decoder order (2 = exp 6; free "
+                         "accuracy at zero extra spikes)")
+
+    # --- matched-baseline knobs --------------------------------------------
+    # An unmatched mbe baseline is what produced the dead 14.2x. Give it the same
+    # advantages: readout order 2 and a log-uniform identity calibration draw.
+    ap.add_argument("--mbe-readout-order", type=int,
+                    default=_DEF.mbe_readout_order,
+                    help="global-MBE decoder order; set 2 to match mbe_pasn")
+    ap.add_argument("--mbe-id-logsample", action="store_true",
+                    default=_DEF.mbe_id_logsample,
+                    help="draw the global identity's calibration log-uniformly, the "
+                         "fairest global analogue of the routed relative budget")
     ap.add_argument("--pasn-T", type=int, default=6,
                     help="pasn: SAR bits per bank (spike budget)")
     ap.add_argument("--pasn-order", type=int, default=2,
@@ -197,6 +289,11 @@ def main():
                     help="sliding-window context length (0 = model n_positions)")
     ap.add_argument("--stride", type=int, default=512,
                     help="sliding-window stride (tokens scored per window)")
+    ap.add_argument("--json", default=None, metavar="PATH",
+                    help="append this run to a JSON array (results/gpt2_p04.json "
+                         "is the P0.4 deliverable). Sequential runs only")
+    ap.add_argument("--tag", default=None,
+                    help="free-form label stored with the JSON record")
     args = ap.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     eval_batch_size = args.eval_batch_size or (4 if device == "cuda" else 1)
@@ -226,18 +323,65 @@ def main():
                                   limit_windows=args.limit_blocks,
                                   progress_every=args.progress_every, label=label)
 
+    t0 = time.perf_counter()
     ppl_ann = eval_ppl("ANN")
+    eval_ann_s = time.perf_counter() - t0
     which = "smoke: tiny random GPT-2" if args.smoke else args.model
     print(f"ANN ({which}) perplexity = {ppl_ann:.4f}  "
           f"[eval={args.eval_mode}, ctx={max_length}, stride={args.stride}]")
+
+    # Record only the knobs that reach this backend. ``_build_one`` branches on
+    # ``backend in _ROUTED_BACKENDS``, so the pasn_* family is dead for a global mbe
+    # run and the mbe_*/n_basis_* family is dead for a routed one. Storing all of
+    # them anyway puts a column in the deliverable table that varies without
+    # anything changing -- the shape of trap 6, one level up in the analysis.
+    routed = args.backend in cv._ROUTED_BACKENDS
+    converting = args.backend != "none"
+    # The identity's operating point likewise only exists under a relative budget.
+    rel = (args.pasn_id_target_rel
+           if routed and args.pasn_id_target == "relative" else None)
+
+    def rt(v):                       # routed-only knob
+        return v if routed else None
+
+    def gl(v):                       # global-MBE-only knob
+        return v if converting and not routed else None
+
+    rec = dict(
+        tag=args.tag, backend=args.backend, scope=args.convert_ops,
+        model=which, smoke=args.smoke, device=device,
+        id_target=rt(args.pasn_id_target), r=rel,
+        pasn_e_min=rt(args.pasn_e_min), pasn_id_e_min=rt(args.pasn_id_e_min),
+        pasn_readout_order=rt(args.pasn_readout_order),
+        pasn_n_local=rt(args.pasn_n_local),
+        mbe_readout_order=gl(args.mbe_readout_order),
+        mbe_id_logsample=gl(args.mbe_id_logsample),
+        n_basis_act=gl(args.n_basis_act), n_basis_ln=gl(args.n_basis_ln),
+        epochs=args.epochs if converting else None, n_steps=_DEF.n_steps,
+        eval_mode=args.eval_mode, ctx=max_length, stride=args.stride,
+        limit_blocks=args.limit_blocks, eval_batch_size=eval_batch_size,
+        ppl_ann=ppl_ann, ppl_snn=None, delta_pct=None,
+        spikes_per_token=None, total_spikes=None, by_kind=None,
+        stored_params=None, stored_bytes=None, n_primitives=None,
+        n_activations=None, act_spikes_per_input=None,
+        build_s=None, eval_ann_s=eval_ann_s, eval_snn_s=None,
+        started=time.strftime("%Y-%m-%dT%H:%M:%S"),
+    )
 
     if args.backend != "none":
         n = make_spikable(model)
         print(f"marked {n} GELU activations; converting (backend={args.backend}) ...")
         cfg = cv.ConvertConfig(epochs=args.epochs, backend=args.backend,
                                spike_mult=True, n_basis_act=args.n_basis_act,
+                               n_basis_ln=args.n_basis_ln,
                                pasn_n_local=args.pasn_n_local,
                                pasn_e_min=args.pasn_e_min,
+                               pasn_id_e_min=args.pasn_id_e_min,
+                               pasn_id_target=args.pasn_id_target,
+                               pasn_id_target_rel=args.pasn_id_target_rel,
+                               pasn_readout_order=args.pasn_readout_order,
+                               mbe_readout_order=args.mbe_readout_order,
+                               mbe_id_logsample=args.mbe_id_logsample,
                                pasn_T=args.pasn_T,
                                pasn_order=args.pasn_order,
                                pasn_s_n_shared=(args.pasn_s_n_shared[0]
@@ -251,7 +395,10 @@ def main():
         only = {
             "activation" if args.convert_ops == "activation" else "layernorm"
         } if args.convert_ops != "both" else None
+        t0 = time.perf_counter()
         convert_gpt2(model, calib, cfg=cfg, only=only, verbose=True)
+        rec["build_s"] = time.perf_counter() - t0
+        print(f"[build] conversion took {rec['build_s'] / 60:.1f} min")
         # Fair-comparison cost metrics (MBE and PASN store different #bases, so
         # accuracy alone is not comparable): stored/active bases + spikes per input.
         sample_batch = ids[:block].unsqueeze(0)
@@ -260,13 +407,30 @@ def main():
         # Whole-model spike cost. The line above is activations only; the FP-multiply
         # identities inside LayerNorm (and attention, once it is converted) are not
         # in it, so it is not an energy total.
-        print(cv.format_spiking_cost_report(
-            cv.spiking_cost_report(model, sample_batch), label=args.backend),
-            flush=True)
+        spikes = cv.spiking_cost_report(model, sample_batch)
+        print(cv.format_spiking_cost_report(spikes, label=args.backend), flush=True)
+        store = storage_report(model)
+        print(f"[store {args.backend}] params={store['params']}  "
+              f"bytes={store['bytes']}  primitives={store['primitives']}",
+              flush=True)
+        rec.update(spikes_per_token=spikes["spikes_per_input"],
+                   total_spikes=spikes["total_spikes"],
+                   by_kind=spikes["by_kind"],
+                   stored_params=store["params"], stored_bytes=store["bytes"],
+                   n_primitives=store["primitives"], n_activations=len(costs),
+                   act_spikes_per_input=(sum(c["spikes"] for c in costs.values())
+                                         / len(costs) if costs else None))
+
+        t0 = time.perf_counter()
         ppl_snn = eval_ppl(f"SNN-{args.backend}")
+        rec["eval_snn_s"] = time.perf_counter() - t0
         drop = 100.0 * (ppl_snn - ppl_ann) / ppl_ann
+        rec.update(ppl_snn=ppl_snn, delta_pct=drop)
         print(f"SNN ({args.backend}) perplexity = {ppl_snn:.4f}   "
               f"(delta {drop:+.2f}%)")
+
+    if args.json:
+        write_record(args.json, rec)
 
 
 if __name__ == "__main__":
