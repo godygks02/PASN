@@ -333,6 +333,14 @@ class ConvertConfig:
     n_basis_sm: int = 8
     n_basis_mm: int = 8
     n_steps: int = 16
+    # Global-backend counterparts of the routed knobs, so a waterfall ablation can
+    # give the baseline the same advantages instead of comparing an old default
+    # against a tuned method (P0.3). ``mbe_id_logsample`` is the fairest matched
+    # form of the routed identity's relative-error budget: a global neuron has no
+    # per-range structure to target, but a log-uniform calibration draw at least
+    # stops every point landing in the top decade.
+    mbe_readout_order: int = 1
+    mbe_id_logsample: bool = False
     epochs: int = 300
     seed: int = 0
     spike_mult: bool = True          # spike-driven FP mult inside SM/LN/MatMul
@@ -379,6 +387,10 @@ class ConvertConfig:
     # MSE budget starves exactly the small operands, which is why a global MBE_Id
     # lands at 15-49% relative error on a real product (실험 10).
     pasn_id_tied: bool = True
+    # "auto" fits both alpha placements per bank and keeps the better, doubling
+    # the build. "uniform" is the placement the routed residual wants.
+    pasn_alpha_init: str = "auto"
+    pasn_id_target: str = "relative"     # "absolute" recovers the pre-실험4 form
     pasn_id_target_rel: float = 1e-2
     # Build the routed identity over a *signed* domain so the router reads the
     # operand's sign, letting the multiply skip the relu(x) - relu(-x) split and
@@ -491,7 +503,8 @@ def _routed_primitive(name, domain, e_min, e_max, cfg: ConvertConfig,
             spike_budget=cfg.pasn_s_spike_budget, sample=sample,
             device=fit_device, verbose=cfg.verbose_fits,
         )
-    kw = dict(readout_order=cfg.pasn_readout_order, near0=cfg.pasn_near0)
+    kw = dict(readout_order=cfg.pasn_readout_order, near0=cfg.pasn_near0,
+              alpha_init=cfg.pasn_alpha_init)
     kw.update(pasn_kw)
     beta = (cfg.pasn_beta or {}).get(name, 0.0)
     if beta:
@@ -573,7 +586,7 @@ def _routed_identity(hi, cfg: ConvertConfig, fit_device, sample=None):
         near0="signed" if cfg.pasn_id_signed else cfg.pasn_near0,
         # Homogeneous target + a product downstream: tie the banks and budget on
         # *relative* error. Order 1 -- the multiply factorises a spike sum only.
-        tied=cfg.pasn_id_tied, target="relative",
+        tied=cfg.pasn_id_tied, target=cfg.pasn_id_target,
         target_rel=cfg.pasn_id_target_rel, readout_order=1,
     )
 
@@ -593,6 +606,7 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
             return _SpikingActModule(so.SpikingActivation(neuron))
         act = so.build_activation(mod.kind, slots[0].sample,
                                   n_basis=cfg.n_basis_act, n_steps=cfg.n_steps,
+                                  readout_order=cfg.mbe_readout_order,
                                   seed=cfg.seed, margin=cfg.margin,
                                   epochs=cfg.epochs, device=fit_device)
         return _SpikingActModule(act)
@@ -605,7 +619,9 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
                 slots[0].sample, dim=mod.dim,
                 n_basis=cfg.n_basis_sm, n_steps=cfg.n_steps,
                 epochs=cfg.epochs, seed=cfg.seed,
-                spike_mult=cfg.spike_mult, device=fit_device
+                spike_mult=cfg.spike_mult, device=fit_device,
+                readout_order=cfg.mbe_readout_order,
+                log_sample=cfg.mbe_id_logsample
             )
         return _SpikingSoftmaxModule(sm, mod.dim)
 
@@ -638,7 +654,9 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
                 sample, eps=mod.eps,
                 n_basis=cfg.n_basis_ln, n_steps=cfg.n_steps,
                 epochs=cfg.epochs, seed=cfg.seed,
-                spike_mult=cfg.spike_mult, device=fit_device
+                spike_mult=cfg.spike_mult, device=fit_device,
+                readout_order=cfg.mbe_readout_order,
+                log_sample=cfg.mbe_id_logsample
             )
         return _SpikingLayerNormModule(ln, mod.weight, mod.bias)
 
@@ -655,10 +673,12 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
         else:
             idn = so.calibrate_identity(0.0, hi_a, n_basis=cfg.n_basis_mm,
                                         n_steps=cfg.n_steps, epochs=cfg.epochs,
-                                        seed=cfg.seed, device=fit_device)
+                                        seed=cfg.seed, device=fit_device,
+                                        log_sample=cfg.mbe_id_logsample)
             idn2 = so.calibrate_identity(0.0, hi_b, n_basis=cfg.n_basis_mm,
                                          n_steps=cfg.n_steps, epochs=cfg.epochs,
-                                         seed=cfg.seed, device=fit_device)
+                                         seed=cfg.seed, device=fit_device,
+                                         log_sample=cfg.mbe_id_logsample)
         return _SpikingMatMulModule(idn, idn2, cfg.spike_mult)
 
     raise ValueError(kind)
