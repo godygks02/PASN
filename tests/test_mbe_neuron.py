@@ -3,6 +3,7 @@
 Run:  python -m pytest tests/ -q     (from the project root, SNN env)
    or  python tests/test_mbe_neuron.py
 """
+import math
 import os
 import sys
 
@@ -90,6 +91,157 @@ def test_mbe_pasn_router_routes_by_binade():
     assert int(idx[3]) == r.key_to_idx[(1.0, 1)]            # 3.0 in [2,4)
     assert int(idx[4]) == r.key_to_idx[(-1.0, 0)]           # -1.5 in [-2,-1)
     assert int(idx[5]) == r.key_to_idx[(-1.0, 2)]           # -6.0 in [-8,-4)
+
+
+def test_mbe_pasn_signed_near0_splits_the_polarity():
+    """``near0="signed"`` reads the sign bit in the near-zero region too.
+
+    With the default single near-zero bank the bend of GELU/SiLU/ReLU sits in the
+    *middle* of that bank, where a monotone staircase code cannot resolve it (a
+    measured error floor -- 연구일지 실험 1 section 6). Splitting by polarity gives
+    every bank single-sign, monotone inputs; this test pins the routing, not the
+    accuracy.
+    """
+    r = MBEPrefixRouter(-8.0, 8.0, e_min=-2, e_max=3, near0="signed")
+    assert r.n_banks == MBEPrefixRouter(-8.0, 8.0, e_min=-2,
+                                        e_max=3).n_banks + 1
+    x = torch.tensor([-0.2, -0.01, 0.0, 0.01, 0.2, -1.5, 1.5])
+    idx = r.route(x)
+    neg, pos = r.near0_idx[-1.0], r.near0_idx[1.0]
+    assert idx[0] == neg and idx[1] == neg                  # negatives together
+    assert idx[2] == pos and idx[3] == pos and idx[4] == pos
+    assert r.bank_interval(neg) == (-0.25, 0.0)
+    assert r.bank_interval(pos) == (0.0, 0.25)
+    # every near-zero bank now sees a single sign, and is fed |x| (raw=False)
+    for bi in (neg, pos):
+        assert r.banks[bi]["raw"] is False
+        sub = x[idx == bi]
+        assert bool((sub >= 0).all()) or bool((sub < 0).all())
+    # magnitude routing is unchanged
+    assert idx[5] == r.key_to_idx[(-1.0, 0)] and idx[6] == r.key_to_idx[(1.0, 0)]
+
+
+def test_mbe_pasn_rule_budget_scales_with_dynamic_range():
+    """The 실험 1 rule: ``T`` follows the bank's dynamic range, ``N`` stays 1.
+
+    ``b = log2(delta / sqrt(eps))`` is the required resolution in bits, and a fitted
+    MBE bank delivers ``2 + 1.7*log2(T)`` of them. A flat tail therefore needs the
+    minimum budget while a full-scale bank needs the maximum -- which is the whole
+    reason a per-bank budget saves spikes over a global ``T``.
+    """
+    from mbe.mbe_pasn import T_GRID, rule_budget
+    eps = 1e-5
+    flat_N, flat_T = rule_budget(1e-4, eps)          # essentially constant bank
+    mid_N, mid_T = rule_budget(0.25, eps)
+    big_N, big_T = rule_budget(64.0, eps)
+
+    assert (flat_N, flat_T) == (1, T_GRID[0])        # nothing to resolve
+    assert flat_T < mid_T < big_T                    # monotone in dynamic range
+    assert flat_N == mid_N == 1                      # extra bases only at the top
+    assert big_N > 1 and big_T == T_GRID[-1]
+    assert rule_budget(0.0, eps) == (1, T_GRID[0])   # constant target: bias alone
+    # A tighter target needs more resolution at the same dynamic range.
+    assert rule_budget(0.25, 1e-8)[1] > mid_T
+
+
+def test_mbe_pasn_beta_moves_the_dense_ranges():
+    """``beta`` relocates the log-dense point; ``gamma`` provably cannot.
+
+    The binade grid is anchored at zero, so a domain that never approaches zero
+    gets one usable range. ``1/S`` on ``[0.5, 1)`` is exactly that -- a single
+    binade -- yet its curvature peaks at ``S = 0.5``. Routing on ``S - 0.5``
+    re-expands that end. ``gamma`` only slides the domain along the grid, which
+    ``e_min`` already does, so with the exponent bounds taken relative to the key
+    range it cancels exactly.
+    """
+    r0 = MBEPrefixRouter(0.5, 1.0, e_min=-6, e_max=0)
+    rb = MBEPrefixRouter(0.5, 1.0, e_min=-6, e_max=0, beta=0.5)
+    s = torch.tensor([0.5, 0.501, 0.52, 0.6, 0.8, 0.99])
+
+    # anchored at zero every point lands in one bank; anchored at 0.5 they spread
+    assert len(set(r0.route(s).tolist())) == 1
+    assert len(set(rb.route(s).tolist())) >= 4
+
+    # the routed interval still maps back to x-space through the affine
+    for bi in range(rb.n_banks):
+        a, b = rb.bank_interval(bi)
+        ka, kb = rb.key_interval(bi)
+        assert abs(rb.from_key(ka) - a) < 1e-9 and abs(rb.from_key(kb) - b) < 1e-9
+
+    # gamma is a relabelling: same partition of the same points
+    rg = MBEPrefixRouter(0.5, 1.0, e_min=-9, e_max=-3, beta=0.5, gamma_log2=3)
+    def parts(r, x):
+        idx = r.route(x)
+        return sorted(tuple(sorted((idx == i).nonzero().flatten().tolist()))
+                      for i in set(idx.tolist()))
+    assert parts(rg, s) == parts(rb, s)
+
+
+def test_mbe_pasn_tied_banks_share_one_prototype():
+    """A homogeneous target factorises into (routed scale) x (one unit shape).
+
+    ``f(sigma 2^e (1+rho)) = [sigma^k 2^{ek}] f(1+rho)`` for ``f(lx) = l^k f(x)``,
+    and the bracket is a function of the routed key -- which the router reads for
+    free. So every magnitude bank can *be* one prototype with a scaled readout:
+    storage stops growing with the number of ranges while the relative error stays
+    flat across binades. The identity is the case that matters, since the
+    spike-driven FP multiply reconstructs both operands through an ``MBE_Id``.
+    """
+    from mbe.mbe_pasn import build_mbe_pasn
+    lo, hi = 2.0 ** -6, 2.0 ** 6
+    x = torch.exp(torch.linspace(math.log(lo), math.log(hi * 0.99), 3000))
+    kw = dict(e_min=-6, e_max=6, budget="rule", target="relative",
+              target_rel=1e-3, near0="single", epochs=120,
+              alpha_init="uniform")
+    free = build_mbe_pasn("identity", (lo, hi), tied=False, **kw)
+    tied = build_mbe_pasn("identity", (lo, hi), tied=True, **kw)
+
+    def rel(m):
+        with torch.no_grad():
+            return float(((m(x) - x) / x).pow(2).mean().sqrt())
+
+    # far less storage, no accuracy given up
+    assert tied.num_learnable() * 4 < free.num_learnable()
+    assert rel(tied) < 2.0 * rel(free)
+    assert tied.stored_bases() < free.stored_bases()
+
+    # relative error is flat across binades -- the point of the factorisation
+    per = []
+    for e in range(-6, 6):
+        m = (x >= 2.0 ** e) & (x < 2.0 ** (e + 1))
+        with torch.no_grad():
+            per.append(float(((tied(x[m]) - x[m]) / x[m]).pow(2).mean().sqrt()))
+    assert max(per) < 4.0 * min(per)
+
+    # and the guard rejects a target that does not factorise
+    try:
+        build_mbe_pasn("gelu", (-8.0, 8.0), e_min=-2, e_max=4, tied=True,
+                       epochs=20, near0="single")
+    except ValueError as exc:
+        assert "self-similar" in str(exc)
+    else:
+        raise AssertionError("tied=True must reject a non-homogeneous target")
+
+
+def test_mbe_pasn_unreachable_banks_are_not_random():
+    """Domain endpoints route to a bank the calibration domain never covers.
+
+    ``x = hi`` has ``floor(log2|x|)`` one binade above the last fitted bank, so an
+    unfitted bank there returns its random initialisation -- garbage, not
+    extrapolation. :func:`fill_unreachable` points those at the nearest fitted
+    neighbour, and shares the module so storage is unchanged.
+    """
+    from mbe.mbe_pasn import build_mbe_pasn
+    m = build_mbe_pasn("tanh", (-8.0, 8.0), e_min=-2, e_max=4, n_local=1,
+                       n_near0=1, n_steps=4, epochs=20, near0="single")
+    unreachable = [i for i in range(m.router.n_banks)
+                   if m.router.reachable(i, -8.0, 8.0) is None]
+    assert unreachable, "this router/domain pair should have unreachable banks"
+    for i in unreachable:                       # shares a fitted neighbour's module
+        assert any(m.bank_mods[i] is m.bank_mods[j]
+                   for j in range(m.router.n_banks) if j not in unreachable)
+    edge = torch.tensor([-8.0, 8.0])
+    assert float((m(edge) - torch.tanh(edge)).abs().max()) < 0.5
 
 
 def test_mbe_pasn_dispatch_matches_per_bank():

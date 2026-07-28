@@ -76,9 +76,21 @@ class MBEConfig:
     x_scale: float = 1.0             # calibration: domain span (membrane normaliser)
     decay: bool = True               # exponential decay kernels (False = ablation)
     use_bias: bool = True            # learnable output DC offset (affine baseline)
+    # Decoder order. Eq. 8 reads out f_hat = sum_n w_n o_n, i.e. the decode is
+    # *linear* in the accumulated features. That is the binding constraint on how
+    # many bits a spike train can be worth: a basis running an exact binary search
+    # produces o = rho_hat, so a linear readout can only express an affine function
+    # of rho -- the fit must therefore distort the staircase itself to manufacture
+    # curvature, and spends resolution doing it (measured: effective bits grow like
+    # 2 + 1.7*log2(T), not like T). order > 1 appends o^2, o^3, ... so the decoder
+    # supplies the curvature instead. Costs stored coefficients only -- the spike
+    # count is unchanged. Keep order 1 for MBE_Id: the FP-multiply factorisation
+    # needs the output to stay a pure spike sum.
+    readout_order: int = 1
+    learn_tau: bool = True           # False freezes the kernels at their init
+    tau_min: float = 1.0             # smallest init time constant (fastest decay)
     surrogate: str = "atan"          # surrogate gradient kind
     surrogate_alpha: float = 2.0     # surrogate sharpness
-    tau_min: float = 1.0             # smallest init time constant (fastest decay)
     tau_max: float = 8.0             # largest init time constant (slowest decay)
 
 
@@ -124,15 +136,24 @@ class MBENeuron(nn.Module):
         log_tau_init = torch.linspace(
             math.log(config.tau_min), math.log(config.tau_max), N
         )
-        self.log_tau_r = nn.Parameter(log_tau_init.clone())
-        self.log_tau_vth = nn.Parameter(log_tau_init.clone())
-        self.log_tau_d = nn.Parameter(log_tau_init.clone())
+        if config.learn_tau:
+            self.log_tau_r = nn.Parameter(log_tau_init.clone())
+            self.log_tau_vth = nn.Parameter(log_tau_init.clone())
+            self.log_tau_d = nn.Parameter(log_tau_init.clone())
+            self.log_dt = nn.Parameter(torch.full((N,), math.log(config.dt_init)))
+        else:
+            # Frozen kernels. With tau = dt/ln2 every step halves, i.e. the basis
+            # is an exact binary-search (SAR) encoder -- the paper's own reading of
+            # Eq. 4. Freezing lets us ask whether the *learned* kernels are worth
+            # their cost once the decoder can be nonlinear (see readout_order).
+            self.register_buffer("log_tau_r", log_tau_init.clone())
+            self.register_buffer("log_tau_vth", log_tau_init.clone())
+            self.register_buffer("log_tau_d", log_tau_init.clone())
+            self.register_buffer(
+                "log_dt", torch.full((N,), math.log(config.dt_init)))
 
-        # -- discrete time step dt (per basis) ---------------------------------
-        self.log_dt = nn.Parameter(torch.full((N,), math.log(config.dt_init)))
-
-        # -- basis weights w ---------------------------------------------------
-        self.w = nn.Parameter(torch.randn(N) * 0.1)
+        # -- basis weights w (order blocks: [o, o^2, ...]) ----------------------
+        self.w = nn.Parameter(torch.randn(N * config.readout_order) * 0.1)
 
         # -- output DC bias ----------------------------------------------------
         if config.use_bias:
@@ -173,12 +194,17 @@ class MBENeuron(nn.Module):
     def _normalise(self, x_flat: torch.Tensor) -> torch.Tensor:
         return (x_flat - self.cfg.x_min) / self.cfg.x_scale
 
-    def features(self, x: torch.Tensor) -> torch.Tensor:
+    def features(self, x: torch.Tensor, with_rate: bool = False):
         """Per-basis accumulated outputs ``o_n(T)``, shape ``(M, N)``.
 
         These are the linear-readout features: ``forward = features @ w (+ bias)``.
         Exposing them lets the optimiser solve the readout ``(w, bias)`` in closed
         form (see ``fit.solve_readout``).
+
+        ``with_rate=True`` also returns the mean surrogate spike fraction over the
+        same pass -- differentiable, so it can be penalised in the loss. Note the
+        readout ``(w, bias)`` does not enter the spike dynamics at all, so adding a
+        firing-rate term leaves the closed-form readout solve exactly optimal.
         """
         cfg = self.cfg
         T, N = cfg.n_steps, cfg.n_basis
@@ -186,27 +212,50 @@ class MBENeuron(nn.Module):
         d, r, vth = self._kernels()                 # each (T, N)
         u = self._normalise(x_flat).unsqueeze(1).expand(-1, N).contiguous()  # (M,N)
         o = torch.zeros_like(u)
+        fired = None
         for t in range(T):
             s = heaviside(u - vth[t], cfg.surrogate, cfg.surrogate_alpha)
             u = u - s * r[t]
             o = o + s * d[t]
-        return o
+            if with_rate:
+                fired = s.mean() if fired is None else fired + s.mean()
+        return (o, fired / T) if with_rate else o
+
+    def forward_with_rate(self, x: torch.Tensor):
+        """``(output, mean firing rate)`` from one pass -- both differentiable."""
+        o, rate = self.features(x, with_rate=True)
+        p = self.cfg.readout_order
+        feats = o if p == 1 else torch.cat([o ** k for k in range(1, p + 1)], 1)
+        out = (feats * self.w).sum(dim=1)
+        if self.bias is not None:
+            out = out + self.bias
+        return out.reshape(x.shape), rate
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        o = self.features(x)                         # (M, N)
-        out = (o * self.w).sum(dim=1)               # Eq. 8
+        feats = self.readout_features(x)             # (M, N*order)
+        out = (feats * self.w).sum(dim=1)            # Eq. 8 (order 1) / extended
         if self.bias is not None:
             out = out + self.bias
         return out.reshape(x.shape)
 
     # -- linear readout interface (for closed-form (w, bias) solves) -------
     def readout_features(self, x: torch.Tensor) -> torch.Tensor:
-        return self.features(x)
+        """``[o, o^2, ..., o^order]`` concatenated, shape ``(M, N*order)``.
+
+        Still *linear in the coefficients*, so the closed-form readout solve
+        (:func:`fit.solve_readout`) needs no change -- only the design matrix gets
+        wider. The spike train is untouched, so the energy cost is unchanged.
+        """
+        o = self.features(x)
+        p = self.cfg.readout_order
+        if p == 1:
+            return o
+        return torch.cat([o ** k for k in range(1, p + 1)], dim=1)
 
     @torch.no_grad()
     def set_readout(self, coeffs: torch.Tensor):
-        """Assign the readout from a solved vector ``[w (N,), bias]``."""
-        self.w.copy_(coeffs[:self.cfg.n_basis])
+        """Assign the readout from a solved vector ``[w (N*order,), bias]``."""
+        self.w.copy_(coeffs[:self.w.numel()])
         if self.bias is not None:
             self.bias.copy_(coeffs[-1:])
 
@@ -237,7 +286,14 @@ class MBENeuron(nn.Module):
 
         Input-independent (depends only on trained parameters), so it is the
         precomputable intensity matrix ``D`` of Eq. 11 / Appendix F.1.
+
+        Only defined for a linear decoder: the FP-multiply factorisation needs the
+        output to *be* the spike sum, which a polynomial readout is not.
         """
+        if self.cfg.readout_order != 1:
+            raise ValueError(
+                "intensities()/reconstruct() need readout_order=1 -- the "
+                "spike-driven multiply factorises only a pure spike sum")
         d, _, _ = self._kernels()                    # d: (T, N)
         return self.w.unsqueeze(1) * d.t()           # (N, T)
 

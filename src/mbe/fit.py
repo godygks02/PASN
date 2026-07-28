@@ -102,15 +102,30 @@ def fit_model(
     ridge: float = 1e-8,
     log_every: int = 0,
     seed: int = 0,
+    spike_lambda: float = 0.0,
 ) -> FitResult:
     """Fit any neuron exposing ``readout_features`` / ``set_readout`` / ``cfg``.
 
     Works for both :class:`MBENeuron` and :class:`SignedMBENeuron`. The readout
     ``(w, bias)`` is periodically solved in closed form (:func:`solve_readout`)
     while gradient descent optimises the spike-generating (shape) parameters.
+
+    ``spike_lambda > 0`` adds ``lambda * firing_rate`` to the objective. Spikes are
+    the energy currency of an SNN, and up to here they were only ever *selected*
+    on, never optimised for -- the fit minimised MSE and the firing rate was
+    whatever the thresholds happened to give (measured: 0.41 with learned kernels,
+    0.54 with halving ones). The readout does not enter the spike dynamics, so the
+    closed-form solve stays exactly optimal under this objective.
     """
     torch.manual_seed(seed)
     loss_fn = torch.nn.MSELoss()
+    use_rate = spike_lambda > 0.0 and hasattr(model, "forward_with_rate")
+
+    def objective():
+        if use_rate:
+            pred, rate = model.forward_with_rate(x)
+            return loss_fn(pred, y) + spike_lambda * rate
+        return loss_fn(model(x), y)
 
     # Start from the optimal readout for the initial (random) shape parameters.
     solve_readout(model, x, y, ridge)
@@ -125,7 +140,7 @@ def fit_model(
     history = []
     for epoch in range(epochs):
         opt.zero_grad()
-        loss = loss_fn(model(x), y)
+        loss = objective()
         loss.backward()
         opt.step()
         sched.step()
@@ -141,7 +156,9 @@ def fit_model(
     # LBFGS polish on shape params with a sharpening surrogate; re-solve the
     # readout after each round and roll back rounds that do not improve.
     if lbfgs_refine:
-        best_mse = loss_fn(model(x), y).item()
+        # Roll back on the *objective* being optimised, not on MSE alone, or a
+        # spike-penalised run would keep rounds that only look good on MSE.
+        best_mse = objective().item()
         best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
         for sa in lbfgs_alphas:
             model.cfg.surrogate_alpha = sa
@@ -150,14 +167,14 @@ def fit_model(
 
             def closure():
                 opt.zero_grad()
-                loss = loss_fn(model(x), y)
+                loss = objective()
                 loss.backward()
                 return loss
 
             try:
                 opt.step(closure)
                 solve_readout(model, x, y, ridge)
-                cur = loss_fn(model(x), y).item()
+                cur = objective().item()
             except RuntimeError:
                 cur = float("inf")
             if math.isfinite(cur) and cur < best_mse:

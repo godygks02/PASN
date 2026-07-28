@@ -360,7 +360,29 @@ class ConvertConfig:
     # growing identity storage linearly. All backends share the value, so they stay
     # comparable; None falls back to pasn_e_min.
     pasn_id_e_min: int | None = -6
-    pasn_n_local: int = 2            # mbe_pasn: MBE bases per binade bank
+    pasn_n_local: int = 2            # mbe_pasn: MBE bases per binade bank (budget="fixed")
+    # mbe_pasn budget policy. "rule" derives each bank's (N, T) from its own dynamic
+    # range and pasn_target_mse (연구일지 실험 1): flat tails collapse to (1, 2) and
+    # only banks that need the resolution get a long spike train. "fixed" keeps the
+    # uniform pasn_n_local / n_steps everywhere. T is a *linear* factor in the spike
+    # count and was a global constant until this was added.
+    pasn_budget: str = "rule"
+    pasn_target_mse: float = 1e-5
+    # Split the near-zero region by polarity so no bank straddles zero (실험 2).
+    # A single near-zero bank has a hard error floor on targets whose bend sits at 0
+    # (ReLU 1362x, GELU 61x), and it is the most-visited bank of all.
+    pasn_near0: str = "signed"
+    # Identity primitives only. The identity is positively homogeneous, so every
+    # magnitude bank's target is the *same* unit-interval function up to the scale
+    # the router already read: one fitted prototype serves them all (연구일지 실험 4).
+    # And what a spike-driven multiply needs is *relative* accuracy -- an absolute
+    # MSE budget starves exactly the small operands, which is why a global MBE_Id
+    # lands at 15-49% relative error on a real product (실험 10).
+    pasn_id_tied: bool = True
+    pasn_id_target_rel: float = 1e-2
+    # Decoder order for the activation. Not used for the identity: the FP-multiply
+    # factorisation needs the output to stay a spike sum (실험 6).
+    pasn_readout_order: int = 2
     pasn_T: int = 6                  # pasn: SAR bits (spike budget) per bank
     pasn_order: int = 2              # pasn: per-bank readout polynomial order
     # mbe_pasn_s: candidate bases (int or list) and an optional cap on mean spikes
@@ -398,7 +420,7 @@ _ROUTED_BACKENDS = ("mbe_pasn", "mbe_pasn_s", "pasn")
 
 
 def _routed_primitive(name, domain, e_min, e_max, cfg: ConvertConfig,
-                      fit_device, n_near0=None, sample=None):
+                      fit_device, n_near0=None, sample=None, **pasn_kw):
     """Build one prefix-routed neuron for target ``name`` on ``domain``.
 
     Dispatches on ``cfg.backend``; the router bounds are passed through identically
@@ -422,12 +444,16 @@ def _routed_primitive(name, domain, e_min, e_max, cfg: ConvertConfig,
             spike_budget=cfg.pasn_s_spike_budget, sample=sample,
             device=fit_device, verbose=cfg.verbose_fits,
         )
+    kw = dict(readout_order=cfg.pasn_readout_order)
+    kw.update(pasn_kw)
     return build_mbe_pasn(
         name, domain, e_min=e_min, e_max=e_max,
         n_local=cfg.pasn_n_local,
         n_near0=n_near0 or cfg.pasn_n_local,
         n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
-        device=fit_device, verbose=cfg.verbose_fits,
+        budget=cfg.pasn_budget, target_mse=cfg.pasn_target_mse,
+        near0=cfg.pasn_near0,
+        device=fit_device, verbose=cfg.verbose_fits, **kw,
     )
 
 
@@ -485,8 +511,13 @@ def _routed_identity(hi, cfg: ConvertConfig, fit_device, sample=None):
     id_e_min = (cfg.pasn_e_min if cfg.pasn_id_e_min is None
                 else cfg.pasn_id_e_min)
     e_min, e_max = _erange(0.0, hi, id_e_min)
-    return _routed_primitive("identity", (0.0, hi), e_min, e_max, cfg,
-                             fit_device, sample=sample)
+    return _routed_primitive(
+        "identity", (0.0, hi), e_min, e_max, cfg, fit_device, sample=sample,
+        # Homogeneous target + a product downstream: tie the banks and budget on
+        # *relative* error. Order 1 -- the multiply factorises a spike sum only.
+        tied=cfg.pasn_id_tied, target="relative",
+        target_rel=cfg.pasn_id_target_rel, readout_order=1,
+    )
 
 
 def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):

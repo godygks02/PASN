@@ -71,12 +71,11 @@ def neuron_params(neuron) -> int:
     PASN stores only per-bank readout coefficients (the SAR thresholds are fixed
     constants); MBE / signed-MBE / MBE-PASN store learned spike-dynamics + readout.
     """
-    from .mbe_pasn import MBEPASNNeuron
     from .pasn import PASNNeuron
     if isinstance(neuron, PASNNeuron):
         return int(neuron.W.numel())
-    if isinstance(neuron, MBEPASNNeuron):
-        return int(sum(b.num_learnable() for b in neuron.bank_mods))
-    # MBE, signed-MBE and MBE-PASN-S all report their own learnable count
-    # (MBE-PASN-S: 5N shared shape parameters + R(N+1) routed readout).
+    # MBE, signed-MBE, MBE-PASN and MBE-PASN-S all report their own learnable
+    # count. For MBE-PASN that count is **de-duplicated**: unreachable banks share
+    # a fitted neighbour and tied banks all reference one prototype, so summing
+    # per-bank counts would charge the same basis set many times over.
     return int(neuron.num_learnable())

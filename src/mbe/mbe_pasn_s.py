@@ -69,6 +69,12 @@ class MBEPASNSNeuron(nn.Module):
             "bank_scale",
             torch.tensor([b["x_scale"] for b in router.banks], dtype=W.dtype),
         )
+        # Which banks are fed the signed x rather than |x| (see PrefixRouter).
+        self.register_buffer(
+            "bank_raw",
+            torch.tensor([bool(b.get("raw", b["kind"] == "near0"))
+                          for b in router.banks]),
+        )
 
     # -- routing -----------------------------------------------------------
     def _route(self, flat: torch.Tensor):
@@ -79,7 +85,7 @@ class MBEPASNSNeuron(nn.Module):
         ``MBENeuron._normalise``, left unclamped for the same reason.
         """
         idx = self.router.route(flat)
-        val = torch.where(idx == 0, flat, flat.abs())
+        val = torch.where(self.bank_raw[idx], flat, flat.abs())
         rho = (val - self.bank_min[idx]) / self.bank_scale[idx]
         return idx, rho
 

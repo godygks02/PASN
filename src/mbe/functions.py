@@ -36,6 +36,14 @@ def silu(x: torch.Tensor) -> torch.Tensor:
     return x * torch.sigmoid(x)
 
 
+def sigmoid(x: torch.Tensor) -> torch.Tensor:
+    return torch.sigmoid(x)
+
+
+def relu(x: torch.Tensor) -> torch.Tensor:
+    return torch.relu(x)
+
+
 def reciprocal(x: torch.Tensor) -> torch.Tensor:
     return 1.0 / x
 
@@ -58,6 +66,8 @@ REGISTRY = {
     "gelu_tanh": (gelu_tanh, (-120.0, 10.0)),
     "tanh": (tanh, (-5.0, 5.0)),
     "silu": (silu, (-8.0, 12.0)),
+    "sigmoid": (sigmoid, (-8.0, 8.0)),
+    "relu": (relu, (-8.0, 8.0)),
     "inv": (reciprocal, (0.5, 1.0)),
     "invsqrt": (inv_sqrt, (0.5, 2.0)),
     "exp2": (exp2, (0.0, 1.0)),
