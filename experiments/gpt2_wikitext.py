@@ -86,9 +86,16 @@ def perplexity_sliding(model, ids, device, max_length, stride,
 
     Each token is scored once with up to ``max_length`` tokens of left context;
     only the last ``stride`` tokens of each window contribute (the rest are
-    context, masked with -100). Non-overlapping blocks over-estimate perplexity,
-    which is why our earlier block eval gave 38 where the paper reports ~22.3 for
-    GPT-2-medium.
+    context, masked with -100).
+
+    ``stride == max_length`` (the default) is the non-overlapping recipe the
+    published GPT-2 numbers use, and it is what reproduces them: 21.71 for
+    gpt2-medium against Table 3's 22.76. Overlap is *not* a correction to apply on
+    top -- shortening the stride hands every token more left context and lowers the
+    number without bound (512 -> 18.46, 256 -> 18.08), so it measures an easier
+    quantity than the tables do. What over-estimated our earlier 38 was the ``block``
+    evaluator at ``block=512``, which caps context at 512 *and* scores the first
+    tokens of every block with almost none.
     """
     model.eval()
     n = ids.numel()
@@ -287,8 +294,12 @@ def main():
                          "block = fast non-overlapping (over-estimates ppl)")
     ap.add_argument("--max-length", type=int, default=0,
                     help="sliding-window context length (0 = model n_positions)")
-    ap.add_argument("--stride", type=int, default=512,
-                    help="sliding-window stride (tokens scored per window)")
+    ap.add_argument("--stride", type=int, default=1024,
+                    help="sliding-window stride (tokens scored per window). 1024 = "
+                         "non-overlapping, the published recipe: gpt2-medium 21.71 and "
+                         "gpt2 29.94 vs Table 3's 22.76 / 29.41. stride 512 was the old "
+                         "default and reads 18.46, 17%% low -- more left context per "
+                         "token is an easier quantity, not the paper's")
     ap.add_argument("--json", default=None, metavar="PATH",
                     help="append this run to a JSON array (results/gpt2_p04.json "
                          "is the P0.4 deliverable). Sequential runs only")

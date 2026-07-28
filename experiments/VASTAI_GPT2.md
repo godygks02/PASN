@@ -25,7 +25,25 @@ So the target is: **conversion loss ≤ +0.35 % at T = 16**, on the same model s
   recipe every published GPT-2 WikiText number uses. Our old figure of 34.52 was
   measured with blank lines dropped **and** on `gpt2`, so it is not comparable to
   anything — discard it.
-* **Sliding-window perplexity** (default), ctx = 1024, stride = 512.
+* **Sliding-window perplexity** (default), ctx = 1024, **stride = 1024** (non-overlapping
+  windows). Measured 2026-07-28, full WikiText-2 test, blank lines kept:
+
+  | stride | `gpt2-medium` | `gpt2` | published |
+  |---|---|---|---|
+  | **1024** | **21.71** | **29.94** | 22.34 (MBE), 22.76 / 29.41 (GPT-2 paper Tab. 3) |
+  | 512 | 18.46 | — | — |
+  | 256 | 18.08 | — | — |
+
+  stride = 512 was the previous default and it is **17 % low** — it is not the published
+  recipe. A smaller stride gives every token more left context, so it measures a
+  genuinely easier quantity; HF's perplexity tutorial uses 512 precisely to *demonstrate*
+  that effect, which is where the wrong claim came from. The published GPT-2 numbers are
+  non-overlapping. Both model sizes landing on Table 3 at stride 1024 — and `gpt2` hitting
+  29.41 to within 1.8 % — is what confirms the text join and tokenisation are right; the
+  residual few percent is the GPT-2 paper's invertible detokenisers, which we do not apply.
+
+  Non-overlapping also halves the window count (561 → 281), which matters because the SNN
+  eval, not the ANN, is the expensive side.
 
 ## What is actually converted (Stage 1)
 
