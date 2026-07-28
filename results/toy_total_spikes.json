@@ -1,0 +1,86 @@
+[
+ {
+  "label": "mbe (전역, 기준선)",
+  "err": 0.020391758531332016,
+  "total": 1409.587890625,
+  "by_kind": {
+   "layernorm": 568.65234375,
+   "matmul": 303.724609375,
+   "softmax": 302.05078125,
+   "activation": 235.16015625
+  },
+  "params": 1401,
+  "id_params": 912,
+  "build_s": 45.02201200000127
+ },
+ {
+  "label": "mbe_pasn (구: 실험1 이전)",
+  "err": 0.005601685959845781,
+  "total": 741.64453125,
+  "by_kind": {
+   "layernorm": 324.005859375,
+   "matmul": 193.00390625,
+   "softmax": 116.56640625,
+   "activation": 108.068359375
+  },
+  "params": 2767,
+  "id_params": 2197,
+  "build_s": 265.1906028999947
+ },
+ {
+  "label": "mbe_pasn (신, 항등원 r=1e-01)",
+  "err": 0.06638568639755249,
+  "total": 104.0859375,
+  "by_kind": {
+   "layernorm": 32.0078125,
+   "matmul": 18.1796875,
+   "softmax": 31.37109375,
+   "activation": 22.52734375
+  },
+  "params": 794,
+  "id_params": 400,
+  "build_s": 61.23074629998882
+ },
+ {
+  "label": "mbe_pasn (신, 항등원 r=3e-02)",
+  "err": 0.01867377571761608,
+  "total": 151.5078125,
+  "by_kind": {
+   "layernorm": 58.1484375,
+   "matmul": 31.7265625,
+   "softmax": 39.03515625,
+   "activation": 22.59765625
+  },
+  "params": 794,
+  "id_params": 400,
+  "build_s": 77.90782290001516
+ },
+ {
+  "label": "mbe_pasn (신, 항등원 r=1e-02)",
+  "err": 0.006523625925183296,
+  "total": 512.30859375,
+  "by_kind": {
+   "layernorm": 259.708984375,
+   "matmul": 138.16015625,
+   "softmax": 91.890625,
+   "activation": 22.548828125
+  },
+  "params": 794,
+  "id_params": 400,
+  "build_s": 69.39800889999606
+ },
+ {
+  "label": "mbe_pasn (신, 항등원 r=3e-03)",
+  "err": 0.0033280898351222277,
+  "total": 606.009765625,
+  "by_kind": {
+   "layernorm": 309.63671875,
+   "matmul": 163.6328125,
+   "softmax": 110.208984375,
+   "activation": 22.53125
+  },
+  "params": 914,
+  "id_params": 520,
+  "build_s": 63.09706279999227
+ }
+]
