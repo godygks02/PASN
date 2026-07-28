@@ -598,6 +598,25 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
     """
     if budget not in ("fixed", "rule"):
         raise ValueError(f"budget must be 'fixed' or 'rule', got {budget!r}")
+    if tied and budget == "rule" and target == "absolute":
+        # Not a coding gap -- the two are incompatible. Tying fits one prototype on
+        # the *unit* residual and hands every magnitude bank that same prototype
+        # scaled by the routed key, so the relative error is flat across banks by
+        # construction. An absolute budget means "every bank held to the same MSE",
+        # which for a scale-sigma bank is a relative target proportional to 1/sigma
+        # -- a different (N, T) per bank, which one shared prototype cannot express.
+        #
+        # This used to be silent: the tied branch read target_rel unconditionally, so
+        # target="absolute" fell through to a relative budget and built a bit-identical
+        # neuron. P0.4's headline arms (pasn-both-abs vs pasn-both-rel-1e-2) came back
+        # equal to the last digit because of it. Compare the two targets at
+        # tied=False, where the budget really is per-bank.
+        raise ValueError(
+            "tied=True cannot honour target='absolute': the tied prototype is fitted "
+            "once on the unit residual, so its error budget is relative by "
+            "construction. Use tied=False to budget per bank on an absolute MSE, or "
+            "target='relative' to keep the tying."
+        )
     fn, _ = functions.REGISTRY[name]
     router = PrefixRouter(domain[0], domain[1], e_min=e_min, e_max=e_max,
                           near0=near0, beta=beta, gamma_log2=gamma_log2)

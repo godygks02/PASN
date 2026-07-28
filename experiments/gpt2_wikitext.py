@@ -259,6 +259,12 @@ def main():
                     default=_DEF.pasn_id_target_rel,
                     help="operating point r for --pasn-id-target=relative (ignored "
                          "when absolute -- sweeping it there gives identical configs)")
+    ap.add_argument("--pasn-id-tied", action=argparse.BooleanOptionalAction,
+                    default=_DEF.pasn_id_tied,
+                    help="tie the identity's magnitude banks to one prototype (exp 4). "
+                         "Required off to compare --pasn-id-target: a tied prototype is "
+                         "fitted on the unit residual, so its budget is relative by "
+                         "construction and 'absolute' is not expressible")
     ap.add_argument("--pasn-id-e-min", type=int, default=_DEF.pasn_id_e_min,
                     help="router depth for the identity primitives only; their "
                          "operands span many decades. -6 on the toy, unverified on "
@@ -362,6 +368,7 @@ def main():
         tag=args.tag, backend=args.backend, scope=args.convert_ops,
         model=which, smoke=args.smoke, device=device,
         id_target=rt(args.pasn_id_target), r=rel,
+        pasn_id_tied=rt(args.pasn_id_tied),
         pasn_e_min=rt(args.pasn_e_min), pasn_id_e_min=rt(args.pasn_id_e_min),
         pasn_readout_order=rt(args.pasn_readout_order),
         pasn_n_local=rt(args.pasn_n_local),
@@ -390,6 +397,7 @@ def main():
                                pasn_id_e_min=args.pasn_id_e_min,
                                pasn_id_target=args.pasn_id_target,
                                pasn_id_target_rel=args.pasn_id_target_rel,
+                               pasn_id_tied=args.pasn_id_tied,
                                pasn_readout_order=args.pasn_readout_order,
                                mbe_readout_order=args.mbe_readout_order,
                                mbe_id_logsample=args.mbe_id_logsample,
