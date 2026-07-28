@@ -36,3 +36,6 @@ wandb/
 Thumbs.db
 .vscode/
 .idea/
+
+# Obsidian vault: 연구 노트는 Obsidian 쪽에서 관리 (git 밖)
+PASN_vault/
