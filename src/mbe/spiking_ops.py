@@ -253,6 +253,16 @@ def build_activation(name: str, sample_x: torch.Tensor, n_basis: int = 4,
     activations whose range crosses zero -- required for GELU/SiLU, where a single
     global neuron cannot represent the near-zero bend. Pass ``signed=False`` to
     force the (failing) plain neuron for an ablation.
+
+    .. warning::
+       ``readout_order`` is **ignored on the signed path**, which is the path GELU and
+       SiLU take. :class:`~mbe.signed.SignedMBENeuron` has no order-2 readout and
+       :func:`~mbe.functions.make_signed` does not take the argument, so orders 1 and 2
+       build a bit-identical neuron (verified 2026-07-28: fingerprint 19.523948072, 85
+       parameters either way, against 37 -> 43 on the unsigned path). It is honoured
+       only when ``signed=False``. Any "matched-readout-order" comparison against a
+       routed backend is therefore **not matched on the activation** -- see
+       ``experiments/P0.4_GPT2_HANDOFF.md`` §4.2.
     """
     lo = float(sample_x.min())
     hi = float(sample_x.max())
@@ -277,7 +287,13 @@ def _fit_signed_activation(name, lo, hi, n_basis, n_steps, epochs, seed, device,
 
     Each side gets ``n_basis`` bases, curvature-placed for its restriction of the
     activation; a single joint readout combines both banks (see
-    :class:`SignedMBENeuron`)."""
+    :class:`SignedMBENeuron`).
+
+    ``readout_order`` is accepted and **discarded** -- the joint readout is order-1 and
+    ``make_signed`` has no parameter to raise it. Kept for signature parity with the
+    unsigned path. Giving the signed neuron a real order-2 readout is a change to
+    :mod:`mbe.signed`, not a wiring fix; until then a caller cannot match a routed
+    backend's decoder order here, and P0.4's ``mbe-*-matched`` rows do not."""
     device = torch.device(device)
     sm = functions.make_signed(name, n_pos=n_basis, n_neg=n_basis, pivot=0.0,
                                n_steps=n_steps, domain=(lo, hi)).to(device)

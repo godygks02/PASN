@@ -279,7 +279,10 @@ def main():
     # advantages: readout order 2 and a log-uniform identity calibration draw.
     ap.add_argument("--mbe-readout-order", type=int,
                     default=_DEF.mbe_readout_order,
-                    help="global-MBE decoder order; set 2 to match mbe_pasn")
+                    help="global-MBE decoder order. WARNING: reaches LayerNorm only. "
+                         "GELU takes the polarity-split SignedMBENeuron, which has no "
+                         "order-2 readout, so the activation stays order-1 however this "
+                         "is set -- a matched baseline is matched only on LayerNorm")
     ap.add_argument("--mbe-id-logsample", action="store_true",
                     default=_DEF.mbe_id_logsample,
                     help="draw the global identity's calibration log-uniformly, the "
