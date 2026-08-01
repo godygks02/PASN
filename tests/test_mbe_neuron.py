@@ -705,6 +705,61 @@ def test_phase4_spike_path_matches_exact_wiring():
     assert ((ys - y).abs().mean() / denom) < 0.2
 
 
+def test_spiking_softmax_survives_a_causal_mask():
+    """A masked score must underflow to zero, not to NaN (Stage 2 blocker).
+
+    A causal mask adds ``finfo.min``; ``x_m * log2(e)`` overflows to ``-inf`` and
+    ``-inf - floor(-inf)`` is NaN, which poisons every head. Verified against
+    ``torch.softmax``, which handles the mask natively.
+    """
+    torch.manual_seed(0)
+    scores = torch.randn(2, 3, 6, 6)
+    mask = torch.full((6, 6), torch.finfo(torch.float32).min).triu(1)
+    x = scores + mask
+
+    sm = spiking_ops.build_softmax(x, dim=-1, n_basis=4, n_steps=16, epochs=30, seed=0)
+    y, ref = sm(x), torch.softmax(x, dim=-1)
+
+    assert torch.isfinite(y).all(), "masked softmax produced NaN/inf"
+    # masked positions are exactly zero, as torch.softmax gives them
+    assert float(y[..., mask < 0].abs().max()) == 0.0
+    assert torch.allclose(y.sum(-1), torch.ones_like(y.sum(-1)), atol=5e-2)
+    assert float((y - ref).abs().mean() / ref.abs().mean()) < 0.1
+
+
+def test_stage2_attention_markers_are_numerically_inert():
+    """Marking attention must not change the ANN by even one bit.
+
+    The markers *are* ``@`` and ``torch.softmax`` until conversion runs, so any
+    difference means the wiring is wrong rather than the fit. This caught a real
+    one: registering the attention function without also registering a mask
+    builder for the same name makes HF hand back ``attention_mask=None`` -- the
+    model silently attends to future tokens, with no error raised anywhere.
+    """
+    try:
+        import transformers
+    except ImportError:                                   # pragma: no cover
+        print("  (skipped: transformers not installed)")
+        return
+    from mbe.gpt2_convert import make_attention_spikable
+
+    cfg = transformers.GPT2Config(n_layer=2, n_head=2, n_embd=32, n_positions=64,
+                                  vocab_size=64)
+    model = transformers.GPT2LMHeadModel(cfg).eval()
+    model.config._attn_implementation = "eager"
+    ids = torch.randint(0, 64, (1, 16))
+
+    with torch.no_grad():
+        before = model(ids).logits
+    assert make_attention_spikable(model) == 2
+    with torch.no_grad():
+        after = model(ids).logits
+
+    assert torch.equal(before, after), (
+        f"markers shifted the ANN by {float((after - before).abs().max()):.3g} "
+        "-- check that the mask builder is registered too")
+
+
 def test_storage_bytes_charges_a_shared_prototype_once():
     """Bytes must de-duplicate the way ``num_learnable`` already does (P0.5).
 

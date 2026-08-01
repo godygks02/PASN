@@ -26,7 +26,8 @@ import torch  # noqa: E402
 import torch.nn.functional as F  # noqa: E402
 
 from mbe import convert as cv  # noqa: E402
-from mbe.gpt2_convert import make_spikable, convert_gpt2  # noqa: E402
+from mbe.gpt2_convert import (make_spikable, make_attention_spikable,  # noqa: E402
+                              convert_gpt2)
 from mbe.metrics import neuron_params, storage_breakdown  # noqa: E402
 
 
@@ -235,9 +236,14 @@ def main():
     )
     ap.add_argument("--progress-every", type=int, default=10)
     ap.add_argument(
-        "--convert-ops", choices=["both", "activation", "layernorm"],
+        "--convert-ops",
+        choices=["all", "both", "activation", "layernorm", "attention"],
         default="both",
-        help="conversion scope; activation isolates the PASN-vs-MBE contribution",
+        help="conversion scope. 'all' = Stage 2, the whole network including "
+             "attention -- the ONLY scope comparable to the paper's Table 3. "
+             "'both' = Stage 1 (GELU + LayerNorm, attention left exact FP), kept "
+             "as the default so the recorded P0.4 rows keep their meaning. The "
+             "single-op scopes isolate one contribution",
     )
     ap.add_argument(
         "--fit-device", choices=["auto", "cpu", "cuda"], default="auto",
@@ -387,6 +393,10 @@ def main():
 
     rec = dict(
         tag=args.tag, backend=args.backend, scope=args.convert_ops,
+        # 1 = GELU + LayerNorm only (attention exact FP); 2 = whole network.
+        # Only stage 2 may be placed next to the paper's Table 3.
+        stage=(None if not converting
+               else 2 if args.convert_ops in ("all", "attention") else 1),
         model=which, smoke=args.smoke, device=device,
         id_target=rt(args.pasn_id_target), r=rel,
         pasn_id_tied=rt(args.pasn_id_tied),
@@ -432,9 +442,21 @@ def main():
                                fit_device=None if args.fit_device == "auto"
                                else args.fit_device,
                                verbose_fits=True)
-        only = {
-            "activation" if args.convert_ops == "activation" else "layernorm"
-        } if args.convert_ops != "both" else None
+        # Scope -> primitive kinds. "both" stays Stage 1 (GELU + LayerNorm) so the
+        # recorded P0.4 rows keep their meaning; "all" is Stage 2, the whole
+        # network, and is the only scope comparable to the paper's Table 3.
+        _SCOPE_KINDS = {
+            "all": None,                                  # every kind
+            "both": {"activation", "layernorm"},
+            "activation": {"activation"},
+            "layernorm": {"layernorm"},
+            "attention": {"matmul", "softmax"},
+        }
+        only = _SCOPE_KINDS[args.convert_ops]
+        if args.convert_ops in ("all", "attention"):
+            n_attn = make_attention_spikable(model)
+            print(f"marked {n_attn} attention blocks "
+                  f"(QK^T / softmax / attn*V); Stage 2")
         t0 = time.perf_counter()
         convert_gpt2(model, calib, cfg=cfg, only=only, verbose=True)
         rec["build_s"] = time.perf_counter() - t0

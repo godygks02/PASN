@@ -311,6 +311,24 @@ def _fit_signed_activation(name, lo, hi, n_basis, n_steps, epochs, seed, device,
 _LOG2E = 1.4426950408889634         # log2(e)
 
 
+#: Mantissa bits per float dtype, for locating the smallest subnormal.
+_MANTISSA_BITS = {torch.float32: 23, torch.float64: 52,
+                  torch.float16: 10, torch.bfloat16: 7}
+
+
+def _exp_underflow_floor(dtype) -> float:
+    """Largest ``x`` for which ``exp(x)`` is exactly ``0`` in ``dtype``.
+
+    Below the smallest subnormal (``smallest_normal * 2**-mantissa_bits``) there
+    is no representable nonzero value left, so clamping a softmax shift here
+    changes nothing about the result -- it only keeps the intermediate
+    ``x * log2(e)`` inside the exponent range. fp32: about -103.97.
+    """
+    fi = torch.finfo(dtype)
+    mant = _MANTISSA_BITS.get(dtype, 23)
+    return math.log(fi.smallest_normal) - (mant + 1) * math.log(2.0)
+
+
 class SpikingSoftmax(torch.nn.Module):
     """Softmax decomposed into exp / sum / reciprocal / FP-multiply.
 
@@ -332,8 +350,17 @@ class SpikingSoftmax(torch.nn.Module):
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor, dim: int = -1) -> torch.Tensor:
-        # numerical-stability shift (does not change softmax); makes x_m <= 0
-        x_m = x - x.max(dim=dim, keepdim=True).values
+        # numerical-stability shift (does not change softmax); makes x_m <= 0,
+        # floored where exp() underflows to exactly zero anyway.
+        #
+        # The floor is what makes a *masked* attention score survive. A causal
+        # mask adds ``finfo.min`` (-3.4e38 in fp32) to the score; ``x_m * log2(e)``
+        # then overflows to ``-inf``, and ``-inf - floor(-inf)`` is **NaN**, which
+        # propagates through the whole head. Clamping is exact rather than a
+        # tolerance: below this point the entry contributes 0 to the sum and 0 to
+        # the output, which is what softmax gives it regardless.
+        x_m = (x - x.max(dim=dim, keepdim=True).values).clamp_min(
+            _exp_underflow_floor(x.dtype))
         z = x_m * _LOG2E
         z_floor = torch.floor(z)
         frac = z - z_floor                          # in [0, 1)
