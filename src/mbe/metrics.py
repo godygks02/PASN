@@ -79,3 +79,87 @@ def neuron_params(neuron) -> int:
     # a fitted neighbour and tied banks all reference one prototype, so summing
     # per-bank counts would charge the same basis set many times over.
     return int(neuron.num_learnable())
+
+
+def _tensors(module) -> "list[torch.Tensor]":
+    """Every tensor a module stores -- parameters *and* buffers.
+
+    ``state_dict()`` rather than ``parameters()``: ``learn_tau=False`` moves the
+    taus into buffers, which are still stored (trap 7).
+    """
+    return [t for t in module.state_dict().values() if torch.is_tensor(t)]
+
+
+@torch.no_grad()
+def storage_bytes(modules) -> int:
+    """Real stored footprint of one module or an iterable of them, in bytes.
+
+    **De-duplicated by storage, not by state-dict key.** ``TiedBank`` holds a
+    *reference* to one prototype and :func:`~.mbe_pasn.fill_unreachable` points
+    unreachable banks at a fitted neighbour, so a routed neuron's ``state_dict()``
+    lists the same tensor once per bank that shares it. Summing those values
+    charges the sharing as if it were copies -- which is precisely the saving the
+    sharing exists to produce, counted backwards. A global MBE shares nothing, so
+    the same sum is exact for the baseline and inflated for the routed side only:
+    the comparison, not the measurement, is what breaks.
+
+    ``neuron_params`` already de-duplicates (it goes through ``parameters()``),
+    which is why the two axes disagreed on GPT-2 -- 8792 params vs 9249 for a
+    *larger* byte count. Same object, two de-duplication rules.
+
+    Sharing survives serialisation: ``torch.save`` records storages once, so the
+    de-duplicated number is what a checkpoint and a weight-loading accelerator
+    both actually pay.
+    """
+    if isinstance(modules, torch.nn.Module):
+        modules = [modules]
+    seen: dict[int, int] = {}
+    for m in modules:
+        for t in _tensors(m):
+            s = t.untyped_storage()
+            seen[s.data_ptr()] = s.nbytes()
+    return int(sum(seen.values()))
+
+
+@torch.no_grad()
+def storage_breakdown(modules) -> dict:
+    """:func:`storage_bytes` split by what the tensor is for, plus the naive sum.
+
+    Roles follow the neuron's own names: ``alpha`` (per-basis gains), ``tau`` (the
+    three time constants and ``dt`` -- buffers when ``learn_tau=False``),
+    ``readout`` (``w``, ``N*readout_order`` of them), ``bias``, and ``other``.
+    ``bytes_naive`` is the un-de-duplicated sum the P0.4 tables reported, kept so
+    those rows stay interpretable; ``shared_factor`` is how much of it was the
+    same tensor counted twice.
+    """
+    if isinstance(modules, torch.nn.Module):
+        modules = [modules]
+
+    def role(key: str) -> str:
+        leaf = key.rsplit(".", 1)[-1]
+        if "alpha" in leaf:
+            return "alpha"
+        if leaf.startswith("log_tau") or leaf == "log_dt":
+            return "tau"
+        if leaf == "w":
+            return "readout"
+        if leaf == "bias":
+            return "bias"
+        return "other"
+
+    by_role: dict[str, int] = {}
+    naive = 0
+    seen: set[int] = set()
+    for m in modules:
+        for key, t in m.state_dict().items():
+            if not torch.is_tensor(t):
+                continue
+            naive += t.numel() * t.element_size()
+            s = t.untyped_storage()
+            if s.data_ptr() in seen:
+                continue
+            seen.add(s.data_ptr())
+            by_role[role(key)] = by_role.get(role(key), 0) + s.nbytes()
+    total = int(sum(by_role.values()))
+    return dict(bytes=total, bytes_naive=int(naive),
+                shared_factor=naive / max(total, 1), by_role=by_role)

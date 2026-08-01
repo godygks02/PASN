@@ -705,6 +705,35 @@ def test_phase4_spike_path_matches_exact_wiring():
     assert ((ys - y).abs().mean() / denom) < 0.2
 
 
+def test_storage_bytes_charges_a_shared_prototype_once():
+    """Bytes must de-duplicate the way ``num_learnable`` already does (P0.5).
+
+    Tied banks reference one prototype, so a state-dict sum charges it once per
+    bank -- and only the routed side has any sharing to over-charge, which is how
+    GPT-2 came back with *fewer* params but 2x the bytes. Pins both directions:
+    tying has to shrink real bytes, and it has to shrink them by less than the
+    naive sum claims.
+    """
+    from mbe.metrics import storage_bytes, storage_breakdown
+
+    kw = dict(domain=(0.0, 8.0), e_min=-4, budget="rule", target="relative",
+              target_rel=1e-2, readout_order=1, epochs=8, seed=0)
+    tied = build_mbe_pasn("identity", tied=True, **kw)
+    untied = build_mbe_pasn("identity", tied=False, **kw)
+
+    br = storage_breakdown(tied)
+    assert br["bytes"] == storage_bytes(tied)
+    # the prototype is shared, so the naive sum charges it once per bank
+    assert br["shared_factor"] > 1.5, br
+    # ... and an unshared build must be unaffected, or the fix would be moving
+    # both sides and proving nothing
+    assert storage_breakdown(untied)["shared_factor"] == 1.0
+    # the saving survives de-duplication -- it was never an artefact of it
+    assert storage_bytes(tied) < storage_bytes(untied)
+    # de-duplicating across a list must not re-charge a neuron shared by two sites
+    assert storage_bytes([tied, tied]) == storage_bytes(tied)
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

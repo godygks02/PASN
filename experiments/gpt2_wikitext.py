@@ -27,7 +27,7 @@ import torch.nn.functional as F  # noqa: E402
 
 from mbe import convert as cv  # noqa: E402
 from mbe.gpt2_convert import make_spikable, convert_gpt2  # noqa: E402
-from mbe.metrics import neuron_params  # noqa: E402
+from mbe.metrics import neuron_params, storage_breakdown  # noqa: E402
 
 
 WIKITEXT_DATASET_ID = "Salesforce/wikitext"
@@ -151,19 +151,25 @@ def storage_report(model) -> dict:
 
     ``params`` is ``neuron_params`` summed over the *unique* spiking primitives --
     the same quantity the toy waterfall tables report, so a GPT-2 row is directly
-    comparable to them. ``bytes`` is the real state-dict footprint (parameters
-    **and** buffers): ``learn_tau=False`` moves the taus into buffers, which makes
-    the learnable count fall without anything actually being freed, so any memory
+    comparable to them. ``bytes`` is the real stored footprint (parameters **and**
+    buffers): ``learn_tau=False`` moves the taus into buffers, which makes the
+    learnable count fall without anything actually being freed, so any memory
     claim has to be made on this number instead.
+
+    Both axes de-duplicate by object -- see :func:`~mbe.metrics.storage_bytes`.
+    The de-duplication is taken over the whole primitive list at once, not per
+    neuron: ``share_fits=True`` lets 24 layers reuse one fitted primitive, and the
+    model stores that once. ``bytes_naive`` is the pre-P0.5 sum, which charged
+    every shared tensor once per bank referencing it and so inflated the routed
+    backend alone; it is kept only to keep the P0.4 rows readable.
     """
     prims = cv._spiking_primitives(model)
-    nbytes = 0
-    for _, _, neuron in prims:
-        nbytes += sum(t.numel() * t.element_size()
-                      for t in neuron.state_dict().values()
-                      if torch.is_tensor(t))
-    return dict(params=sum(neuron_params(n) for _, _, n in prims),
-                bytes=int(nbytes), primitives=len(prims))
+    neurons = [n for _, _, n in prims]
+    br = storage_breakdown(neurons)
+    return dict(params=sum(neuron_params(n) for n in neurons),
+                bytes=br["bytes"], bytes_naive=br["bytes_naive"],
+                shared_factor=br["shared_factor"], by_role=br["by_role"],
+                primitives=len(prims))
 
 
 def write_record(path: str, rec: dict):
@@ -212,6 +218,11 @@ def main():
     # ANN 22.34 ppl on WikiText-2, their conversion 22.69 (+0.35%). Compare there.
     ap.add_argument("--model", default="gpt2-medium")
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--build-only", action="store_true",
+                    help="build + report storage and spikes, skip both perplexity "
+                         "evals. P0.5 re-measures bytes on rows whose ppl is "
+                         "already known; the eval is the expensive half and the "
+                         "conversion is deterministic, so it need not be repeated")
     ap.add_argument("--drop-blank-lines", action="store_true",
                     help="pre-fix behaviour: drop blank lines before joining the "
                          "WikiText split (changes the token stream and inflates ppl)")
@@ -343,12 +354,19 @@ def main():
                                   limit_windows=args.limit_blocks,
                                   progress_every=args.progress_every, label=label)
 
-    t0 = time.perf_counter()
-    ppl_ann = eval_ppl("ANN")
-    eval_ann_s = time.perf_counter() - t0
     which = "smoke: tiny random GPT-2" if args.smoke else args.model
-    print(f"ANN ({which}) perplexity = {ppl_ann:.4f}  "
-          f"[eval={args.eval_mode}, ctx={max_length}, stride={args.stride}]")
+    if args.build_only:
+        # Storage and spike counts come off the built model; only perplexity needs
+        # the sweep over windows. P0.5 re-measures bytes for rows whose ppl is
+        # already recorded, and paying 1-2 h of eval to reprint it would be waste.
+        ppl_ann, eval_ann_s = None, None
+        print(f"[build-only] skipping perplexity for {which}")
+    else:
+        t0 = time.perf_counter()
+        ppl_ann = eval_ppl("ANN")
+        eval_ann_s = time.perf_counter() - t0
+        print(f"ANN ({which}) perplexity = {ppl_ann:.4f}  "
+              f"[eval={args.eval_mode}, ctx={max_length}, stride={args.stride}]")
 
     # Record only the knobs that reach this backend. ``_build_one`` branches on
     # ``backend in _ROUTED_BACKENDS``, so the pasn_* family is dead for a global mbe
@@ -433,23 +451,30 @@ def main():
         print(cv.format_spiking_cost_report(spikes, label=args.backend), flush=True)
         store = storage_report(model)
         print(f"[store {args.backend}] params={store['params']}  "
-              f"bytes={store['bytes']}  primitives={store['primitives']}",
+              f"bytes={store['bytes']}  primitives={store['primitives']}  "
+              f"(naive={store['bytes_naive']}, "
+              f"shared {store['shared_factor']:.2f}x)  "
+              f"roles={ {k: v for k, v in sorted(store['by_role'].items())} }",
               flush=True)
         rec.update(spikes_per_token=spikes["spikes_per_input"],
                    total_spikes=spikes["total_spikes"],
                    by_kind=spikes["by_kind"],
                    stored_params=store["params"], stored_bytes=store["bytes"],
+                   stored_bytes_naive=store["bytes_naive"],
+                   stored_shared_factor=store["shared_factor"],
+                   stored_by_role=store["by_role"],
                    n_primitives=store["primitives"], n_activations=len(costs),
                    act_spikes_per_input=(sum(c["spikes"] for c in costs.values())
                                          / len(costs) if costs else None))
 
-        t0 = time.perf_counter()
-        ppl_snn = eval_ppl(f"SNN-{args.backend}")
-        rec["eval_snn_s"] = time.perf_counter() - t0
-        drop = 100.0 * (ppl_snn - ppl_ann) / ppl_ann
-        rec.update(ppl_snn=ppl_snn, delta_pct=drop)
-        print(f"SNN ({args.backend}) perplexity = {ppl_snn:.4f}   "
-              f"(delta {drop:+.2f}%)")
+        if not args.build_only:
+            t0 = time.perf_counter()
+            ppl_snn = eval_ppl(f"SNN-{args.backend}")
+            rec["eval_snn_s"] = time.perf_counter() - t0
+            drop = 100.0 * (ppl_snn - ppl_ann) / ppl_ann
+            rec.update(ppl_snn=ppl_snn, delta_pct=drop)
+            print(f"SNN ({args.backend}) perplexity = {ppl_snn:.4f}   "
+                  f"(delta {drop:+.2f}%)")
 
     if args.json:
         write_record(args.json, rec)
