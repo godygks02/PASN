@@ -814,7 +814,7 @@ def _install_cost_probe(name, neuron, tally, busy, saved):
     and two *sequential* calls still count twice because the depth returns to 0
     in between.
     """
-    from .metrics import neuron_cost
+    from .metrics import neuron_cost, neuron_op_cost
 
     entry = tally[name]
     state = {"depth": 0}
@@ -829,8 +829,14 @@ def _install_cost_probe(name, neuron, tally, busy, saved):
                         and not busy["flag"]):
                     busy["flag"] = True
                     try:
-                        entry["spikes"] += (neuron_cost(neuron, x)["spikes"]
-                                            * x.numel())
+                        spikes = neuron_cost(neuron, x)["spikes"]
+                        entry["spikes"] += spikes * x.numel()
+                        # Non-spike work on the same measured invocation: the
+                        # per-timestep threshold compare, the order-2 squaring and
+                        # the router are invisible to a spike count (open issue 5).
+                        ops = entry.setdefault("ops", {})
+                        for cls, v in neuron_op_cost(neuron, x, spikes).items():
+                            ops[cls] = ops.get(cls, 0.0) + v * x.numel()
                         entry["elements"] += x.numel()
                         entry["calls"] += 1
                     finally:
@@ -868,21 +874,33 @@ def spiking_cost_report(model: nn.Module, batch) -> dict:
     reconstructs four operand halves, a LayerNorm squares and then normalises, a
     softmax reduces over one axis -- multipliers that are easy to get wrong by hand.
 
+    Alongside the spikes it tallies the work a spike count cannot see (open issue
+    5) -- ``by_op`` / ``ops_per_input`` split into threshold compares, gated
+    accumulates, readout MACs, decoder powers and router arithmetic (see
+    :func:`~.metrics.neuron_op_cost`), and ``energy_pj_per_input`` prices them.
+    The compares dominate: they scale as ``N*T`` and are paid whether or not the
+    neuron fires, so the energy ratio between two backends is *not* their spike
+    ratio. On the toy it is the larger of the two (3.99x spikes, 4.72x energy) --
+    routing cuts ``N*T`` harder than it cuts spikes, so the always-on half of the
+    cost falls faster than the firing half. Do not assume the direction; the two
+    ratios move independently and both have to be reported.
+
     Returns ``primitives`` (per neuron: kind, spikes, elements, calls,
-    spikes/element), ``by_kind`` (spikes summed per op kind), ``total_spikes``, and
+    spikes/element, ops), ``by_kind`` (spikes summed per op kind), ``total_spikes``, and
     ``spikes_per_input`` = total spikes divided by the number of elements in the
     model's own input tensor -- spikes per token for a language model, spikes per
     input activation for the toy Transformer. That last figure is the one comparable
     across backends; a per-activation figure is not a total.
     """
-    from .metrics import neuron_cost
+    from .metrics import neuron_cost, op_energy_pj
 
     prims = _spiking_primitives(model)
     if not prims:
         return dict(primitives={}, by_kind={}, total_spikes=0.0,
-                    spikes_per_input=0.0, input_elements=0)
+                    spikes_per_input=0.0, input_elements=0, by_op={},
+                    ops_per_input={}, energy_pj_per_input=0.0)
 
-    tally = {name: dict(kind=kind, spikes=0.0, elements=0, calls=0)
+    tally = {name: dict(kind=kind, spikes=0.0, elements=0, calls=0, ops={})
              for name, kind, _ in prims}
     busy = {"flag": False}
     saved = []
@@ -908,12 +926,18 @@ def spiking_cost_report(model: nn.Module, batch) -> dict:
         _remove_cost_probes(saved)
 
     by_kind: dict[str, float] = {}
+    by_op: dict[str, float] = {}
     for name, e in tally.items():
         e["spikes_per_element"] = e["spikes"] / max(e["elements"], 1)
         by_kind[e["kind"]] = by_kind.get(e["kind"], 0.0) + e["spikes"]
+        for cls, v in e["ops"].items():
+            by_op[cls] = by_op.get(cls, 0.0) + v
     total = sum(by_kind.values())
     return dict(primitives=tally, by_kind=by_kind, total_spikes=total,
-                spikes_per_input=total / max(n_in, 1), input_elements=n_in)
+                spikes_per_input=total / max(n_in, 1), input_elements=n_in,
+                by_op=by_op,
+                ops_per_input={k: v / max(n_in, 1) for k, v in by_op.items()},
+                energy_pj_per_input=op_energy_pj(by_op) / max(n_in, 1))
 
 
 def format_spiking_cost_report(rep: dict, label: str = "") -> str:
@@ -929,6 +953,15 @@ def format_spiking_cost_report(rep: dict, label: str = "") -> str:
         n = sum(1 for e in rep["primitives"].values() if e["kind"] == kind)
         lines.append(f"    {kind:10s} {s / total * 100:5.1f}%  "
                      f"{s:.3e} spikes over {n} primitive(s)")
+    if rep.get("ops_per_input"):
+        # The spike count is not the energy (open issue 5): threshold compares run
+        # every timestep, the order-2 decoder squares, and the router routes.
+        ops = " ".join(f"{k}={v:.1f}"
+                       for k, v in sorted(rep["ops_per_input"].items(),
+                                          key=lambda kv: -kv[1]))
+        lines.append(f"    [ops/input] {ops}")
+        lines.append(f"    [energy]    {rep['energy_pj_per_input']:.1f} pJ per "
+                     f"input element (45 nm model, mbe.metrics.OP_ENERGY_PJ)")
     return "\n".join(lines)
 
 

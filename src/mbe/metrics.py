@@ -81,6 +81,112 @@ def neuron_params(neuron) -> int:
     return int(neuron.num_learnable())
 
 
+#: Energy per 32-bit operation at 45 nm, picojoules -- the Horowitz (ISSCC 2014)
+#: figures the SNN-conversion literature quotes. ``ac`` is an FP add (the
+#: accumulate a spike triggers), ``mac`` a multiply-accumulate, ``cmp`` a compare
+#: (priced as an add: it is a subtract plus a sign test). **This is a model, not a
+#: measurement of our own** -- swap it for whatever the target hardware and the
+#: paper being compared against actually use, which is why every consumer takes it
+#: as an argument.
+OP_ENERGY_PJ = dict(ac=0.9, mac=4.6, cmp=0.9, bitop=0.0)
+
+
+@torch.no_grad()
+def neuron_op_cost(neuron, x: torch.Tensor, spikes: float | None = None) -> dict:
+    """Per-input-element event counts, split by what the hardware would run.
+
+    Spikes are not the whole energy story (open issue 5): the membrane compare
+    happens every timestep whether or not the neuron fires, the order-2 decoder
+    squares its features, and a routed neuron pays a router per element. Counting
+    only spikes charges none of those. The classes are
+
+    * ``cmp``     -- threshold comparisons, ``active_bases * T`` per element. Always
+      paid, spike or no spike, and normally the **largest** class.
+    * ``ac``      -- accumulates gated by a spike: each one decrements ``u`` and adds
+      into ``o``, so ``2 * spikes``.
+    * ``mac``     -- readout multiply-accumulates, ``active_bases * readout_order``.
+    * ``poly``    -- the ``o^k`` powers an order>1 decoder needs (exp 6's "free"
+      accuracy gain is free in *spikes*, not in multiplies).
+    * ``router``  -- routing arithmetic: the key affine, the near-zero and sign
+      compares, the clamp, and the per-bank input affine. The binade itself is an
+      IEEE-754 exponent-field read, which is a bit select and is charged to
+      ``bitop`` (zero by default) -- that is the claim the router rests on, now
+      counted rather than asserted.
+
+    Routed neurons are weighted **per element by the bank it lands in**: the budget
+    rule gives each bank its own ``(N_j, T_j)``, so a single ``T`` is wrong for
+    them (``neuron_cost`` reports bank 0's, which is fine for its purposes because
+    its spike figure comes from ``mean_spikes``).
+    """
+    from .signed import SignedMBENeuron
+    from .mbe_pasn import MBEPASNNeuron
+    from .mbe_pasn_s import MBEPASNSNeuron
+    from .pasn import PASNNeuron
+
+    if spikes is None:
+        spikes = neuron_cost(neuron, x)["spikes"]
+    zero = dict(cmp=0.0, ac=2.0 * spikes, mac=0.0, poly=0.0, router=0.0,
+                bitop=0.0)
+
+    if isinstance(neuron, MBEPASNNeuron):
+        flat = x.reshape(-1)
+        idx = neuron.router.route(flat)
+        dev = idx.device
+        Nv = torch.tensor([b.cfg.n_basis for b in neuron.bank_mods],
+                          device=dev, dtype=torch.float32)
+        Tv = torch.tensor([b.cfg.n_steps for b in neuron.bank_mods],
+                          device=dev, dtype=torch.float32)
+        Ov = torch.tensor([b.cfg.readout_order for b in neuron.bank_mods],
+                          device=dev, dtype=torch.float32)
+        if not flat.numel():
+            return zero
+        n, t, o = Nv[idx], Tv[idx], Ov[idx]
+        zero.update(cmp=float((n * t).mean()),
+                    mac=float((n * o).mean()),
+                    poly=float((n * (o - 1)).mean()),
+                    # key affine (sub) + near0/sign/2x clamp compares + bank affine
+                    # (sub + mul); the binade read is the bitop below
+                    router=6.0, bitop=1.0)
+        return zero
+
+    if isinstance(neuron, MBEPASNSNeuron):
+        cfg = neuron.core.cfg
+        zero.update(cmp=float(cfg.n_basis * cfg.n_steps),
+                    mac=float(cfg.n_basis * cfg.readout_order),
+                    poly=float(cfg.n_basis * (cfg.readout_order - 1)),
+                    router=6.0, bitop=1.0)
+        return zero
+
+    if isinstance(neuron, SignedMBENeuron):
+        # both polarity banks run for every input
+        Np, Nn = neuron.pos.cfg.n_basis, neuron.neg.cfg.n_basis
+        T = neuron.pos.cfg.n_steps
+        zero.update(cmp=float((Np + Nn) * T), mac=float(Np + Nn),
+                    poly=0.0, router=1.0)   # the relu split is one compare
+        return zero
+
+    if isinstance(neuron, PASNNeuron):
+        c = neuron.cost(x)
+        zero.update(cmp=float(c["active"] * c["steps"]),
+                    mac=float(c["active"]), poly=0.0)
+        return zero
+
+    cfg = neuron.cfg                                   # plain MBE
+    zero.update(cmp=float(cfg.n_basis * cfg.n_steps),
+                mac=float(cfg.n_basis * cfg.readout_order),
+                poly=float(cfg.n_basis * (cfg.readout_order - 1)))
+    return zero
+
+
+def op_energy_pj(ops: dict, table: dict | None = None) -> float:
+    """Energy for one :func:`neuron_op_cost` dict under a per-op price list."""
+    e = dict(OP_ENERGY_PJ if table is None else table)
+    return (ops.get("ac", 0.0) * e["ac"]
+            + (ops.get("mac", 0.0) + ops.get("poly", 0.0)) * e["mac"]
+            + (ops.get("cmp", 0.0) + ops.get("router", 0.0)) * e["cmp"]
+            + ops.get("bitop", 0.0) * e["bitop"])
+
+
 def _tensors(module) -> "list[torch.Tensor]":
     """Every tensor a module stores -- parameters *and* buffers.
 
