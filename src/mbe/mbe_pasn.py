@@ -545,10 +545,18 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
                    beta: float = 0.0, gamma_log2: int = 0,
                    readout_order: int = 1, learn_tau: bool = True,
                    tau_range: tuple | None = None, rule_ac: tuple | None = None,
-                   spike_lambda: float = 0.0,
+                   spike_lambda: float = 0.0, t_fixed: int | None = None,
                    alpha_init: str = "auto", verbose: bool = False,
                    device: torch.device | str = "cpu") -> MBEPASNNeuron:
     """Build + fit an MBE-PASN neuron for target ``name`` on ``domain``.
+
+    ``t_fixed`` overrides every bank's ``T`` *after* the budget rule has run,
+    leaving the rule's ``N_j`` alone. This is the knob for a **timestep-matched
+    comparison**: the MBE paper reports a single global ``T=16``, while the rule
+    normally gives most banks far fewer steps, so a bare accuracy comparison is
+    open to "you used fewer timesteps". Setting ``t_fixed=16`` removes that
+    objection at a higher spike cost -- it cannot help accuracy less than the
+    rule's choice, since every bank gets at least as many steps as it asked for.
 
     ``budget`` selects how each bank's ``(N, T)`` is chosen:
 
@@ -650,12 +658,15 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
                                 (target_rel * float(h.pow(2).mean().sqrt())) ** 2,
                                 n_max=min(n_max, 4), a=ra, c=rc)
                     if budget == "rule" else (n_local, n_steps))
+        if t_fixed is not None:
+            T_t = t_fixed
         banks, _ = _build_tied(fn, router, domain, reach, N_t, T_t, epochs, seed,
                                device, alpha_init, tied_tol, 512, verbose)
         for bi in reach:                      # near-zero banks are not homogeneous
             if banks[bi] is None:
                 tgt, flo, fhi = bank_target(bi)
-                banks[bi], _ = _fit_bank(tgt, flo, fhi, n_near0, n_steps,
+                banks[bi], _ = _fit_bank(tgt, flo, fhi, n_near0,
+                                         t_fixed or n_steps,
                                          epochs, seed, device,
                                          alpha_init=alpha_init,
                                          readout_order=readout_order,
@@ -690,6 +701,8 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
             ra, rc = rule_ac or bit_law(readout_order, learn_tau)
             cap, steps = rule_budget(float(y.max() - y.min()), eps,
                                      n_max=min(n_max, 4), a=ra, c=rc)
+        if t_fixed is not None:
+            steps = t_fixed
         if adaptive:
             bank, mse = _fit_bank_adaptive(tgt, flo, fhi, target_mse,
                                            n_max, steps, epochs, seed, device)

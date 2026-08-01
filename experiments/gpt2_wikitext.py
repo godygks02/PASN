@@ -304,6 +304,13 @@ def main():
                     default=_DEF.mbe_id_logsample,
                     help="draw the global identity's calibration log-uniformly, the "
                          "fairest global analogue of the routed relative budget")
+    ap.add_argument("--pasn-t-fixed", type=int, default=None,
+                    help="force every bank to this many timesteps, overriding the "
+                         "budget rule's per-bank T_j but keeping its N_j. Use 16 "
+                         "for the timestep-matched arm: the paper reports a single "
+                         "global T=16, so an unmatched accuracy comparison invites "
+                         "'you used fewer timesteps'. Costs spikes, cannot cost "
+                         "accuracy")
     ap.add_argument("--pasn-T", type=int, default=6,
                     help="pasn: SAR bits per bank (spike budget)")
     ap.add_argument("--pasn-order", type=int, default=2,
@@ -402,6 +409,7 @@ def main():
         pasn_id_tied=rt(args.pasn_id_tied),
         pasn_e_min=rt(args.pasn_e_min), pasn_id_e_min=rt(args.pasn_id_e_min),
         pasn_readout_order=rt(args.pasn_readout_order),
+        pasn_t_fixed=rt(args.pasn_t_fixed),
         pasn_n_local=rt(args.pasn_n_local),
         mbe_readout_order=gl(args.mbe_readout_order),
         mbe_id_logsample=gl(args.mbe_id_logsample),
@@ -430,6 +438,7 @@ def main():
                                pasn_id_target_rel=args.pasn_id_target_rel,
                                pasn_id_tied=args.pasn_id_tied,
                                pasn_readout_order=args.pasn_readout_order,
+                               pasn_t_fixed=args.pasn_t_fixed,
                                mbe_readout_order=args.mbe_readout_order,
                                mbe_id_logsample=args.mbe_id_logsample,
                                pasn_T=args.pasn_T,
