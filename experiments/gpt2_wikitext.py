@@ -490,6 +490,10 @@ def main():
         rec.update(spikes_per_token=spikes["spikes_per_input"],
                    total_spikes=spikes["total_spikes"],
                    by_kind=spikes["by_kind"],
+                   # P0.5: spikes are not the energy. Keep the op split and the
+                   # priced total, or every energy number needs a second run.
+                   ops_per_input=spikes.get("ops_per_input"),
+                   energy_pj_per_input=spikes.get("energy_pj_per_input"),
                    stored_params=store["params"], stored_bytes=store["bytes"],
                    stored_bytes_naive=store["bytes_naive"],
                    stored_shared_factor=store["shared_factor"],
