@@ -118,6 +118,22 @@ def main() -> None:
             print(f"   {tags}  ->  ppl={fp[0]}, spikes={fp[1]}, "
                   f"params={fp[2]}, bytes={fp[3]}")
 
+    # -- pre-P0.5 rows carry the un-de-duplicated byte count -----------------
+    # ``stored_bytes_naive`` only exists on records written after the storage fix.
+    # Its absence is the marker that a row's ``bytes`` is the old sum, which
+    # charged a shared prototype once per bank and so inflated the routed
+    # backend alone. Those numbers are not comparable to the corrected ones.
+    stale = [r.get("tag") for r in recs
+             if r.get("stored_bytes") is not None
+             and "stored_bytes_naive" not in r]
+    if stale:
+        print("\n!! PRE-P0.5 BYTES -- these rows' `bytes` double-count tensors "
+              "shared between banks, which inflates mbe_pasn and leaves mbe "
+              "untouched. Do not compare them:")
+        print(f"   {stale}")
+        print("   corrected values: results/p05_bytes.json "
+              "(re-measure with --build-only)")
+
     incomplete = [r.get("tag") for r in recs if r.get("ppl_snn") is None
                   and r.get("backend") != "none"]
     if incomplete:
