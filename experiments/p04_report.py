@@ -26,9 +26,38 @@ from collections import defaultdict
 DEFAULT_JSON = os.path.join(os.path.dirname(__file__), "..", "results",
                             "gpt2_p04.json")
 
+#: The MBE paper's published NLG numbers (Table 3), the external baseline.
+#:
+#: **Unit trap.** The table prints ``22.69 (+0.35)`` and the prose calls it "0.35%
+#: conversion loss", but 0.35 is the *absolute* perplexity difference. Relative,
+#: 22.69/22.34 is **+1.57%** -- 4.5x the quoted figure. Our delta_pct is relative,
+#: so it must be compared against the relative column, never against "0.35%".
+PAPER_TABLE3 = {
+    "WikiText-2": dict(ann=22.34, snn=22.69, T=16),
+    "WikiText-103": dict(ann=22.65, snn=23.41, T=16),
+}
+
+
+def paper_rel_pct(name: str) -> float:
+    p = PAPER_TABLE3[name]
+    return 100.0 * (p["snn"] - p["ann"]) / p["ann"]
+
 
 def _fmt(v, spec: str, dash: str = "--") -> str:
     return dash if v is None else format(v, spec)
+
+
+def _stage(r: dict) -> int | None:
+    """Conversion stage, inferred for records written before the field existed.
+
+    Those all predate the attention wiring, so a converting row without a
+    ``stage`` is necessarily Stage 1. Inferring rather than returning ``None``
+    keeps the Table-3 guard airtight: an unlabelled row must never read as
+    "maybe Stage 2".
+    """
+    if r.get("stage") is not None:
+        return r["stage"]
+    return 1 if r.get("backend") not in (None, "none") else None
 
 
 def _fingerprint(r: dict) -> tuple:
@@ -54,16 +83,57 @@ def table(rows: list, title: str) -> None:
     if not rows:
         return
     print(f"\n## {title}")
-    print(f"{'tag':<28} {'scope':<10} {'ppl':>11} {'d%':>10} "
+    print(f"{'tag':<28} {'scope':<10} {'st':>2} {'ppl':>11} {'d%':>10} "
           f"{'spikes/tok':>11} {'params':>7} {'bytes':>7}  knobs")
-    print("-" * 118)
+    print("-" * 122)
     for r in rows:
         print(f"{r.get('tag', '?'):<28} {str(r.get('scope', '?')):<10} "
+              f"{_fmt(_stage(r), '2d', ' ?')} "
               f"{_fmt(r.get('ppl_snn'), '11.3f')} "
               f"{_fmt(r.get('delta_pct'), '+10.2f')} "
               f"{_fmt(r.get('spikes_per_token'), '11.4g')} "
               f"{_fmt(r.get('stored_params'), '7d')} "
               f"{_fmt(r.get('stored_bytes'), '7d')}  {_knobs(r)}")
+
+
+def _paper_section(recs: list) -> None:
+    """Place only Stage-2 rows next to the paper's published Table 3.
+
+    Stage 1 leaves attention exact, so its delta-perplexity comes from converting
+    roughly half the network's nonlinear work while the paper converted all of
+    it. Relative perplexity fixes the *different ANN* problem (ours 21.71, theirs
+    22.34, a detokenisation difference); it does **not** fix the different-scope
+    problem. So the comparison is gated on the stage, not left to the reader.
+    """
+    ref = paper_rel_pct("WikiText-2")
+    print(f"\n## vs the paper's Table 3 (WikiText-2)")
+    print(f"published: ANN {PAPER_TABLE3['WikiText-2']['ann']} -> SNN "
+          f"{PAPER_TABLE3['WikiText-2']['snn']} at T=16  =  "
+          f"**{ref:+.2f}% relative**")
+    print('  (the paper writes "(+0.35)" / "0.35% conversion loss"; 0.35 is the '
+          "absolute ppl difference, not a percentage)")
+
+    stage2 = [r for r in recs if _stage(r) == 2
+              and r.get("delta_pct") is not None]
+    if not stage2:
+        print("\n  no Stage-2 rows yet -- nothing here is comparable to Table 3.")
+        n1 = sum(1 for r in recs if _stage(r) == 1)
+        if n1:
+            print(f"  ({n1} Stage-1 row(s) present: attention still exact FP, so "
+                  "they convert less than the paper does and must not be quoted "
+                  "against it. Use --convert-ops all.)")
+        return
+
+    print(f"\n{'tag':<28} {'ours (rel)':>12} {'paper (rel)':>12} {'margin':>10}")
+    print("-" * 66)
+    for r in sorted(stage2, key=lambda r: r.get("delta_pct")):
+        d = r["delta_pct"]
+        print(f"{r.get('tag', '?'):<28} {d:+11.2f}% {ref:+11.2f}% "
+              f"{ref - d:+9.2f}pp")
+    print("\n  Both columns are each method's own ANN baseline, so the differing "
+          "absolute perplexities do not enter.")
+    print("  Still not matched on T: the paper uses a global T=16, our banks use "
+          "per-bank T_j from the budget rule. State it.")
 
 
 def main() -> None:
@@ -133,6 +203,8 @@ def main() -> None:
         print(f"   {stale}")
         print("   corrected values: results/p05_bytes.json "
               "(re-measure with --build-only)")
+
+    _paper_section(recs)
 
     incomplete = [r.get("tag") for r in recs if r.get("ppl_snn") is None
                   and r.get("backend") != "none"]
