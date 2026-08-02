@@ -21,8 +21,9 @@ theirs.
 
 Attention is included (Stage 2) -- the same operator set the paper converts.
 
-    python experiments/roberta_sst2.py --smoke                  # CPU wiring check
-    python experiments/roberta_sst2.py --model textattack/roberta-base-SST-2
+    python experiments/roberta_sst2.py --smoke                   # CPU wiring check
+    python experiments/roberta_sst2.py --task sst2 --size base
+    python experiments/roberta_sst2.py --task mr --size base --pasn-t-fixed 16
 """
 from __future__ import annotations
 
@@ -42,8 +43,34 @@ from mbe.metrics import neuron_params, storage_breakdown  # noqa: E402
 
 _DEF = cv.ConvertConfig()
 
-#: Table 2, SST-2 column. ``(ANN, theirs, T)`` -- accuracy in percent.
-PAPER_SST2 = {"base": (94.49, 93.46, 16), "large": (96.22, 95.98, 16)}
+#: Paper Table 2, ``task -> {size: (ANN, theirs)}`` in percent, all at T=16.
+PAPER_TABLE2 = {
+    "sst2": {"base": (94.49, 93.46), "large": (96.22, 95.98)},
+    "sst5": {"base": (55.46, 55.11), "large": (59.37, 58.31)},
+    "mr":   {"base": (89.39, 89.00), "large": (91.36, 90.96)},
+    "subj": {"base": (96.45, 96.30), "large": (97.50, 97.45)},
+}
+
+#: ``task -> (dataset id, config, split, text field)``. The paper cites
+#: "standard experimental settings" without publishing them, so these are the
+#: usual public choices; record them with every number.
+TASKS = {
+    "sst2": ("glue", "sst2", "validation", "sentence"),
+    "sst5": ("SetFit/sst5", None, "test", "text"),
+    "mr":   ("rotten_tomatoes", None, "test", "text"),
+    "subj": ("SetFit/subj", None, "test", "text"),
+}
+
+#: Public fine-tunes we could actually find. **Third-party, mixed provenance** --
+#: each is a different recipe from the paper's and from each other, so only the
+#: relative loss against *its own* ANN means anything.
+DEFAULT_CKPT = {
+    ("sst2", "base"): "textattack/roberta-base-SST-2",
+    ("sst2", "large"): "philschmid/roberta-large-sst2",
+    ("mr", "base"): "textattack/roberta-base-rotten_tomatoes",
+    ("sst5", "large"): "Unso/roberta-large-finetuned-sst5",
+    ("subj", "large"): "ghatgetanuj/roberta-large_cls_subj",
+}
 
 
 @torch.no_grad()
@@ -65,15 +92,17 @@ def accuracy(model, batches, device, label="eval", progress_every=10) -> float:
     return 100.0 * right / max(total, 1)
 
 
-def load_sst2(tok, split="validation", batch_size=16, max_length=128, limit=None):
+def load_task(task, tok, batch_size=16, max_length=128, limit=None):
     from datasets import load_dataset
-    ds = load_dataset("glue", "sst2", split=split)
+    name, config, split, field = TASKS[task]
+    ds = (load_dataset(name, config, split=split) if config
+          else load_dataset(name, split=split))
     if limit:
         ds = ds.select(range(min(limit, len(ds))))
     out = []
     for i in range(0, len(ds), batch_size):
         chunk = ds[i:i + batch_size]
-        enc = tok(chunk["sentence"], padding=True, truncation=True,
+        enc = tok(chunk[field], padding=True, truncation=True,
                   max_length=max_length, return_tensors="pt")
         enc["labels"] = torch.tensor(chunk["label"])
         out.append(enc)
@@ -82,7 +111,11 @@ def load_sst2(tok, split="validation", batch_size=16, max_length=128, limit=None
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--model", default="textattack/roberta-base-SST-2")
+    ap.add_argument("--task", choices=sorted(TASKS), default="sst2")
+    ap.add_argument("--size", choices=["base", "large"], default="base")
+    ap.add_argument("--model", default=None,
+                    help="checkpoint; defaults to the known public fine-tune "
+                         "for --task/--size")
     ap.add_argument("--backend", default="mbe_pasn",
                     choices=["none", "mbe_pasn", "mbe", "pasn", "mbe_pasn_s"])
     ap.add_argument("--convert-ops",
@@ -108,6 +141,12 @@ def main() -> None:
     ap.add_argument("--tag", default="run")
     a = ap.parse_args()
 
+    if a.model is None:
+        a.model = DEFAULT_CKPT.get((a.task, a.size))
+        if a.model is None and not a.smoke:
+            raise SystemExit(
+                f"no default checkpoint known for {a.task}/{a.size}; pass --model. "
+                f"Known: {sorted(DEFAULT_CKPT)}")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if a.smoke:
         from transformers import RobertaConfig, RobertaForSequenceClassification
@@ -124,13 +163,14 @@ def main() -> None:
         tok = AutoTokenizer.from_pretrained(a.model)
         model = AutoModelForSequenceClassification.from_pretrained(
             a.model, attn_implementation="eager").eval()
-        batches = load_sst2(tok, "validation", a.batch_size, a.max_length, a.limit)
+        batches = load_task(a.task, tok, a.batch_size, a.max_length, a.limit)
     model.config._attn_implementation = "eager"
     model.to(device)
     calib = [{k: v for k, v in b.items() if k != "labels"}
              for b in batches[:a.calib_batches]]
 
-    rec = dict(tag=a.tag, backend=a.backend, scope=a.convert_ops, model=a.model,
+    rec = dict(tag=a.tag, task=a.task, size=a.size, dataset=TASKS[a.task],
+               backend=a.backend, scope=a.convert_ops, model=a.model,
                device=device, smoke=a.smoke, epochs=a.epochs,
                stage=(None if a.backend == "none"
                       else 2 if a.convert_ops in ("all", "attention") else 1),
@@ -182,12 +222,12 @@ def main() -> None:
                        delta_pct=100.0 * drop_pp / acc_ann)
             print(f"SNN ({a.backend}) accuracy = {acc_snn:.2f}   "
                   f"({drop_pp:+.2f} pp, {rec['delta_pct']:+.2f}% relative)")
-            size = "large" if "large" in a.model else "base"
-            p_ann, p_snn, p_T = PAPER_SST2[size]
-            print(f"  paper (RoBERTa-{size}): {p_ann} -> {p_snn} at T={p_T}  "
-                  f"= {100.0 * (p_snn - p_ann) / p_ann:+.2f}% relative")
-            print("  compare the RELATIVE columns only -- our ANN is a different "
-                  "fine-tune of the same architecture")
+            p_ann, p_snn = PAPER_TABLE2[a.task][a.size]
+            rec["paper_rel_pct"] = 100.0 * (p_snn - p_ann) / p_ann
+            print(f"  paper (RoBERTa-{a.size}, {a.task}): {p_ann} -> {p_snn} "
+                  f"at T=16 = {rec['paper_rel_pct']:+.2f}% relative")
+            print("  compare the RELATIVE columns only -- our ANN is a different, "
+                  "third-party fine-tune of the same architecture")
 
     if a.json:
         prev = []

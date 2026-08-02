@@ -1,0 +1,89 @@
+[
+ {
+  "tag": "mr-base-ann",
+  "task": "mr",
+  "size": "base",
+  "dataset": [
+   "rotten_tomatoes",
+   null,
+   "test",
+   "text"
+  ],
+  "backend": "none",
+  "scope": "all",
+  "model": "textattack/roberta-base-rotten_tomatoes",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": null,
+  "n_eval": 1066,
+  "started": "2026-08-02T19:55:30",
+  "acc_ann": 89.02439024390245
+ },
+ {
+  "tag": "mr-base-t16",
+  "task": "mr",
+  "size": "base",
+  "dataset": [
+   "rotten_tomatoes",
+   null,
+   "test",
+   "text"
+  ],
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "model": "textattack/roberta-base-rotten_tomatoes",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": 2,
+  "n_eval": 1066,
+  "started": "2026-08-02T19:56:45",
+  "acc_ann": 89.02439024390245,
+  "build_s": 467.29633329994977,
+  "spikes_per_input": 586516.2427325582,
+  "by_kind": {
+   "layernorm": 140726616.0,
+   "matmul": 106739975.0,
+   "softmax": 44234707.0,
+   "activation": 111821877.0
+  },
+  "ops_per_input": {
+   "cmp": 5403862.448036194,
+   "ac": 1173032.4854651163,
+   "mac": 383353.8680911064,
+   "poly": 45612.4650888443,
+   "router": 1394646.0,
+   "bitop": 232441.0
+  },
+  "energy_pj_per_input": 9147631.972778952,
+  "stored_params": 5744,
+  "stored_bytes": 22976,
+  "n_primitives": 171,
+  "acc_snn": 88.36772983114446,
+  "delta_pp": -0.6566604127579865,
+  "delta_pct": -0.7376185458377382,
+  "paper_rel_pct": -0.43629041279785274
+ },
+ {
+  "tag": "sst2-large-ann",
+  "task": "sst2",
+  "size": "large",
+  "dataset": [
+   "glue",
+   "sst2",
+   "validation",
+   "sentence"
+  ],
+  "backend": "none",
+  "scope": "all",
+  "model": "philschmid/roberta-large-sst2",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": null,
+  "n_eval": 872,
+  "started": "2026-08-02T20:50:52",
+  "acc_ann": 96.44495412844037
+ }
+]
