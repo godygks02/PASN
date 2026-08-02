@@ -546,9 +546,16 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
                    readout_order: int = 1, learn_tau: bool = True,
                    tau_range: tuple | None = None, rule_ac: tuple | None = None,
                    spike_lambda: float = 0.0, t_fixed: int | None = None,
+                   n_fixed: int | None = None,
                    alpha_init: str = "auto", verbose: bool = False,
                    device: torch.device | str = "cpu") -> MBEPASNNeuron:
     """Build + fit an MBE-PASN neuron for target ``name`` on ``domain``.
+
+    ``n_fixed`` is the same idea on the other axis: it overrides every bank's
+    ``N`` after the rule has run, leaving ``T_j`` alone. Set it to the rule's cap
+    (4) and no bank gets fewer bases than it asked for, so the two arms differ
+    only in what the *allocation* saves -- and unlike ``t_fixed`` this one moves
+    storage as well, since parameters are per-basis.
 
     ``t_fixed`` overrides every bank's ``T`` *after* the budget rule has run,
     leaving the rule's ``N_j`` alone. This is the knob for a **timestep-matched
@@ -660,12 +667,14 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
                     if budget == "rule" else (n_local, n_steps))
         if t_fixed is not None:
             T_t = t_fixed
+        if n_fixed is not None:
+            N_t = n_fixed
         banks, _ = _build_tied(fn, router, domain, reach, N_t, T_t, epochs, seed,
                                device, alpha_init, tied_tol, 512, verbose)
         for bi in reach:                      # near-zero banks are not homogeneous
             if banks[bi] is None:
                 tgt, flo, fhi = bank_target(bi)
-                banks[bi], _ = _fit_bank(tgt, flo, fhi, n_near0,
+                banks[bi], _ = _fit_bank(tgt, flo, fhi, n_fixed or n_near0,
                                          t_fixed or n_steps,
                                          epochs, seed, device,
                                          alpha_init=alpha_init,
@@ -703,6 +712,8 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
                                      n_max=min(n_max, 4), a=ra, c=rc)
         if t_fixed is not None:
             steps = t_fixed
+        if n_fixed is not None:
+            cap = n_fixed
         if adaptive:
             bank, mse = _fit_bank_adaptive(tgt, flo, fhi, target_mse,
                                            n_max, steps, epochs, seed, device)

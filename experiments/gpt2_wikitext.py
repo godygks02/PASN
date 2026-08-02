@@ -311,6 +311,12 @@ def main():
                          "global T=16, so an unmatched accuracy comparison invites "
                          "'you used fewer timesteps'. Costs spikes, cannot cost "
                          "accuracy")
+    ap.add_argument("--pasn-n-fixed", type=int, default=None,
+                    help="force every bank to this many bases, overriding the "
+                         "rule's N_j but keeping its T_j. Use 4 (the rule's cap) "
+                         "for the N-matched ablation: no bank gets fewer bases "
+                         "than it asked for, so the arms differ only in what the "
+                         "allocation saves. Moves storage as well as spikes")
     ap.add_argument("--pasn-T", type=int, default=6,
                     help="pasn: SAR bits per bank (spike budget)")
     ap.add_argument("--pasn-order", type=int, default=2,
@@ -410,6 +416,7 @@ def main():
         pasn_e_min=rt(args.pasn_e_min), pasn_id_e_min=rt(args.pasn_id_e_min),
         pasn_readout_order=rt(args.pasn_readout_order),
         pasn_t_fixed=rt(args.pasn_t_fixed),
+        pasn_n_fixed=rt(args.pasn_n_fixed),
         pasn_n_local=rt(args.pasn_n_local),
         mbe_readout_order=gl(args.mbe_readout_order),
         mbe_id_logsample=gl(args.mbe_id_logsample),
@@ -439,6 +446,7 @@ def main():
                                pasn_id_tied=args.pasn_id_tied,
                                pasn_readout_order=args.pasn_readout_order,
                                pasn_t_fixed=args.pasn_t_fixed,
+                               pasn_n_fixed=args.pasn_n_fixed,
                                mbe_readout_order=args.mbe_readout_order,
                                mbe_id_logsample=args.mbe_id_logsample,
                                pasn_T=args.pasn_T,

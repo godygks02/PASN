@@ -381,6 +381,9 @@ class ConvertConfig:
     # paper's global T=16; None keeps the rule's per-bank T_j (the default, and
     # the whole point of the budget rule).
     pasn_t_fixed: int | None = None
+    # Same, on the basis axis: force every bank to this many bases, keeping
+    # the rule's T_j. Set to the rule's cap (4) for the N-matched ablation.
+    pasn_n_fixed: int | None = None
     # Split the near-zero region by polarity so no bank straddles zero (실험 2).
     # A single near-zero bank has a hard error floor on targets whose bend sits at 0
     # (ReLU 1362x, GELU 61x), and it is the most-visited bank of all.
@@ -524,7 +527,7 @@ def _routed_primitive(name, domain, e_min, e_max, cfg: ConvertConfig,
         n_near0=n_near0 or cfg.pasn_n_local,
         n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
         budget=cfg.pasn_budget, target_mse=cfg.pasn_target_mse,
-        t_fixed=cfg.pasn_t_fixed,
+        t_fixed=cfg.pasn_t_fixed, n_fixed=cfg.pasn_n_fixed,
         device=fit_device, verbose=cfg.verbose_fits, **kw,
     )
 
