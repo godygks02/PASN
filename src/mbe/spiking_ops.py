@@ -371,7 +371,13 @@ class SpikingSoftmax(torch.nn.Module):
         m, e = torch.frexp(S)                       # m in [0.5,1), S = m * 2^e
         inv_m = self.inv(m)                         # ~ 1/m
         inv_S = torch.ldexp(inv_m, -e)              # 1/S = (1/m) * 2^-e
-        inv_S = inv_S.expand_as(exp_x)
+        # Left at one value per row, **not** broadcast to the full matrix. The
+        # multiply reconstructs each operand through the identity, and a
+        # reconstruction is element-wise, so recon(expand(v)) == expand(recon(v)):
+        # broadcasting first would encode the same S values S times over. On a
+        # causal attention matrix that is the difference between S and S*S
+        # invocations of the identity -- 256x measured at S=256, bit-identical
+        # output either way. The product broadcasts on its own.
         if self.spike_mult:
             return spiking_multiply(self.idn, exp_x, inv_S, signed=False)
         return exp_x * inv_S

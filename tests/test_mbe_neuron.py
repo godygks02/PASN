@@ -705,6 +705,43 @@ def test_phase4_spike_path_matches_exact_wiring():
     assert ((ys - y).abs().mean() / denom) < 0.2
 
 
+def test_softmax_does_not_re_encode_the_row_reciprocal():
+    """``1/S`` is one value per row; encoding it once per *element* is S x the work.
+
+    Reconstruction is element-wise, so ``recon(expand(v)) == expand(recon(v))`` --
+    broadcasting before the identity runs costs ``S*S`` invocations where ``S``
+    carry the same information, and removing it changes no output bit. Measured on
+    GPT-2: 2.25x fewer softmax spikes, 1.32x on the whole model.
+    """
+    from mbe import convert as cv
+
+    torch.manual_seed(0)
+    S = 24
+    x = torch.randn(2, S, S)
+    sm = spiking_ops.build_softmax(x, dim=-1, n_basis=4, n_steps=8, epochs=40,
+                                   seed=0)
+
+    tally = {"idn": dict(kind="matmul", spikes=0.0, elements=0, calls=0)}
+    saved = []
+    cv._install_cost_probe("idn", sm.idn, tally, {"flag": False}, saved)
+    try:
+        out = sm(x, dim=-1)
+    finally:
+        cv._remove_cost_probes(saved)
+
+    n_scores = x.numel()                 # exp(x): every element, unavoidable
+    n_rows = x.numel() // S              # 1/S: one per row
+    elems = tally["idn"]["elements"]
+    assert elems >= n_scores, "the exp operand must still be encoded"
+    assert elems <= n_scores + n_rows + 1, (
+        f"identity ran on {elems} elements; {n_scores} + {n_rows} suffice -- "
+        "1/S is being broadcast before reconstruction again")
+    # ... and it is still a softmax. Accuracy proper is pinned by
+    # test_spiking_softmax_matches_torch; this only guards a broken rewiring.
+    assert torch.isfinite(out).all() and bool((out >= 0).all())
+    assert torch.allclose(out.sum(-1), torch.ones_like(out.sum(-1)), atol=0.15)
+
+
 def test_spiking_softmax_survives_a_causal_mask():
     """A masked score must underflow to zero, not to NaN (Stage 2 blocker).
 
