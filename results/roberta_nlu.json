@@ -85,5 +85,71 @@
   "n_eval": 872,
   "started": "2026-08-02T20:50:52",
   "acc_ann": 96.44495412844037
+ },
+ {
+  "tag": "sst2-large-t16",
+  "task": "sst2",
+  "size": "large",
+  "dataset": [
+   "glue",
+   "sst2",
+   "validation",
+   "sentence"
+  ],
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "model": "philschmid/roberta-large-sst2",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": 2,
+  "n_eval": 872,
+  "started": "2026-08-02T23:22:49",
+  "acc_ann": 96.44495412844037,
+  "build_s": 1114.76530129998,
+  "spikes_per_input": 1704492.3930555556,
+  "by_kind": {
+   "layernorm": 359395972.0,
+   "matmul": 304718340.0,
+   "softmax": 127587581.0,
+   "activation": 435532630.0
+  },
+  "ops_per_input": {
+   "cmp": 14318655.34161377,
+   "ac": 3408984.7861111113,
+   "mac": 1016646.4994010925,
+   "poly": 121730.54055023193,
+   "router": 3700518.0,
+   "bitop": 616753.0
+  },
+  "energy_pj_per_input": 24521876.698728487,
+  "stored_params": 11960,
+  "stored_bytes": 47840,
+  "n_primitives": 339,
+  "acc_snn": 96.3302752293578,
+  "delta_pp": -0.11467889908257689,
+  "delta_pct": -0.11890606420928304,
+  "paper_rel_pct": -0.24942839326542807
+ },
+ {
+  "tag": "subj-large-ann",
+  "task": "subj",
+  "size": "large",
+  "dataset": [
+   "SetFit/subj",
+   null,
+   "test",
+   "text"
+  ],
+  "backend": "none",
+  "scope": "all",
+  "model": "ghatgetanuj/roberta-large_cls_subj",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": null,
+  "n_eval": 2000,
+  "started": "2026-08-03T01:12:13",
+  "acc_ann": 93.35
  }
 ]

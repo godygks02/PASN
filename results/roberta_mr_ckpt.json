@@ -1,0 +1,182 @@
+[
+ {
+  "tag": "mr-textattack_roberta-base-rotten-tomatoes-ann",
+  "task": "mr",
+  "size": "base",
+  "dataset": [
+   "rotten_tomatoes",
+   null,
+   "test",
+   "text"
+  ],
+  "backend": "none",
+  "scope": "all",
+  "model": "textattack/roberta-base-rotten-tomatoes",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": null,
+  "n_eval": 1066,
+  "started": "2026-08-03T01:37:45",
+  "acc_ann": 88.74296435272045
+ },
+ {
+  "tag": "mr-MarkKisker_roberta-base_Rotten_Tomato_v3-ann",
+  "task": "mr",
+  "size": "base",
+  "dataset": [
+   "rotten_tomatoes",
+   null,
+   "test",
+   "text"
+  ],
+  "backend": "none",
+  "scope": "all",
+  "model": "MarkKisker/roberta-base_Rotten_Tomato_v3",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": null,
+  "n_eval": 1066,
+  "started": "2026-08-03T01:40:26",
+  "acc_ann": 50.0
+ },
+ {
+  "tag": "mr-seed1-t16",
+  "task": "mr",
+  "size": "base",
+  "dataset": [
+   "rotten_tomatoes",
+   null,
+   "test",
+   "text"
+  ],
+  "seed": 1,
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "model": "textattack/roberta-base-rotten_tomatoes",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": 2,
+  "n_eval": 1066,
+  "started": "2026-08-03T01:41:47",
+  "acc_ann": 89.02439024390245,
+  "build_s": 527.181661700015,
+  "spikes_per_input": 586516.2427325582,
+  "by_kind": {
+   "layernorm": 140726616.0,
+   "matmul": 106739975.0,
+   "softmax": 44234707.0,
+   "activation": 111821877.0
+  },
+  "ops_per_input": {
+   "cmp": 5403862.448036194,
+   "ac": 1173032.4854651163,
+   "mac": 383353.8680911064,
+   "poly": 45612.4650888443,
+   "router": 1394646.0,
+   "bitop": 232441.0
+  },
+  "energy_pj_per_input": 9147631.972778952,
+  "stored_params": 5744,
+  "stored_bytes": 22976,
+  "n_primitives": 171,
+  "acc_snn": 88.36772983114446,
+  "delta_pp": -0.6566604127579865,
+  "delta_pct": -0.7376185458377382,
+  "paper_rel_pct": -0.43629041279785274
+ },
+ {
+  "tag": "mr-seed2-t16",
+  "task": "mr",
+  "size": "base",
+  "dataset": [
+   "rotten_tomatoes",
+   null,
+   "test",
+   "text"
+  ],
+  "seed": 2,
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "model": "textattack/roberta-base-rotten_tomatoes",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": 2,
+  "n_eval": 1066,
+  "started": "2026-08-03T02:34:16",
+  "acc_ann": 89.02439024390245,
+  "build_s": 526.0641865000362,
+  "spikes_per_input": 586516.2427325582,
+  "by_kind": {
+   "layernorm": 140726616.0,
+   "matmul": 106739975.0,
+   "softmax": 44234707.0,
+   "activation": 111821877.0
+  },
+  "ops_per_input": {
+   "cmp": 5403862.448036194,
+   "ac": 1173032.4854651163,
+   "mac": 383353.8680911064,
+   "poly": 45612.4650888443,
+   "router": 1394646.0,
+   "bitop": 232441.0
+  },
+  "energy_pj_per_input": 9147631.972778952,
+  "stored_params": 5744,
+  "stored_bytes": 22976,
+  "n_primitives": 171,
+  "acc_snn": 88.36772983114446,
+  "delta_pp": -0.6566604127579865,
+  "delta_pct": -0.7376185458377382,
+  "paper_rel_pct": -0.43629041279785274
+ },
+ {
+  "tag": "mr-hyphen-t16",
+  "task": "mr",
+  "size": "base",
+  "dataset": [
+   "rotten_tomatoes",
+   null,
+   "test",
+   "text"
+  ],
+  "seed": 0,
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "model": "textattack/roberta-base-rotten-tomatoes",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": 2,
+  "n_eval": 1066,
+  "started": "2026-08-03T03:26:36",
+  "acc_ann": 88.74296435272045,
+  "build_s": 525.8874843000667,
+  "spikes_per_input": 582736.3677325582,
+  "by_kind": {
+   "layernorm": 140248083.0,
+   "matmul": 106966370.0,
+   "softmax": 44193145.0,
+   "activation": 109515023.0
+  },
+  "ops_per_input": {
+   "cmp": 5401402.681861877,
+   "ac": 1165472.7354651163,
+   "mac": 383064.15853405,
+   "poly": 45476.49091768265,
+   "router": 1394646.0,
+   "bitop": 232441.0
+  },
+  "energy_pj_per_input": 9136656.263072265,
+  "stored_params": 5744,
+  "stored_bytes": 22976,
+  "n_primitives": 171,
+  "acc_snn": 88.64915572232646,
+  "delta_pp": -0.09380863039399401,
+  "delta_pct": -0.10570824524312644,
+  "paper_rel_pct": -0.43629041279785274
+ }
+]

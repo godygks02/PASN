@@ -137,6 +137,11 @@ def main() -> None:
     ap.add_argument("--pasn-t-fixed", type=int, default=None,
                     help="16 matches the paper's global T")
     ap.add_argument("--pasn-n-fixed", type=int, default=None)
+    ap.add_argument("--seed", type=int, default=_DEF.seed,
+                    help="fitting seed. Vary it to separate a real conversion "
+                         "loss from fit noise -- the build is otherwise "
+                         "deterministic, so a stable delta across seeds is the "
+                         "only evidence that a delta is a property of the method")
     ap.add_argument("--json", default=None)
     ap.add_argument("--tag", default="run")
     a = ap.parse_args()
@@ -169,7 +174,7 @@ def main() -> None:
     calib = [{k: v for k, v in b.items() if k != "labels"}
              for b in batches[:a.calib_batches]]
 
-    rec = dict(tag=a.tag, task=a.task, size=a.size, dataset=TASKS[a.task],
+    rec = dict(tag=a.tag, task=a.task, size=a.size, dataset=TASKS[a.task], seed=a.seed,
                backend=a.backend, scope=a.convert_ops, model=a.model,
                device=device, smoke=a.smoke, epochs=a.epochs,
                stage=(None if a.backend == "none"
@@ -191,6 +196,7 @@ def main() -> None:
             print(f"marked {make_attention_spikable(model)} attention blocks; "
                   f"Stage 2", flush=True)
         cfg = cv.ConvertConfig(epochs=a.epochs, backend=a.backend, spike_mult=True,
+                               seed=a.seed,
                                pasn_id_target=a.pasn_id_target,
                                pasn_id_target_rel=a.pasn_id_target_rel,
                                pasn_t_fixed=a.pasn_t_fixed,
