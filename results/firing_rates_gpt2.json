@@ -1,0 +1,44 @@
+{
+ "model": "gpt2",
+ "t_fixed": 16,
+ "ours_rate": {
+  "layernorm rsqrt": 65.648681640625,
+  "layernorm id_dev": 19.94621982126499,
+  "layernorm id_istd": 19.833744483642942,
+  "matmul qk": 19.916331385519424,
+  "softmax exp": 32.30284843254632,
+  "softmax inv": 57.045343187120224,
+  "softmax idn": 29.291254214359935,
+  "matmul av": 15.398685314706569,
+  "activation": 39.29610320663795
+ },
+ "ours_spikes_per_elem": {
+  "layernorm rsqrt": 10.5037890625,
+  "layernorm id_dev": 4.808321126302084,
+  "layernorm id_istd": 4.76115234375,
+  "matmul qk": 4.796772162119548,
+  "softmax exp": 6.451720549000634,
+  "softmax inv": 18.25450981987847,
+  "softmax idn": 6.958687964412901,
+  "matmul av": 4.848714155309341,
+  "activation": 6.3423177401224775
+ },
+ "paper_rate": {
+  "2^x": 46.94,
+  "LayerNorm_1/x_identity": 38.46,
+  "GELU": 38.22,
+  "LayerNorm_input_identity": 27.61,
+  "1/sqrt(x)": 25.27,
+  "Attention_score": 8.31,
+  "1/x": 3.74
+ },
+ "paper_n": {
+  "2^x": 8,
+  "LayerNorm_1/x_identity": 8,
+  "GELU": 4,
+  "LayerNorm_input_identity": 8,
+  "1/sqrt(x)": 8,
+  "Attention_score": 8,
+  "1/x": 8
+ }
+}
