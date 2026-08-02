@@ -1,0 +1,87 @@
+[
+ {
+  "tag": "ann-full",
+  "backend": "none",
+  "scope": "all",
+  "model": "textattack/roberta-base-SST-2",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": null,
+  "n_eval": 872,
+  "started": "2026-08-02T18:10:53",
+  "acc_ann": 94.03669724770643
+ },
+ {
+  "tag": "pasn-stage2-rel-1e-2",
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "model": "textattack/roberta-base-SST-2",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": 2,
+  "n_eval": 872,
+  "started": "2026-08-02T18:12:32",
+  "acc_ann": 94.03669724770643,
+  "build_s": 913.5878720000619,
+  "spikes_per_input": 471645.6277777778,
+  "by_kind": {
+   "layernorm": 141027196.0,
+   "matmul": 112537840.0,
+   "softmax": 43531570.0,
+   "activation": 42488246.0
+  },
+  "ops_per_input": {
+   "cmp": 4913129.328781128,
+   "ac": 943291.2555555556,
+   "mac": 385166.7992653847,
+   "poly": 45816.1002869606,
+   "router": 1401558.0,
+   "bitop": 233593.0
+  },
+  "energy_pj_per_input": 8514702.063843803,
+  "stored_params": 5744,
+  "stored_bytes": 22976,
+  "n_primitives": 171,
+  "acc_snn": 93.80733944954129,
+  "delta_pp": -0.22935779816513957,
+  "delta_pct": -0.24390243902439232
+ },
+ {
+  "tag": "pasn-stage2-t16",
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "model": "textattack/roberta-base-SST-2",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": 2,
+  "n_eval": 872,
+  "started": "2026-08-02T19:06:57",
+  "acc_ann": 94.03669724770643,
+  "build_s": 474.4296493999427,
+  "spikes_per_input": 579627.8763888889,
+  "by_kind": {
+   "layernorm": 141876889.0,
+   "matmul": 112422542.0,
+   "softmax": 45238290.0,
+   "activation": 117794350.0
+  },
+  "ops_per_input": {
+   "cmp": 5429419.7939453125,
+   "ac": 1159255.7527777778,
+   "mac": 385150.75514793396,
+   "poly": 45812.01802635193,
+   "router": 1401558.0,
+   "bitop": 233593.0
+  },
+  "energy_pj_per_input": 9173638.948652497,
+  "stored_params": 5744,
+  "stored_bytes": 22976,
+  "n_primitives": 171,
+  "acc_snn": 94.15137614678899,
+  "delta_pp": 0.11467889908256268,
+  "delta_pct": 0.1219512195121886
+ }
+]
