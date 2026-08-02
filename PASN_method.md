@@ -319,6 +319,28 @@ one active bank) are all preserved.
    whole binade) take ``N_j=1``; high-curvature near-zero binades take larger
    ``N_j``. Compute is *allocated by range*, not spent uniformly.
 
+   **Measured on GPT-2 (Stage 2), the allocation is carried by ``N_j``, not by
+   ``T_j``.** Forcing every bank to the rule's basis cap costs **3.26x spikes and
+   2.55x storage**; forcing every bank to a global ``T=16`` costs **1.06x spikes
+   and nothing at all in storage**. The rule already picks ``T=16`` wherever the
+   budget actually is — the identities inside matmul and LayerNorm span decades —
+   and only trims ``T`` on the flat activation tails, which are 3% of the network's
+   spikes. So the honest form of this claim is **"per-range *basis* allocation"**;
+   the timestep half is real but secondary. The two axes are complementary rather
+   than redundant: the rule gives matmul/LayerNorm the maximum ``T`` while cutting
+   their ``N``, and does the opposite for activations.
+
+   **The rule presumes a bank the router has already narrowed.** Where the router
+   degenerates — an argument that is *already* a single binade, such as the IEEE
+   mantissa in ``[0.5,1)`` that ``1/x`` receives inside the softmax — the rule is
+   extrapolating outside the regime its constants were fitted on, and it
+   under-provisions ``N``. Measured: it selects ``(N=2, T=16)`` for 17.32 spikes
+   per element where ``(N=3, T=8)`` reaches *better* error for **8.76** — 1.98x,
+   identical across three seeds. Fewer bases force the bank to fire on nearly every
+   timestep, so spikes are **not monotone** in ``(N, T)`` there. Such primitives
+   should be searched rather than predicted. (Elsewhere the rule holds up: on
+   ``2^x`` and ``1/sqrt(x)`` it is spike-optimal, on the identity within 1.08x.)
+
 ## 10. Router (concrete)
 
 Given a calibrated domain ``[lo, hi]`` and bounds ``e_min ≤ e_max``:
@@ -342,16 +364,49 @@ of the baseline signed mechanism ([[Signed MBE Neuron]]) is therefore needed onl
 inside that single small bank, not globally. Routing structurally absorbs the sign
 problem for the tails (§6's consistency rule, made cheap).
 
-## 12. Evaluation protocol (the headline claim)
+## 12. Evaluation protocol and measured results
 
-PASN is **not** evaluated by a single MSE. For each nonlinearity, sweep the budget
-and plot the frontier of **approximation MSE vs. mean spikes per input**
-(``= firing_rate · N_{j(x)} · T_{j(x)}``), alongside timestep ``T`` and stored
-parameters ``Σ_j N_j``. The contribution is: **PASN's MSE–spike Pareto frontier
-dominates the global MBE neuron** on GELU / SiLU / 1/x / 2^x / 1/√x, and — plugged
-into the Phase-4 conversion ([[Phase 4 - Conversion Framework]]) — matches ANN
-accuracy at fewer spikes (lower energy). Honest cost: PASN stores more parameters
-and adds prefix-extraction/bank-addressing overhead (report both).
+The baseline is the **MBE paper's published tables**, never our own MBE
+reimplementation (§0). Our reimplementation is retained only as an *internal
+ablation* — the arm with routing removed — and its numbers are not quoted as a
+comparison to the literature.
+
+Three levels, all matched, all measured (2026-08-02):
+
+| level | published | PASN | matching |
+|---|---|---|---|
+| **network** (Tab. 3, GPT-2-medium × WikiText-2) | **+1.57%** relative conversion loss | **−0.14%** | operator set verified identical (their Algorithm 1); global ``T=16`` both sides; PASN uses **fewer** bases |
+| **operator** (Tab. XI, firing rates) | 7 primitives | **2.2–10.3x fewer spikes/element on 6 of 7** | ``T=16``; compared through ``T·η·N``, their own energy quantity |
+| **function** (Tab. X, MSE vs N) | per-function MSE | reproduced and beaten | no scope question at this level |
+
+**Report ``T·η·N``, never the firing rate alone.** A routed bank holds far fewer
+``(basis, timestep)`` slots, so it fires a *larger fraction* of a much smaller
+number: on ``1/sqrt(x)`` PASN fires 65.65% against the paper's 25.27% and still
+emits 3.08x fewer spikes. Firing rate is not an efficiency metric on its own.
+
+**Units.** Tab. 3 prints ``22.69 (+0.35)`` and the prose calls it "0.35%
+conversion loss", but 0.35 is the *absolute* perplexity difference; relative it is
+**+1.57%**. Our figure is relative and belongs beside that.
+
+**Honest costs, all measured rather than asserted:**
+
+- **Router arithmetic is real**: ~6 operations plus one bit-select per element,
+  **15.9%** of PASN's modelled energy on GPT-2 — bought by removing **7.55x** of
+  the threshold comparisons, which are paid every timestep whether or not a
+  neuron fires.
+- **Memory is a wash against a global MBE** (35168 vs 38148 bytes, 1.08x). The
+  1.99x memory result belongs to *tying the identity*, a different comparison;
+  do not merge them.
+- **One operator is a regression**: ``1/x`` costs 3.8x the published figure
+  (§9.3). It is the cheapest primitive by element count, so the effect on totals
+  is ≈0.3%, but it must be disclosed.
+- Energy is a **model** (45 nm; ``E_AC`` 0.9 pJ, ``E_MAC`` 4.6 pJ — the paper's own
+  constants), and **memory traffic is uncounted on both sides**. Bank switching
+  breaks locality, so that omission may favour us.
+
+**Open assumption**: the paper does not state its perplexity recipe (stride,
+context) anywhere in the appendix, so both figures are read relative to their own
+ANN baseline (ours 21.706, theirs 22.34).
 
 ## 13. Reduction check (unchanged)
 
@@ -359,3 +414,39 @@ and adds prefix-extraction/bank-addressing overhead (report both).
 ⇒ one bank = the baseline MBE neuron ⇒ bit-identical output for identical
 parameters ([[MBE Neuron Core]] ``test_r1_reduces_to_single_bank``, to be
 upgraded to the real router).
+
+## 14. Open extensions (measured openings, not speculation)
+
+The core above is settled. These are the places the measurements say the method is
+*not* finished; each carries the number that says so.
+
+1. **Mantissa-prefix routing.** The router reads sign and exponent. An argument
+   that is already a mantissa — ``1/x`` on ``[0.5,1)`` inside the softmax — has one
+   reachable binade, so routing does nothing for it, and that is the single
+   operator where we lose (§12). Reading mantissa bits is the same idea one prefix
+   deeper, not a bolt-on, and it is the only structural fix for that class.
+2. **Budget search where the router degenerates.** §9.3: predicted ``(2,16)``,
+   optimal ``(3,8)``, 1.98x. Detecting a degenerate router is trivial (one
+   reachable range) and searching a 28-point grid is cheap at build time.
+3. **The τ block is untouched and is where memory actually lives.** Four state
+   tensors per basis (``tau_r``, ``tau_vth``, ``tau_d``, ``dt``) are **54–61%** of
+   stored bytes — a property of the *neuron*, orthogonal to routing, and the axis
+   on which we are merely level with a global MBE. Banks fit scaled versions of
+   related shapes, so sharing τ across banks is the obvious untried move.
+4. **Attention-specific structure.** Attention is **87.7%** of a converted GPT-2's
+   spikes (matmul 45.1% + softmax 42.6%); activations are 3.0%. Two concrete
+   openings: the softmax output is decoded to FP and immediately re-encoded for
+   ``attn·V`` (a fusion would skip a round trip already priced at 6.3 spikes per
+   activation), and ``inv_S`` is broadcast to ``S×S`` *before* reconstruction when
+   ``S`` values would do — a **bit-identical** fix worth ≈14% of total spikes.
+5. **No network-level operating point.** The identity budget ``r`` moved spikes
+   4.2x at Stage 1 but only **1.90x** at Stage 2, because it bites hardest on
+   LayerNorm, which full conversion reduces to ~9%. A conversion method should be
+   able to trade accuracy for energy at the network level; presently it cannot.
+6. **The router's own parameters are hand-set.** ``e_min`` and ``pasn_id_e_min``
+   (−3 / −6) came from the toy and were never solved for, while the method's whole
+   argument is that budgets should be solved rather than tuned.
+
+Priority is not the order above: (4) sits on 87.7% of the budget, (1) and (2) fix
+a 0.3% operator but repair the method's *story*, and (3) is the only route to a
+memory claim.
