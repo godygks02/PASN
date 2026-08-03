@@ -1,0 +1,160 @@
+[
+ {
+  "tag": "ckpt-JeremiahZ_roberta-base-sst2-ann",
+  "task": "sst2",
+  "size": "base",
+  "dataset": [
+   "glue",
+   "sst2",
+   "validation",
+   "sentence"
+  ],
+  "seed": 0,
+  "backend": "none",
+  "scope": "all",
+  "model": "JeremiahZ/roberta-base-sst2",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": null,
+  "n_eval": 872,
+  "started": "2026-08-03T08:43:52",
+  "acc_ann": 93.57798165137615
+ },
+ {
+  "tag": "ckpt-aristotletan_roberta-base-finetuned-sst2-ann",
+  "task": "sst2",
+  "size": "base",
+  "dataset": [
+   "glue",
+   "sst2",
+   "validation",
+   "sentence"
+  ],
+  "seed": 0,
+  "backend": "none",
+  "scope": "all",
+  "model": "aristotletan/roberta-base-finetuned-sst2",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": null,
+  "n_eval": 872,
+  "started": "2026-08-03T08:45:44",
+  "acc_ann": 7.224770642201835
+ },
+ {
+  "tag": "ckpt-korca_bae-roberta-base-sst2-ann",
+  "task": "sst2",
+  "size": "base",
+  "dataset": [
+   "glue",
+   "sst2",
+   "validation",
+   "sentence"
+  ],
+  "seed": 0,
+  "backend": "none",
+  "scope": "all",
+  "model": "korca/bae-roberta-base-sst2",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": null,
+  "n_eval": 872,
+  "started": "2026-08-03T08:48:13",
+  "acc_ann": 86.92660550458716
+ },
+ {
+  "tag": "ckpt-jeremiahz-t16",
+  "task": "sst2",
+  "size": "base",
+  "dataset": [
+   "glue",
+   "sst2",
+   "validation",
+   "sentence"
+  ],
+  "seed": 0,
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "model": "JeremiahZ/roberta-base-sst2",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": 2,
+  "n_eval": 872,
+  "started": "2026-08-03T08:49:59",
+  "acc_ann": 93.57798165137615,
+  "build_s": 520.7517906998983,
+  "spikes_per_input": 593971.3055555555,
+  "by_kind": {
+   "layernorm": 144477670.0,
+   "matmul": 112734871.0,
+   "softmax": 46164536.0,
+   "activation": 124282263.0
+  },
+  "ops_per_input": {
+   "cmp": 5433534.405982971,
+   "ac": 1187942.611111111,
+   "mac": 385468.2265896797,
+   "poly": 45872.32621574402,
+   "router": 1401558.0,
+   "bitop": 233593.0
+  },
+  "energy_pj_per_input": 9204898.058289623,
+  "stored_params": 5744,
+  "stored_bytes": 22976,
+  "n_primitives": 171,
+  "acc_snn": 93.34862385321101,
+  "delta_pp": -0.22935779816513957,
+  "delta_pct": -0.24509803921568835,
+  "paper_rel_pct": -1.0900624404698922
+ },
+ {
+  "tag": "ckpt-korca-t16",
+  "task": "sst2",
+  "size": "base",
+  "dataset": [
+   "glue",
+   "sst2",
+   "validation",
+   "sentence"
+  ],
+  "seed": 0,
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "model": "korca/bae-roberta-base-sst2",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": 2,
+  "n_eval": 872,
+  "started": "2026-08-03T09:33:01",
+  "acc_ann": 86.92660550458716,
+  "build_s": 529.2123853999656,
+  "spikes_per_input": 605842.5291666667,
+  "by_kind": {
+   "layernorm": 143353357.0,
+   "matmul": 111464007.0,
+   "softmax": 45655734.0,
+   "activation": 135733523.0
+  },
+  "ops_per_input": {
+   "cmp": 5434633.113182068,
+   "ac": 1211685.0583333333,
+   "mac": 385817.6199808121,
+   "poly": 46153.05040693283,
+   "router": 1401558.0,
+   "bitop": 233593.0
+  },
+  "energy_pj_per_input": 9230153.638147488,
+  "stored_params": 6272,
+  "stored_bytes": 25088,
+  "n_primitives": 171,
+  "acc_snn": 87.04128440366972,
+  "delta_pp": 0.11467889908256268,
+  "delta_pct": 0.1319261213720246,
+  "paper_rel_pct": -1.0900624404698922
+ }
+]
