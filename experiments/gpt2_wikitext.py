@@ -333,12 +333,17 @@ def main():
                          "block = fast non-overlapping (over-estimates ppl)")
     ap.add_argument("--max-length", type=int, default=0,
                     help="sliding-window context length (0 = model n_positions)")
-    ap.add_argument("--stride", type=int, default=1024,
+    ap.add_argument("--stride", type=int, nargs="+", default=[1024],
                     help="sliding-window stride (tokens scored per window). 1024 = "
                          "non-overlapping, the published recipe: gpt2-medium 21.71 and "
                          "gpt2 29.94 vs Table 3's 22.76 / 29.41. stride 512 was the old "
                          "default and reads 18.46, 17%% low -- more left context per "
-                         "token is an easier quantity, not the paper's")
+                         "token is an easier quantity, not the paper's. "
+                         "Several values evaluate the SAME built model at each, one "
+                         "JSON record apiece: the paper never states its recipe, so "
+                         "the question is whether delta-PPL is stable across strides. "
+                         "The build does not depend on the stride, and re-fitting per "
+                         "point would pay a 15-50 min conversion three times")
     ap.add_argument("--json", default=None, metavar="PATH",
                     help="append this run to a JSON array (results/gpt2_p04.json "
                          "is the P0.4 deliverable). Sequential runs only")
@@ -364,12 +369,14 @@ def main():
 
     max_length = args.max_length or getattr(model.config, "n_positions", 1024)
 
-    def eval_ppl(label):
+    strides = list(dict.fromkeys(args.stride))     # de-duplicated, order kept
+
+    def eval_ppl(label, stride):
         if args.eval_mode == "block":
             return perplexity(model, ids, block, device, args.limit_blocks,
                               batch_size=eval_batch_size,
                               progress_every=args.progress_every, label=label)
-        return perplexity_sliding(model, ids, device, max_length, args.stride,
+        return perplexity_sliding(model, ids, device, max_length, stride,
                                   limit_windows=args.limit_blocks,
                                   progress_every=args.progress_every, label=label)
 
@@ -378,14 +385,17 @@ def main():
         # Storage and spike counts come off the built model; only perplexity needs
         # the sweep over windows. P0.5 re-measures bytes for rows whose ppl is
         # already recorded, and paying 1-2 h of eval to reprint it would be waste.
-        ppl_ann, eval_ann_s = None, None
+        ppl_ann = {s: None for s in strides}
+        eval_ann_s = {s: None for s in strides}
         print(f"[build-only] skipping perplexity for {which}")
     else:
-        t0 = time.perf_counter()
-        ppl_ann = eval_ppl("ANN")
-        eval_ann_s = time.perf_counter() - t0
-        print(f"ANN ({which}) perplexity = {ppl_ann:.4f}  "
-              f"[eval={args.eval_mode}, ctx={max_length}, stride={args.stride}]")
+        ppl_ann, eval_ann_s = {}, {}
+        for s in strides:
+            t0 = time.perf_counter()
+            ppl_ann[s] = eval_ppl(f"ANN s={s}", s)
+            eval_ann_s[s] = time.perf_counter() - t0
+            print(f"ANN ({which}) perplexity = {ppl_ann[s]:.4f}  "
+                  f"[eval={args.eval_mode}, ctx={max_length}, stride={s}]")
 
     # Record only the knobs that reach this backend. ``_build_one`` branches on
     # ``backend in _ROUTED_BACKENDS``, so the pasn_* family is dead for a global mbe
@@ -422,13 +432,15 @@ def main():
         mbe_id_logsample=gl(args.mbe_id_logsample),
         n_basis_act=gl(args.n_basis_act), n_basis_ln=gl(args.n_basis_ln),
         epochs=args.epochs if converting else None, n_steps=_DEF.n_steps,
-        eval_mode=args.eval_mode, ctx=max_length, stride=args.stride,
+        # ``stride``/``ppl_ann``/``eval_ann_s`` are filled per stride at the end;
+        # one record per evaluation point, all sharing this one build.
+        eval_mode=args.eval_mode, ctx=max_length, stride=None,
         limit_blocks=args.limit_blocks, eval_batch_size=eval_batch_size,
-        ppl_ann=ppl_ann, ppl_snn=None, delta_pct=None,
+        ppl_ann=None, ppl_snn=None, delta_pct=None,
         spikes_per_token=None, total_spikes=None, by_kind=None,
         stored_params=None, stored_bytes=None, n_primitives=None,
         n_activations=None, act_spikes_per_input=None,
-        build_s=None, eval_ann_s=eval_ann_s, eval_snn_s=None,
+        build_s=None, eval_ann_s=None, eval_snn_s=None,
         started=time.strftime("%Y-%m-%dT%H:%M:%S"),
     )
 
@@ -510,17 +522,57 @@ def main():
                    act_spikes_per_input=(sum(c["spikes"] for c in costs.values())
                                          / len(costs) if costs else None))
 
-        if not args.build_only:
-            t0 = time.perf_counter()
-            ppl_snn = eval_ppl(f"SNN-{args.backend}")
-            rec["eval_snn_s"] = time.perf_counter() - t0
-            drop = 100.0 * (ppl_snn - ppl_ann) / ppl_ann
-            rec.update(ppl_snn=ppl_snn, delta_pct=drop)
-            print(f"SNN ({args.backend}) perplexity = {ppl_snn:.4f}   "
-                  f"(delta {drop:+.2f}%)")
+    # One record per stride. The build above is shared by all of them, so
+    # ``build_s`` and every cost/storage field repeat -- only the evaluation
+    # point differs, which is exactly the sensitivity being measured.
+    ppl_snn = {s: None for s in strides}
+    eval_snn_s = {s: None for s in strides}
 
-    if args.json:
-        write_record(args.json, rec)
+    def emit(s):
+        """Append this stride's record. Called as soon as the point is known.
+
+        A sweep is hours long and a closed vast.ai box already took P0.4 Block C
+        and the raw Stage 2 records with it. Writing per point means an
+        interrupted sweep still leaves the strides it finished.
+        """
+        if not args.json:
+            return
+        row = dict(rec)
+        row["stride"] = s
+        row["ppl_ann"] = ppl_ann[s]
+        row["eval_ann_s"] = eval_ann_s[s]
+        row["ppl_snn"] = ppl_snn[s]
+        row["eval_snn_s"] = eval_snn_s[s]
+        row["delta_pct"] = (None if ppl_snn[s] is None or ppl_ann[s] is None
+                            else 100.0 * (ppl_snn[s] - ppl_ann[s]) / ppl_ann[s])
+        if len(strides) > 1 and args.tag:
+            row["tag"] = f"{args.tag}-s{s}"
+        write_record(args.json, row)
+
+    if converting and not args.build_only:
+        for s in strides:
+            t0 = time.perf_counter()
+            ppl_snn[s] = eval_ppl(f"SNN-{args.backend} s={s}", s)
+            eval_snn_s[s] = time.perf_counter() - t0
+            drop = 100.0 * (ppl_snn[s] - ppl_ann[s]) / ppl_ann[s]
+            print(f"SNN ({args.backend}) perplexity = {ppl_snn[s]:.4f}   "
+                  f"(delta {drop:+.2f}%)  [stride={s}]", flush=True)
+            emit(s)
+    else:
+        for s in strides:
+            emit(s)
+
+    if len(strides) > 1 and not args.build_only:
+        print("\n=== evaluation-recipe sensitivity (one build, "
+              f"{len(strides)} strides) ===")
+        print("stride      ANN ppl      SNN ppl     delta%")
+        for s in strides:
+            d = ("" if ppl_snn[s] is None
+                 else f"{100.0 * (ppl_snn[s] - ppl_ann[s]) / ppl_ann[s]:+9.3f}")
+            snn = "        -" if ppl_snn[s] is None else f"{ppl_snn[s]:9.4f}"
+            print(f"{s:>6}  {ppl_ann[s]:9.4f}  {snn}  {d}")
+        print("A delta% that holds across strides closes the open assumption: "
+              "the conclusion does not depend on the paper's unstated recipe.")
 
 
 if __name__ == "__main__":
