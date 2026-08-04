@@ -1,7 +1,7 @@
 # What to run next — cold-start brief
 
-Written 2026-08-03. Self-contained: a session that has never seen this project
-should be able to act from this file alone.
+Written 2026-08-03, updated 2026-08-04. Self-contained: a session that has never
+seen this project should be able to act from this file alone.
 
 > **The research log is NOT in git.** `PASN_vault/` is gitignored (Obsidian, local
 > only). Its index is `PASN_vault/60 - 연구일지/00 - 연구일지 인덱스.md`. If you are
@@ -32,6 +32,8 @@ Measured, all at the paper's own global `T=16`:
 | network | RoBERTa-base × MR | −0.44% | −0.73% … −0.10% | **undecidable** (see §3) |
 | operator | Table XI firing rates | 7 primitives | **6/7 at 2.2–10.3× fewer spikes** | cross-model caveat |
 | function | Table X MSE vs N | per-function | reproduced and beaten | clean |
+| recipe | ΔPPL across stride 1024/512/256 | recipe unstated | **−0.140 … +0.058%** | the assumption is closed |
+| depth | per-layer error, 24 blocks | — | shared fits hold; error saturates | closed |
 
 Budget-rule decomposition on GPT-2 (Stage 2): the value is in `N_j`
 (**2.392×** spikes, **2.55×** storage); `T_j` is only **1.065×** and free in
@@ -61,33 +63,35 @@ characterisation that makes the SST-2 claim safe.
 
 ## 3. Ranked: what is actually left
 
-### 1 — GPT-2 evaluation-recipe sensitivity  ★ highest value
+### ~~1 — GPT-2 evaluation-recipe sensitivity~~ ✅ **done 2026-08-04**
 
-**Why.** The single open assumption behind the headline. The paper never states
-its perplexity recipe (stride/context) — not in the body, not in appendix G.1. We
-score at stride 1024 (non-overlapping); shorter strides give every token more
-left context and lower perplexity without bound (1024→21.71, 512→18.46,
-256→18.08). If ΔPPL is stable across strides, the conclusion does not depend on
-knowing their recipe, and the assumption closes.
+The absolute perplexity moves 16.7% across strides (21.706 / 18.463 / 18.081)
+while ΔPPL stays inside a **0.197 pp band** (−0.140% / −0.030% / **+0.058%**),
+never worse than 0.14% in magnitude. The margin over the paper's +1.57% never
+drops below **1.51 pp**, and the whole band is 13% of that margin — **the
+conclusion does not depend on the recipe, and the assumption is closed.**
 
-**Where.** GPU (rent again). gpt2-medium at S=1024 is far too slow on CPU.
+Write it as "lossless under every recipe", **not** "ΔPPL is invariant": the value
+drifts monotonically and changes sign at stride 256. `--stride` now takes several
+values and evaluates one build at each (`results/stride_sens.json`, 13.3 h).
 
-```bash
-M="--model gpt2-medium --epochs 300 --backend mbe_pasn --convert-ops all \
-   --pasn-id-target relative --pasn-id-target-rel 1e-2 --pasn-t-fixed 16 \
-   --json results/stride_sens.json"
-for s in 1024 512 256; do
-  python experiments/gpt2_wikitext.py $M --stride $s --tag stride-$s
-done
-```
+### ~~3 — Layer-wise error profile~~ ✅ **done 2026-08-04**
 
-**Cost.** ~2 h per point on an RTX 5060 Ti; shorter strides are *slower* (more
-windows). Budget 6–8 h.
+`share_fits=True` holds at depth. The shared GELU prototype is *better* at layer
+23 than at layer 0 (0.86×) and its worst layer is **L4**, not a deep one;
+LayerNorm is flat (1.06–1.14×). In-situ and clean-input error agree to a median
+0.65% at the shared sites, so upstream drift contributes essentially nothing.
+Cumulative block error **saturates** rather than compounding (1.39× over 23
+blocks, and it *falls* at L3). Only 2 of 145 sites ever see an input outside the
+pooled fitted range, worst 0.0015%.
 
-**Reads as.** ΔPPL roughly constant → assumption closed, headline safe. ΔPPL
-moving a lot → we must say the comparison depends on a recipe we do not know.
+The one thing that grows with depth is **`av_matmul`** — 2.85× of L0 at its L21
+peak, and the largest per-site error in the network (4–6× every other primitive).
+Not a sharing problem (matmuls are fitted per site); it is the FP-multiply
+identity path, and it points at the same place the spike budget does.
+`experiments/layer_error_profile.py`, 21 min on local CPU.
 
-### 2 — CV: ViT × ImageNet  ★ third modality
+### 1 — CV: ViT × ImageNet  ★ now the top gap
 
 **Why.** The paper covers CV/NLU/NLG; we have two of three. ViT would complete
 the generality argument and is the paper's own strongest cell (ViT-B/16 −0.44%,
@@ -103,28 +107,18 @@ data pipeline.
 **Needs vast.ai.** Check `ACT_TARGETS` covers ViT's activation (it maps
 `GELUActivation` → exact `gelu`, which is what ViT uses).
 
-### 3 — Layer-wise error profile  ★ cheap, still unmeasured
-
-**Why.** P0.4 §4.4 asked for it and it was never done. `share_fits=True` lets 24
-layers reuse one fitted primitive, so per-layer activation distributions could
-drift with depth. This is the one "does it actually hold at depth" question we
-have not answered directly.
-
-**Where.** Local CPU. Instrument a converted model and compare per-layer hidden
-states against the ANN's. No new run needed beyond one build.
-
-### 4 — Method extensions (see `PASN_method.md` §14)
+### 2 — Method extensions (see `PASN_method.md` §14)
 
 Each carries a measured opening:
 
 | extension | evidence | note |
 |---|---|---|
-| **softmax→matmul fusion** | attention is 86.5% of spikes; the attention matrix is decoded to FP then re-encoded, a round trip priced at 6.3 spikes/activation (exp 10) | largest remaining energy target; **changes numerics → full re-eval** |
+| **softmax→matmul fusion** | attention is 86.5% of spikes; the attention matrix is decoded to FP then re-encoded, a round trip priced at 6.3 spikes/activation (exp 10). **The layer profile now points here too**: `av_matmul` is the largest per-site error in the network and the only one that grows with depth | largest remaining energy target; **changes numerics → full re-eval** |
 | **mantissa-prefix router** | `1/x` is the one operator we lose (0.26×); its argument is already a mantissa, so exponent routing is a no-op by construction | fixes the story more than the spikes (0.3% of total) |
 | **budget search where the router degenerates** | rule picks `(2,16)`=17.32 spikes where `(3,8)`=8.76 is *more* accurate — 1.98×, identical across 3 seeds | small change to `rule_budget` |
 | **τ sharing across banks** | the four state tensors per basis are **54–61% of stored bytes**, orthogonal to routing, and memory is our weakest axis (level with global MBE at 1.08×) | only route to a memory claim |
 
-### 5 — P0.5 leftovers
+### 3 — P0.5 leftovers
 
 Matched toy energy (`waterfall.py` rerun against the matched baseline) and the
 `gpt2-medium` re-measure of the Table XI firing rates (that table was taken on
@@ -158,6 +152,21 @@ gpt2-small).
 * **Before trusting a knob, check it moves something.** Two knobs were silently
   ignored (`pasn_id_target` under tying, `mbe_readout_order` on the signed
   activation). Build both arms and diff the state dicts.
+* **Absolute spike totals are environment-dependent; only ratios travel.** The
+  same commit, config and sample on a new box (RTX 5060 Ti, torch 2.12+cu130)
+  gave 0.945× the spikes. Per op: matmul 1.001×, activation 0.993×, layernorm
+  0.985×, **softmax 0.855×** — bytes identical, ΔPPL identical, so the structure
+  is the same and only the firing behaviour moved. Re-measuring the per-bank arm
+  on the same box put the `T_j` decomposition at **1.0719×** against the recorded
+  1.0649× — ratios survive there because the shift hits both arms alike and
+  cancels. **But that cancellation is arm-dependent, not a law.** Re-measuring the
+  `n4` arm too put the `N_j` decomposition at **2.5505×** against the recorded
+  2.3916% — **6.6% apart**, because matmul moves 1.105× in the `n4` arm while it
+  is 1.001× in the per-bank arm, so nothing cancels. Storage is the solid axis:
+  bytes came out **identical** (49952 / 127352) on both boxes, so `N_j`'s 2.55×
+  memory saving is environment-free. Quote **2.55× memory, 2.4–2.55× spikes,
+  1.065× for `T_j`** — and never to four significant figures. Same box is a
+  necessary condition for a ratio, not a sufficient one.
 
 ---
 
@@ -188,7 +197,11 @@ python tests/test_mbe_neuron.py
 Result files: `results/gpt2_stage2_fixed.json` (post-fix spike totals),
 `results/roberta_sst2.json`, `results/roberta_nlu.json`,
 `results/sst2_ckpt_var.json`, `results/roberta_mr_ckpt.json`,
-`results/firing_rates_gpt2.json`, `results/budget_objective.json`.
+`results/firing_rates_gpt2.json`, `results/budget_objective.json`,
+`results/stride_sens.json` (recipe sensitivity, 3 records),
+`results/tj_decomp_samebox.json` + `results/nj_decomp_samebox.json` (the paired
+per-bank and `n4` builds behind the same-box decompositions),
+`results/layer_error_profile.json` (per-layer error).
 
 Related in-repo docs: `PASN_method.md` (method spec, §14 = open extensions),
 `experiments/NLU_RESUME.md` (NLU cell status), `experiments/P0.4_GPT2_HANDOFF.md`
