@@ -13,6 +13,8 @@ from .mbe_pasn import MBEPASNNeuron, build_mbe_pasn
 from .mbe_pasn_s import MBEPASNSNeuron, build_mbe_pasn_s, pareto_front
 # Unified cost metrics across all neuron types.
 from .metrics import neuron_cost, spikes_per_input
+# Whole-op cost accounting (spikes per *output element* of an assembled op).
+from .op_cost import SpikeMeter, measure_op, op_memory
 
 __all__ = [
     "MBENeuron",
@@ -40,4 +42,8 @@ __all__ = [
     # metrics
     "neuron_cost",
     "spikes_per_input",
+    # whole-op cost
+    "SpikeMeter",
+    "measure_op",
+    "op_memory",
 ]
