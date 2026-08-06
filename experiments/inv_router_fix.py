@@ -27,10 +27,29 @@ This script measures three things, because the first two do not imply the third:
 
   1. does ``beta`` actually fix the isolated ``1/x`` Pareto,
   2. what it costs in stored bytes (more reachable banks = more banks stored),
-  3. **whether it moves the softmax op at all** -- ``1/x`` runs once per row
-     against ``2^x`` once per element, so its share of the op is ~1/C. A
-     primitive-level win that does not survive into the operator is a story fix,
-     not an energy fix, and the honest answer needs the operator number.
+  3. **whether it moves the softmax op** -- ``1/x`` runs once per row against
+     ``2^x`` once per element, so its share of the op is ~1/C.
+
+.. warning::
+   **Read (3) with its design in mind: it under-reports, and it fooled us.**
+   ``score_softmax`` pins ``exp2`` and the identity at ``N=8, T=16`` so that any
+   movement is attributable to the reciprocal alone. That is the right control
+   for *attribution*, but it holds the operator's cost fixed by construction, so
+   the op total can only ever come out ~1.0x. This script reports 79.27 -> 80.33
+   and the earlier P0.2 / 실험 5 toy measurement reported 280 -> 275 (1.02x), and
+   **both conclusions are artefacts of that pinning**.
+
+   Sweeping the whole op budget instead (``op_pareto.py``, softmax, ``pasn``
+   arm) shows what is really going on: at ``b=1, T=8`` the shift leaves the
+   spike count alone (4.65 -> 4.63) and improves nrmse ``2.60e-2 -> 6.82e-3``.
+   The degenerate reciprocal was not spending spikes, it was capping the
+   *accuracy* of the whole operator. At matched accuracy softmax then goes
+   **1.88x -> 6.41x**, because PASN can now reach the MBE front from a far
+   cheaper build.
+
+   The lesson generalises past this primitive: **a primitive-level change must be
+   judged with the rest of the operator free to move**, or the measurement
+   answers a question nobody asked.
 
 Usage::  python experiments/inv_router_fix.py --json results/inv_router_fix.json
 """

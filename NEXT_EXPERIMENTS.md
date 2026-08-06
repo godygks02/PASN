@@ -114,9 +114,52 @@ Each carries a measured opening:
 | extension | evidence | note |
 |---|---|---|
 | **softmax→matmul fusion** | attention is 86.5% of spikes; the attention matrix is decoded to FP then re-encoded, a round trip priced at 6.3 spikes/activation (exp 10). **The layer profile now points here too**: `av_matmul` is the largest per-site error in the network and the only one that grows with depth | largest remaining energy target; **changes numerics → full re-eval** |
-| **mantissa-prefix router** | `1/x` is the one operator we lose (0.26×); its argument is already a mantissa, so exponent routing is a no-op by construction | fixes the story more than the spikes (0.3% of total) |
+| ~~**mantissa-prefix router**~~ ✅ **closed 2026-08-06** | ~~`1/x` is the one operator we lose~~ — diagnosed, fixed and defaulted. No new router was needed: `beta=0.5` puts the existing binade ladder on `x − 0.5`. See below. | **do not reopen as an energy item** |
 | **budget search where the router degenerates** | rule picks `(2,16)`=17.32 spikes where `(3,8)`=8.76 is *more* accurate — 1.98×, identical across 3 seeds | small change to `rule_budget` |
 | **τ sharing across banks** | the four state tensors per basis are **54–61% of stored bytes**, orthogonal to routing, and memory is our weakest axis (level with global MBE at 1.08×) | only route to a memory claim |
+
+**The `1/x` row, closed.** `[0.5, 1)` *is* one binade — the interval `frexp`
+normalises a mantissa into — so the exponent router had **1 of 7 banks reachable
+and 20000/20000 inputs in it**. PASN there was a global MBE plus router overhead;
+it never entered the comparison. `PrefixRouter` already routes on
+`(x − beta)/2^gamma`, so `beta=0.5` re-anchors the ladder on the offset and the
+banks partition log-densely at `x=0.5`, where `|f''| = 2/x³` is 8× its value at
+1.0. `beta` is the IEEE mantissa floor, not a tuned constant.
+
+Now the default (`ConvertConfig.pasn_beta = {"inv": 0.5}`, pinned by
+`tests/test_op_cost.py`). At conversion settings: **MSE 4.4e-5 → 1.8e-6 (25×) and
+17.0 → 2.9 spikes (5.9×) at once**, for 3.7× stored bytes on that primitive.
+`invsqrt` is deliberately left off — `[0.5, 2)` is already two binades, so its
+router was never degenerate.
+
+**Why this looked worthless for so long — a measurement trap, not a small
+effect.** `1/x` is 0.0–1.3% of softmax's spikes, and both P0.2 / 실험 5 and the
+first pass of `inv_router_fix.py` concluded ~1.0× at the op level. Both got there
+by **pinning the op's other primitives** (`exp2` and the identity at N=8, T=16)
+and varying only the reciprocal. That holds the operator's cost fixed by
+construction, so it can only ever report ~1×. It cannot see what happens.
+
+Sweep the whole op budget instead (`op_pareto`, softmax, `pasn` arm):
+
+| | nrmse | spikes |
+|---|---|---|
+| `beta=0`, b=1 T=8 | 2.60e-2 | 4.65 |
+| `beta=0.5`, b=1 T=8 | **6.82e-3** | 4.63 |
+
+**Same spikes, 3.8× the accuracy.** The degenerate reciprocal was never costing
+spikes — it was imposing an **accuracy floor on the whole operator**. Lift it and
+softmax reaches the MBE front at a much cheaper build, so at matched accuracy:
+
+* isolated `1/x`: **0.85× → 5.39×**
+* the softmax operator: **1.88× → 6.41×**
+* PASN now wins **10/10 operators** on spikes; it was 9/10.
+
+So it *is* an energy result; it just arrives through accuracy rather than through
+the reciprocal's own spikes. **The general lesson is the one worth keeping: never
+judge a primitive-level change by pinning the rest of the operator.** That design
+answers "what do this primitive's spikes cost", when the question is "what does
+the operator cost at fixed accuracy". `experiments/inv_router_fix.py` (controlled,
+~20 min) and `experiments/op_pareto.py --ops activation softmax --acts inv`.
 
 ### 3 — P0.5 leftovers
 

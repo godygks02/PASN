@@ -151,6 +151,52 @@ def test_op_memory_dedups_shared_primitives():
     assert two["n_prims"] == 2
 
 
+def test_inv_router_is_not_degenerate_by_default():
+    """``inv`` must not route every input into one bank.
+
+    ``[0.5, 1)`` is exactly one binade -- the interval ``frexp`` normalises a
+    mantissa into -- so an exponent router anchored at zero has a single
+    reachable range and the routed neuron silently degenerates to a global MBE
+    plus router overhead. ``ConvertConfig.pasn_beta`` defaults to
+    ``{"inv": 0.5}`` to move the ladder onto ``x - 0.5``. This test fails if that
+    default is dropped, which would look like a small config change and would
+    quietly undo it.
+    """
+    from mbe.convert import ConvertConfig, _routed_primitive
+
+    cfg = ConvertConfig()
+    assert cfg.pasn_beta == {"inv": 0.5}, cfg.pasn_beta
+    # a mutable default must not be shared between instances
+    ConvertConfig().pasn_beta["scratch"] = 1.0
+    assert "scratch" not in ConvertConfig().pasn_beta
+
+    n = _routed_primitive("inv", (0.5, 1.0), -1, 0,
+                          ConvertConfig(epochs=EPOCHS), "cpu")
+    r = n.router
+    reach = sum(1 for bi in range(r.n_banks)
+                if r.reachable(bi, 0.5, 1.0) is not None)
+    assert reach > 1, f"inv router degenerate: {reach}/{r.n_banks} reachable"
+
+    # ...and the unshifted router really is the degenerate case, or the test
+    # above would pass for reasons unrelated to beta
+    off = _routed_primitive("inv", (0.5, 1.0), -1, 0,
+                            ConvertConfig(epochs=EPOCHS, pasn_beta={}), "cpu")
+    assert sum(1 for bi in range(off.router.n_banks)
+               if off.router.reachable(bi, 0.5, 1.0) is not None) == 1
+
+
+def test_invsqrt_is_left_alone():
+    """``1/sqrt`` sees ``[0.5, 2)`` = two binades, so its router is already fine
+    and does not need (or get) a beta shift."""
+    from mbe.convert import ConvertConfig
+    from mbe.mbe_pasn import PrefixRouter
+
+    assert "invsqrt" not in ConvertConfig().pasn_beta
+    r = PrefixRouter(0.5, 2.0, e_min=-1, e_max=1)
+    assert sum(1 for bi in range(r.n_banks)
+               if r.reachable(bi, 0.5, 2.0) is not None) == 2
+
+
 def test_attach_rejects_duplicate_names():
     idn = so.calibrate_identity(0.0, 4.0, n_basis=2, n_steps=8, epochs=EPOCHS)
     with SpikeMeter() as m:

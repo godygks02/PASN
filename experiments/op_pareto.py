@@ -164,7 +164,20 @@ def errors(out: torch.Tensor, ref: torch.Tensor) -> dict:
 _PASN_CACHE: dict = {}
 
 
-def _binades(lo: float, hi: float, span: int) -> tuple[int, int]:
+#: Per-target router origin, taken from the conversion config so the sweep and
+#: the shipped converter cannot drift apart. ``inv`` needs one because ``[0.5, 1)``
+#: is a single binade -- see ``experiments/inv_router_fix.py`` and
+#: ``ConvertConfig.pasn_beta``.
+def _beta_table() -> dict:
+    from mbe.convert import ConvertConfig
+    return dict(ConvertConfig().pasn_beta or {})
+
+
+BETA = _beta_table()
+
+
+def _binades(lo: float, hi: float, span: int,
+             beta: float = 0.0) -> tuple[int, int]:
     """Router exponent range covering ``[lo, hi]`` with ``span`` binades.
 
     ``e_max`` is set by the largest magnitude present; ``e_min`` cuts the ladder
@@ -172,8 +185,15 @@ def _binades(lo: float, hi: float, span: int) -> tuple[int, int]:
     near-zero bank. ``span`` is the memory knob of the routed side (one bank per
     binade per sign), held **fixed** across the sweep so that the swept axis stays
     ``(n_local, T)`` -- the same two quantities the MBE arm sweeps.
+
+    With ``beta`` the magnitudes are measured from the shifted origin, since that
+    is what the router keys on. Shifting lets ``|x - beta|`` reach arbitrarily
+    close to zero *inside* the domain, so the usable binade count stops being a
+    property of the domain and becomes the ``span`` choice -- which is exactly why
+    it is a fixed knob here rather than a swept one.
     """
-    mag = max(abs(float(lo)), abs(float(hi)), 1e-6)
+    lo, hi = float(lo) - beta, float(hi) - beta
+    mag = max(abs(lo), abs(hi), 1e-6)
     e_max = int(math.ceil(math.log2(mag)))
     return e_max - int(span), e_max
 
@@ -187,13 +207,14 @@ def pasn(name: str, domain: tuple[float, float], n: int, t: int, epochs: int,
     allocation here, so the front measures what **routing alone** buys. The
     allocation on top is the separate ``pasn_rule`` arm.
     """
-    e_min, e_max = _binades(*domain, span=span)
+    beta = BETA.get(name, 0.0)
+    e_min, e_max = _binades(*domain, span=span, beta=beta)
     key = (name, round(domain[0], 6), round(domain[1], 6), e_min, e_max, n, t,
-           epochs, seed, tuple(sorted(kw.items())))
+           epochs, seed, beta, tuple(sorted(kw.items())))
     if key not in _PASN_CACHE:
         _PASN_CACHE[key] = build_mbe_pasn(
             name, domain, e_min=e_min, e_max=e_max, n_local=n, n_near0=n,
-            n_steps=t, epochs=epochs, seed=seed, **kw)
+            n_steps=t, epochs=epochs, seed=seed, beta=beta, **kw)
     return _PASN_CACHE[key]
 
 
@@ -218,14 +239,15 @@ def pasn_rule(name: str, domain: tuple[float, float], t: int | None,
     Running both isolates the two halves of the allocation: ``pasn`` -> ``rule_T``
     is what ``N_j`` buys, ``rule_T`` -> ``rule`` is what ``T_j`` adds on top.
     """
-    e_min, e_max = _binades(*domain, span=span)
+    beta = BETA.get(name, 0.0)
+    e_min, e_max = _binades(*domain, span=span, beta=beta)
     key = ("rule", name, round(domain[0], 6), round(domain[1], 6), e_min, e_max,
-           t, target_rel, epochs, seed)
+           t, target_rel, epochs, seed, beta)
     if key not in _PASN_CACHE:
         kw = {} if t is None else dict(t_fixed=t)
         _PASN_CACHE[key] = build_mbe_pasn(
             name, domain, e_min=e_min, e_max=e_max, budget="rule",
-            target="relative", target_rel=target_rel,
+            target="relative", target_rel=target_rel, beta=beta,
             epochs=epochs, seed=seed, **kw)
     return _PASN_CACHE[key]
 

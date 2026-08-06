@@ -416,14 +416,40 @@ class ConvertConfig:
     # [0.5, 1) is a single binade. Its curvature peaks at S=0.5, so routing on
     # S - 0.5 re-expands exactly the hard end.
     #
-    # OFF by default, measured. In isolation this was worth 13.6x (inv) and 8.3x
-    # (1/sqrt(x)) in iso-error spikes (실험 5) -- but in the network those
-    # primitives are the *small* part of their op. Softmax is exp2 + inv +
-    # identity and LayerNorm is rsqrt + two identities, with the identities
-    # dominating both, so the toy total moves 280 -> 275 (1.02x) while stored
-    # parameters grow 35% for the extra ranges. Amdahl, one level down. Set
-    # {"inv": 0.5, "invsqrt": 0.5} to re-enable. (P0.2)
-    pasn_beta: dict | None = field(default_factory=dict)
+    # ON for "inv" as of 2026-08-06; was OFF, and the reason it was OFF still
+    # holds on the axis it was judged on.
+    #
+    # 실험 5 / P0.2 measured 13.6x (inv) and 8.3x (1/sqrt(x)) in iso-error spikes
+    # *in isolation*, but only 280 -> 275 (1.02x) on the toy total, with stored
+    # parameters up 35%: these primitives are the small part of their op (softmax
+    # is exp2 + inv + identity, and the identities dominate), so the isolated win
+    # is divided away. Amdahl, one level down. `experiments/inv_router_fix.py`
+    # reproduced exactly that -- 5.39x isolated, and the softmax op total moves
+    # 79.27 -> 80.33, i.e. 1.00x at matched accuracy.
+    #
+    # But "1.00x" is an artefact of how both of those were measured, and the
+    # artefact is the whole story. Both pinned the op's other primitives (exp2
+    # and the identity at N=8, T=16) and varied only the reciprocal. That holds
+    # the op's cost fixed by construction, so it can only ever report ~1x -- it
+    # cannot observe the thing that actually happens.
+    #
+    # Sweeping the whole op budget instead (op_pareto, softmax, `pasn` arm):
+    #
+    #     beta=0    b=1 T=8   nrmse 2.60e-2   4.65 spikes
+    #     beta=0.5  b=1 T=8   nrmse 6.82e-3   4.63 spikes
+    #
+    # Same spikes, 3.8x the accuracy, with 1/x still ~1% of the total. The
+    # degenerate reciprocal was not costing spikes, it was imposing an *accuracy
+    # floor* on the whole operator. Lift it and softmax reaches the MBE front at
+    # a far cheaper build, so at matched accuracy the op goes 1.88x -> 6.41x and
+    # isolated 1/x goes 0.85x -> 5.39x. It is an energy result after all; it just
+    # arrives through accuracy rather than through the reciprocal's own spikes.
+    #
+    # Cost is stored parameters (~3.7x on this primitive). Set to {} to revert.
+    # "invsqrt" stays off: its argument is [0.5, 2), already two binades, so its
+    # router was never degenerate -- verified in tests/test_op_cost.py.
+    pasn_beta: dict | None = field(
+        default_factory=lambda: {"inv": 0.5})
     pasn_beta_binades: int = 6               # ranges to open up on the shifted key
     # Decoder order for the activation. Not used for the identity: the FP-multiply
     # factorisation needs the output to stay a spike sum (실험 6).
