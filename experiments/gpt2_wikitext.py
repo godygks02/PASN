@@ -304,6 +304,16 @@ def main():
                     default=_DEF.mbe_id_logsample,
                     help="draw the global identity's calibration log-uniformly, the "
                          "fairest global analogue of the routed relative budget")
+    ap.add_argument("--n-steps", type=int, default=_DEF.n_steps,
+                    help="global timestep budget T. The paper's Table 4 sweeps "
+                         "exactly this and Wiki-103 collapses as it falls "
+                         "(22.65 -> 41072 -> 11992 -> 33.56 -> 23.41), so it is "
+                         "the axis where per-bank T_j allocation should pay. For "
+                         "PASN it caps the budget rule's grid -- no bank may "
+                         "allocate more steps than the network runs -- as well as "
+                         "setting the uniform arms' T. At the default 16 the cap "
+                         "is inert, so recorded builds are unchanged. Pair with "
+                         "--pasn-t-fixed <same T> for the timestep-matched arm")
     ap.add_argument("--pasn-t-fixed", type=int, default=None,
                     help="force every bank to this many timesteps, overriding the "
                          "budget rule's per-bank T_j but keeping its N_j. Use 16 "
@@ -431,7 +441,7 @@ def main():
         mbe_readout_order=gl(args.mbe_readout_order),
         mbe_id_logsample=gl(args.mbe_id_logsample),
         n_basis_act=gl(args.n_basis_act), n_basis_ln=gl(args.n_basis_ln),
-        epochs=args.epochs if converting else None, n_steps=_DEF.n_steps,
+        epochs=args.epochs if converting else None, n_steps=args.n_steps,
         # ``stride``/``ppl_ann``/``eval_ann_s`` are filled per stride at the end;
         # one record per evaluation point, all sharing this one build.
         eval_mode=args.eval_mode, ctx=max_length, stride=None,
@@ -448,6 +458,7 @@ def main():
         n = make_spikable(model)
         print(f"marked {n} GELU activations; converting (backend={args.backend}) ...")
         cfg = cv.ConvertConfig(epochs=args.epochs, backend=args.backend,
+                               n_steps=args.n_steps,
                                spike_mult=True, n_basis_act=args.n_basis_act,
                                n_basis_ln=args.n_basis_ln,
                                pasn_n_local=args.pasn_n_local,

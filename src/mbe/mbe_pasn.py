@@ -653,6 +653,14 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
         return ((lambda v, s=s: fn(router.from_key(s * v))),
                 min(abs(ta), abs(tb)), max(abs(ta), abs(tb)))
 
+    # ``n_steps`` is the *global* timestep budget: no bank may allocate more than
+    # the network is willing to run. Truncating the rule's grid is what makes a
+    # reduced global T mean the same thing for us as for a uniform-T method --
+    # otherwise the rule keeps handing out T_j=16 and a "T=8" sweep measures
+    # nothing. At the default 16 this is a no-op (``T_GRID[-1] == 16``), so every
+    # recorded build reproduces bit-identically.
+    t_grid = tuple(t for t in T_GRID if t <= n_steps) or (T_GRID[0],)
+
     if tied:
         # One prototype for every magnitude bank; the routed key supplies the scale.
         # (N, T) come from the rule applied to the *unit* residual, so they are the
@@ -663,7 +671,7 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
         ra, rc = rule_ac or bit_law(readout_order, learn_tau)
         N_t, T_t = (rule_budget(float(h.max() - h.min()),
                                 (target_rel * float(h.pow(2).mean().sqrt())) ** 2,
-                                n_max=min(n_max, 4), a=ra, c=rc)
+                                n_max=min(n_max, 4), a=ra, c=rc, t_grid=t_grid)
                     if budget == "rule" else (n_local, n_steps))
         if t_fixed is not None:
             T_t = t_fixed
@@ -709,7 +717,8 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
                 eps = (target_rel * max(rms, 1e-30)) ** 2
             ra, rc = rule_ac or bit_law(readout_order, learn_tau)
             cap, steps = rule_budget(float(y.max() - y.min()), eps,
-                                     n_max=min(n_max, 4), a=ra, c=rc)
+                                     n_max=min(n_max, 4), a=ra, c=rc,
+                                     t_grid=t_grid)
         if t_fixed is not None:
             steps = t_fixed
         if n_fixed is not None:
