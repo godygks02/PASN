@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import math
 import os
@@ -286,6 +287,12 @@ def main():
                     help="router depth for the identity primitives only; their "
                          "operands span many decades. -6 on the toy, unverified on "
                          "GPT-2's activation distribution")
+    ap.add_argument("--no-pasn-beta", action="store_true",
+                    help="clear ConvertConfig.pasn_beta (default {'inv': 0.5}), "
+                         "putting the reciprocal's router back on the raw binade "
+                         "ladder. The attribution lever for E0: the headline "
+                         "records predate the 2026-08-06 beta default, so this "
+                         "is how a current build is compared against them")
     ap.add_argument("--pasn-readout-order", type=int,
                     default=_DEF.pasn_readout_order,
                     help="mbe_pasn activation decoder order (2 = exp 6; free "
@@ -424,6 +431,36 @@ def main():
     def gl(v):                       # global-MBE-only knob
         return v if converting and not routed else None
 
+    def cfg_snapshot(cfg) -> dict:
+        """Every field of the *built* config, JSON-coerced.
+
+        The flat keys below are hand-maintained, and that is exactly how
+        ``pasn_beta`` went unrecorded: it became a default on 2026-08-06, it
+        changed the build (bytes 49,952 -> 53,888), and **no record said so**, so
+        the headline could not be audited retroactively (E0). A knob that is not
+        serialised is a knob that silently forks the results.
+
+        Dumping the whole dataclass means a future default cannot be omitted by
+        forgetting a line here. The flat keys stay for the readers that already
+        consume them (``p04_report``).
+        """
+        out = {}
+        for f in dataclasses.fields(cfg):
+            v = getattr(cfg, f.name)
+            if isinstance(v, (str, int, float, bool, type(None))):
+                out[f.name] = v
+            elif isinstance(v, dict):
+                out[f.name] = {str(k): (x if isinstance(
+                    x, (str, int, float, bool, type(None))) else str(x))
+                    for k, x in v.items()}
+            elif isinstance(v, (list, tuple)):
+                out[f.name] = [x if isinstance(
+                    x, (str, int, float, bool, type(None))) else str(x)
+                    for x in v]
+            else:
+                out[f.name] = str(v)
+        return out
+
     rec = dict(
         tag=args.tag, backend=args.backend, scope=args.convert_ops,
         # 1 = GELU + LayerNorm only (attention exact FP); 2 = whole network.
@@ -482,6 +519,12 @@ def main():
                                fit_device=None if args.fit_device == "auto"
                                else args.fit_device,
                                verbose_fits=True)
+        if args.no_pasn_beta:
+            cfg.pasn_beta = {}
+        # Record what was actually built, not what the CLI was asked for: the two
+        # differ wherever a ConvertConfig default has no flag (E0).
+        rec["pasn_beta"] = dict(cfg.pasn_beta or {})
+        rec["convert_cfg"] = cfg_snapshot(cfg)
         # Scope -> primitive kinds. "both" stays Stage 1 (GELU + LayerNorm) so the
         # recorded P0.4 rows keep their meaning; "all" is Stage 2, the whole
         # network, and is the only scope comparable to the paper's Table 3.
