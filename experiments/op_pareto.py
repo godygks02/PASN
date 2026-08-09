@@ -176,6 +176,25 @@ def _beta_table() -> dict:
 BETA = _beta_table()
 
 
+#: Primitives this sweep ties, matching what the converter actually ships.
+#: **Only the identity.** The other two positively homogeneous targets are both
+#: excluded for measured reasons, not oversight (E6, 2026-08-09):
+#:
+#: * ``inv`` -- tying needs ``f(from_key(t))`` to factorise in the *key*, and
+#:   ``ConvertConfig.pasn_beta = {"inv": 0.5}`` shifts that key. ``1/(t + 0.5)``
+#:   is not homogeneous in ``t``, so ``_build_tied`` raises (residual 4.2e-3 vs
+#:   tol 1e-3). ``beta`` and tying are **mutually exclusive here**, and ``beta``
+#:   is worth far more (MSE 25x, spikes 5.9x) than a storage-only saving.
+#: * ``invsqrt`` -- ties cleanly, but at conversion settings it buys 2x storage
+#:   (56 -> 28 B) for 1.19x spikes and 1.11x error on a primitive E11 measured at
+#:   **0.0%** of routed elements. Left off, and off in the converter too
+#:   (``pasn_invsqrt_tied=False``), so the two stay in step.
+#:
+#: Gating must be **per primitive**: ``attention`` and ``softmax`` also build
+#: ``exp2``, which is not homogeneous at all and would raise.
+TIED_PRIMS = frozenset({"identity"})
+
+
 def _binades(lo: float, hi: float, span: int,
              beta: float = 0.0) -> tuple[int, int]:
     """Router exponent range covering ``[lo, hi]`` with ``span`` binades.
@@ -209,6 +228,7 @@ def pasn(name: str, domain: tuple[float, float], n: int, t: int, epochs: int,
     """
     beta = BETA.get(name, 0.0)
     e_min, e_max = _binades(*domain, span=span, beta=beta)
+    kw.setdefault("tied", name in TIED_PRIMS)
     key = (name, round(domain[0], 6), round(domain[1], 6), e_min, e_max, n, t,
            epochs, seed, beta, tuple(sorted(kw.items())))
     if key not in _PASN_CACHE:
@@ -241,13 +261,14 @@ def pasn_rule(name: str, domain: tuple[float, float], t: int | None,
     """
     beta = BETA.get(name, 0.0)
     e_min, e_max = _binades(*domain, span=span, beta=beta)
+    tied = name in TIED_PRIMS
     key = ("rule", name, round(domain[0], 6), round(domain[1], 6), e_min, e_max,
-           t, target_rel, epochs, seed, beta)
+           t, target_rel, epochs, seed, beta, tied)
     if key not in _PASN_CACHE:
         kw = {} if t is None else dict(t_fixed=t)
         _PASN_CACHE[key] = build_mbe_pasn(
             name, domain, e_min=e_min, e_max=e_max, budget="rule",
-            target="relative", target_rel=target_rel, beta=beta,
+            target="relative", target_rel=target_rel, beta=beta, tied=tied,
             epochs=epochs, seed=seed, **kw)
     return _PASN_CACHE[key]
 

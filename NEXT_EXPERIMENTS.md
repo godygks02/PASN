@@ -116,7 +116,7 @@ Each carries a measured opening:
 | **softmax→matmul fusion** | attention is 86.5% of spikes; the attention matrix is decoded to FP then re-encoded, a round trip priced at 6.3 spikes/activation (exp 10). **The layer profile now points here too**: `av_matmul` is the largest per-site error in the network and the only one that grows with depth | largest remaining energy target; **changes numerics → full re-eval** |
 | ~~**mantissa-prefix router**~~ ✅ **closed 2026-08-06** | ~~`1/x` is the one operator we lose~~ — diagnosed, fixed and defaulted. No new router was needed: `beta=0.5` puts the existing binade ladder on `x − 0.5`. See below. | **do not reopen as an energy item** |
 | **budget search where the router degenerates** | rule picks `(2,16)`=17.32 spikes where `(3,8)`=8.76 is *more* accurate — 1.98×, identical across 3 seeds | small change to `rule_budget` |
-| **tie the remaining homogeneous primitives** | tying reaches the identity only; `invsqrt` and `inv` are equally homogeneous and exp 4 already measured both at **208 params → 13** with accuracy unchanged. LayerNorm is 10.2% of the spike budget, softmax 37.9%. See below | storage only; **changes numerics → full re-eval**. Overlaps τ sharing — do not add the two |
+| ~~**tie the remaining homogeneous primitives**~~ ✅ **closed 2026-08-09 (E6)** | `inv` **cannot** be tied — `beta` shifts the routing key and `1/(t+0.5)` is not homogeneous in `t` (raises, residual 4.2e-3 vs tol 1e-3). `invsqrt` can, but buys 2× storage for 1.19× spikes and 1.11× error on a primitive at **0.0%** of routed elements. Both left off | **do not reopen.** Tying is identity-only by measurement, not oversight |
 | **τ sharing across banks** | the four state tensors per basis are **54–61% of stored bytes**, orthogonal to routing, and memory is our weakest axis (level with global MBE at 1.08×) | only route to a memory claim |
 
 **The `1/x` row, closed.** `[0.5, 1)` *is* one binade — the interval `frexp`
@@ -178,16 +178,25 @@ factorises out exactly as it does for `k = 1`. Exp 4 §4 verified all three at
 | invsqrt | 1.13e−2 / 208p | 1.16e−2 / **13p** |
 | inv | 2.75e−2 / 208p | 2.91e−2 / **13p** |
 
-**Why this looks closed but is not — an expired note, not a settled question.**
-Exp 4 §5 recorded *"`MBE_inv` is still unroutable: its argument is already the
-`[0.5,1)` mantissa, so tying works but there is one binade and no gain."* That
-was true when written and **stopped being true on 2026-08-06**, when `beta=0.5`
-re-anchored the ladder on `x − 0.5` and the banks began to partition — there are
-now banks to tie. `invsqrt` was never covered by that reasoning at all: `[0.5, 2)`
-is two binades, and it was left out of the tying path for no recorded reason.
+**⚠️ RESOLVED 2026-08-09 (E6) — and the reasoning above was wrong. Do not act on
+it.** This section previously argued that `beta=0.5` had *enabled* tying for
+`inv` ("the banks began to partition — there are now banks to tie"). That
+conflates two different properties. Tying needs `f(from_key(t))` to factorise in
+the **routing key**; `beta` shifts that key. `1/(t + 0.5)` is not homogeneous in
+`t`, so `_build_tied` **raises** — measured residual `4.21e-3` against a `1e-3`
+tolerance. **`beta` and tying are mutually exclusive for `inv`**, and `beta` is
+worth far more (MSE 25×, spikes 5.9×) than a storage-only saving. Partitioning is
+not homogeneity.
 
-Tying was measured **spike- and accuracy-free** on the identity, so this is a
-storage item, and it is not additive with the τ row above — `TiedBank` holds a
+`invsqrt` *does* tie (4 banks → 1 stored basis). But measured at conversion
+settings it is **not worth taking**: storage halves (56 → 28 B, 14 → 7 params)
+for **1.19× spikes and 1.11× relative error**, on a primitive E11 measured at
+**0.0%** of the network's routed elements — roughly 2.5% of stored bytes network
+wide, for a numerics change. Wired as `ConvertConfig.pasn_invsqrt_tied`,
+**default `False`** (verified bit-identical to the previous build).
+
+So tying stays **identity-only**, and that is now a measured decision rather than
+an oversight. It is not additive with the τ row above — `TiedBank` holds a
 *reference*, so a tied bank already shares its τ.
 
 **Related measurement gap — the op-level table understates PASN.**

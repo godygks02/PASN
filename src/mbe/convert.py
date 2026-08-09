@@ -367,6 +367,13 @@ class ConvertConfig:
     # while pasn's spikes drop 4.5%, and -10 / -14 buy nothing on any backend while
     # growing identity storage linearly. All backends share the value, so they stay
     # comparable; None falls back to pasn_e_min.
+    # ⚠️ "-10/-14 buy nothing" is **operating-point specific, not absolute** (E11b,
+    # 2026-08-09). The toy has short sequences, and the attention identity's
+    # concentration scales with 1/S: on real gpt2-medium operands at seq 256 the
+    # near-zero bank holds 97% of the mass and deeper routers *do* pay -- 1.4-1.8x
+    # on spikes and bytes both -- but only in the nrmse 5e-2..1e-2 band. The shipped
+    # point (target 1e-2, T=16) lands at 6.6e-2, where -6 is 2.4x cheaper, so -6
+    # stays. Revisit if this site's accuracy requirement tightens or ctx grows.
     pasn_id_e_min: int | None = -6
     pasn_n_local: int = 2            # mbe_pasn: MBE bases per binade bank (budget="fixed")
     # mbe_pasn budget policy. "rule" derives each bank's (N, T) from its own dynamic
@@ -395,6 +402,18 @@ class ConvertConfig:
     # MSE budget starves exactly the small operands, which is why a global MBE_Id
     # lands at 15-49% relative error on a real product (실험 10).
     pasn_id_tied: bool = True
+    # The LayerNorm rsqrt is *also* positively homogeneous (k = -1/2), so tying
+    # applies and was never wired -- but measured at conversion settings (E6,
+    # 2026-08-09) it is not worth taking: storage halves (56 -> 28 B, 14 -> 7
+    # params) at the cost of **1.19x spikes and 1.11x relative error**, on a
+    # primitive E11 measured at 0.0% of the network's routed elements. Network
+    # wide that is ~2.5% of stored bytes for a numerics change. Off by default;
+    # ``experiments/op_pareto.py`` keeps ``invsqrt`` out of ``TIED_PRIMS`` to
+    # match. The third homogeneous target, ``inv``, cannot be tied at all --
+    # ``pasn_beta`` shifts its routing key and ``1/(t + 0.5)`` is not homogeneous
+    # in ``t``, so ``_build_tied`` raises. beta and tying are mutually exclusive
+    # there and beta wins by far (MSE 25x, spikes 5.9x).
+    pasn_invsqrt_tied: bool = False
     # "auto" fits both alpha placements per bank and keeps the better, doubling
     # the build. "uniform" is the placement the routed residual wants.
     pasn_alpha_init: str = "auto"
@@ -674,7 +693,8 @@ def _build_replacement(kind, mod, slots, cfg: ConvertConfig, fit_device):
             # The rsqrt argument is the (parity-fixed) mantissa of the variance, not
             # a tensor we hold here, so it gets no measured weights.
             rsqrt = _routed_primitive(
-                "invsqrt", (0.5, 2.0), -2, 1, cfg, fit_device, n_near0=4
+                "invsqrt", (0.5, 2.0), -2, 1, cfg, fit_device, n_near0=4,
+                tied=cfg.pasn_invsqrt_tied,
             )
             id_dev = _routed_identity(dev_max, cfg, fit_device,
                                       sample=dev.abs().reshape(-1))
