@@ -116,6 +116,7 @@ Each carries a measured opening:
 | **softmax→matmul fusion** | attention is 86.5% of spikes; the attention matrix is decoded to FP then re-encoded, a round trip priced at 6.3 spikes/activation (exp 10). **The layer profile now points here too**: `av_matmul` is the largest per-site error in the network and the only one that grows with depth | largest remaining energy target; **changes numerics → full re-eval** |
 | ~~**mantissa-prefix router**~~ ✅ **closed 2026-08-06** | ~~`1/x` is the one operator we lose~~ — diagnosed, fixed and defaulted. No new router was needed: `beta=0.5` puts the existing binade ladder on `x − 0.5`. See below. | **do not reopen as an energy item** |
 | **budget search where the router degenerates** | rule picks `(2,16)`=17.32 spikes where `(3,8)`=8.76 is *more* accurate — 1.98×, identical across 3 seeds | small change to `rule_budget` |
+| **tie the remaining homogeneous primitives** | tying reaches the identity only; `invsqrt` and `inv` are equally homogeneous and exp 4 already measured both at **208 params → 13** with accuracy unchanged. LayerNorm is 10.2% of the spike budget, softmax 37.9%. See below | storage only; **changes numerics → full re-eval**. Overlaps τ sharing — do not add the two |
 | **τ sharing across banks** | the four state tensors per basis are **54–61% of stored bytes**, orthogonal to routing, and memory is our weakest axis (level with global MBE at 1.08×) | only route to a memory claim |
 
 **The `1/x` row, closed.** `[0.5, 1)` *is* one binade — the interval `frexp`
@@ -160,6 +161,54 @@ judge a primitive-level change by pinning the rest of the operator.** That desig
 answers "what do this primitive's spikes cost", when the question is "what does
 the operator cost at fixed accuracy". `experiments/inv_router_fix.py` (controlled,
 ~20 min) and `experiments/op_pareto.py --ops activation softmax --acts inv`.
+
+**Tying is on for the identity only — two eligible primitives are not using it.**
+`ConvertConfig.pasn_id_tied = True` is the default and **every** GPT-2 record
+carries `pasn_id_tied=True` (`gpt2_stage2_fixed`, `stride_sens`, both same-box
+decompositions), so the headline −0.14% is a tied number. But the flag reaches
+only `_routed_identity` (`convert.py:619`). `invsqrt` (`convert.py:676`) and `inv`
+(`convert.py:596`) are built without it, and both are positively homogeneous —
+`f(λx) = λ^k f(x)` with `k = −1/2` and `k = −1`, so the router's exponent
+factorises out exactly as it does for `k = 1`. Exp 4 §4 verified all three at
+`r=1e-3`, **208 params → 13**, accuracy unchanged:
+
+| | free banks | tied |
+|---|---|---|
+| identity | 1.17e−3 / 208p | 1.08e−3 / **13p** |
+| invsqrt | 1.13e−2 / 208p | 1.16e−2 / **13p** |
+| inv | 2.75e−2 / 208p | 2.91e−2 / **13p** |
+
+**Why this looks closed but is not — an expired note, not a settled question.**
+Exp 4 §5 recorded *"`MBE_inv` is still unroutable: its argument is already the
+`[0.5,1)` mantissa, so tying works but there is one binade and no gain."* That
+was true when written and **stopped being true on 2026-08-06**, when `beta=0.5`
+re-anchored the ladder on `x − 0.5` and the banks began to partition — there are
+now banks to tie. `invsqrt` was never covered by that reasoning at all: `[0.5, 2)`
+is two binades, and it was left out of the tying path for no recorded reason.
+
+Tying was measured **spike- and accuracy-free** on the identity, so this is a
+storage item, and it is not additive with the τ row above — `TiedBank` holds a
+*reference*, so a tied bank already shares its τ.
+
+**Related measurement gap — the op-level table understates PASN.**
+`experiments/op_pareto.py` never passes `tied=True` (`build_mbe_pasn` defaults it
+`False`) while the conversion path defaults it on, so the sweep's `pasn_rule` arm
+is *not* "the method as it actually is" for the identity-bearing ops, despite the
+docstring saying so. Its byte column is measured with tying off on exactly
+`fp_multiply` (0.06×), `layernorm` (0.13×) and `attention` (0.18×) — the three ops
+where tying applies. **This table is destined for the paper; it currently reports
+our own method's memory cost 3–16× too high on those rows.**
+
+The fix needs **per-primitive** gating, not an arm-wide flag: `attention` and
+`softmax` also build `exp2`, which is non-homogeneous, and `build_mbe_pasn` raises
+on it (`mbe_pasn.py:513`). Gate on `{identity, inv, invsqrt}` in `maker()`.
+Cost to re-measure the three ops: the new arm mirrors `pasn_rule` at **6 builds
+per op**, whose recorded fit time is 237 + 435 + 417 s ≈ **18 min**, and tied
+builds are cheaper still (one prototype fit instead of ~16 per-bank fits). The
+existing `mbe` / `pasn` / `pasn_rule_T` / `pasn_rule` records can be reused —
+bytes are the deterministic, environment-free axis (§4) — but **re-build one
+existing `pasn_rule` record and diff it first**; if it does not reproduce, re-run
+all four arms for the three ops (4901 s ≈ 82 min).
 
 ### 3 — P0.5 leftovers
 
