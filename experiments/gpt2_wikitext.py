@@ -229,6 +229,13 @@ def main():
                     help="pre-fix behaviour: drop blank lines before joining the "
                          "WikiText split (changes the token stream and inflates ppl)")
     ap.add_argument("--block", type=int, default=512)
+    ap.add_argument("--calib-offset", type=int, default=0, metavar="BLOCKS",
+                    help="start the 8-block calibration draw this many blocks into "
+                         "the train split (default 0 = the historical draw, so this "
+                         "reproduces every existing record bit-for-bit). E12 varies "
+                         "it to put an error bar on the headline. NOT a seed sweep: "
+                         "the build is deterministic, so the calibration batches are "
+                         "the only build-level variance source there is")
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--limit-blocks", type=int, default=None)
     ap.add_argument(
@@ -379,9 +386,21 @@ def main():
         tok = GPT2TokenizerFast.from_pretrained(args.model)
         model = GPT2LMHeadModel.from_pretrained(args.model).to(device).eval()
         ids = load_wikitext_ids(tok, "test", args.drop_blank_lines)
-        cids = load_wikitext_ids(tok, "train", args.drop_blank_lines)[: 64 * args.block]
+        # Calibration draw: 8 consecutive blocks of the train split. ``--calib-offset``
+        # slides the window; 0 is the historical draw, so every existing record is an
+        # offset-0 record. This is E12's knob and it is *not* a seed sweep -- the build
+        # is deterministic (``seed=0``/``7`` give identical state dicts), so the
+        # calibration batches are the only build-level variance source left.
+        start = args.calib_offset * args.block
+        need = start + 8 * args.block
+        cids = load_wikitext_ids(tok, "train",
+                                 args.drop_blank_lines)[: max(64 * args.block, need)]
+        if cids.numel() < need:
+            raise SystemExit(
+                f"--calib-offset {args.calib_offset} needs {need} train tokens, "
+                f"only {cids.numel()} available")
         calib = [cids[i:i + args.block].unsqueeze(0)
-                 for i in range(0, 8 * args.block, args.block)]
+                 for i in range(start, need, args.block)]
         block = args.block
 
     max_length = args.max_length or getattr(model.config, "n_positions", 1024)
@@ -479,6 +498,9 @@ def main():
         mbe_id_logsample=gl(args.mbe_id_logsample),
         n_basis_act=gl(args.n_basis_act), n_basis_ln=gl(args.n_basis_ln),
         epochs=args.epochs if converting else None, n_steps=args.n_steps,
+        # E0's lesson: a knob that can change the build must be in the record, or
+        # no future session can tell which draw a number came from.
+        block=args.block, calib_offset=args.calib_offset,
         # ``stride``/``ppl_ann``/``eval_ann_s`` are filled per stride at the end;
         # one record per evaluation point, all sharing this one build.
         eval_mode=args.eval_mode, ctx=max_length, stride=None,
