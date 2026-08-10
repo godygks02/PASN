@@ -129,7 +129,8 @@ def perplexity_sliding(model, ids, device, max_length, stride,
     return math.exp(nll_sum / max(ntok, 1))
 
 
-def load_wikitext_ids(tokenizer, split="test", drop_blank: bool = False):
+def load_wikitext_ids(tokenizer, split="test", drop_blank: bool = False,
+                      config: str | None = None):
     """Tokenised WikiText split.
 
     Defaults to the canonical recipe, ``"\\n\\n".join(ds["text"])`` with blank lines
@@ -137,13 +138,27 @@ def load_wikitext_ids(tokenizer, split="test", drop_blank: bool = False):
     Dropping blank lines (the previous behaviour, kept behind ``drop_blank``) changes the
     token stream and inflates perplexity, which is why our earlier GPT-2 baseline read
     34.52 where the literature reports the high 20s.
+
+    ``config`` selects the WikiText release (E3). Measured 2026-08-10, on the
+    **test** split:
+
+      wikitext-2-raw-v1     1,294,336 chars   0 <unk>       287,644 GPT-2 tokens
+      wikitext-103-raw-v1   1,294,336 chars   0 <unk>       287,644   (byte-identical)
+      wikitext-2-v1         1,260,798 chars   15,218 <unk>  297,300
+      wikitext-103-v1       1,285,113 chars   2,492 <unk>   286,657
+
+    All four hold the same 241,211 words -- the same documents. **In raw form the
+    -2 and -103 test splits are byte-identical**, so switching to -103 changes the
+    *calibration* corpus and nothing else. The word-level releases differ only
+    because ``<unk>`` is applied from a vocabulary built on each corpus's own
+    train split, and -2's train is 49x smaller (36,718 rows against 1,801,350).
     """
     from datasets import load_dataset
     # Use the canonical namespaced repository ID. The legacy shorthand
     # ``"wikitext"`` is resolved by some datasets releases to an invalid
     # ``hf://datasets/wikitext@...`` URI; recent huggingface_hub parsers require
     # repository IDs in ``namespace/name`` form.
-    ds = load_dataset(WIKITEXT_DATASET_ID, WIKITEXT_CONFIG, split=split)
+    ds = load_dataset(WIKITEXT_DATASET_ID, config or WIKITEXT_CONFIG, split=split)
     texts = (t for t in ds["text"] if t.strip()) if drop_blank else ds["text"]
     return tokenizer("\n\n".join(texts), return_tensors="pt").input_ids[0]
 
@@ -229,6 +244,15 @@ def main():
                     help="pre-fix behaviour: drop blank lines before joining the "
                          "WikiText split (changes the token stream and inflates ppl)")
     ap.add_argument("--block", type=int, default=512)
+    ap.add_argument("--dataset", default=WIKITEXT_CONFIG, metavar="CONFIG",
+                    help="WikiText release (E3). ⚠ In RAW form the -2 and -103 "
+                         "test splits are byte-identical (measured), so "
+                         "wikitext-103-raw-v1 changes only the CALIBRATION "
+                         "corpus -- it is not a different evaluation set. The "
+                         "word-level releases do differ, but only through <unk> "
+                         "(6.31%% of -2's test words against 1.03%% of -103's), "
+                         "which is what makes the paper's 22.34 and 22.65 two "
+                         "numbers for one set of documents")
     ap.add_argument("--calib-offset", type=int, default=0, metavar="BLOCKS",
                     help="start the 8-block calibration draw this many blocks into "
                          "the train split (default 0 = the historical draw, so this "
@@ -385,7 +409,8 @@ def main():
         from transformers import GPT2LMHeadModel, GPT2TokenizerFast
         tok = GPT2TokenizerFast.from_pretrained(args.model)
         model = GPT2LMHeadModel.from_pretrained(args.model).to(device).eval()
-        ids = load_wikitext_ids(tok, "test", args.drop_blank_lines)
+        ids = load_wikitext_ids(tok, "test", args.drop_blank_lines,
+                                config=args.dataset)
         # Calibration draw: 8 consecutive blocks of the train split. ``--calib-offset``
         # slides the window; 0 is the historical draw, so every existing record is an
         # offset-0 record. This is E12's knob and it is *not* a seed sweep -- the build
@@ -393,8 +418,8 @@ def main():
         # calibration batches are the only build-level variance source left.
         start = args.calib_offset * args.block
         need = start + 8 * args.block
-        cids = load_wikitext_ids(tok, "train",
-                                 args.drop_blank_lines)[: max(64 * args.block, need)]
+        cids = load_wikitext_ids(tok, "train", args.drop_blank_lines,
+                                 config=args.dataset)[: max(64 * args.block, need)]
         if cids.numel() < need:
             raise SystemExit(
                 f"--calib-offset {args.calib_offset} needs {need} train tokens, "
@@ -501,6 +526,7 @@ def main():
         # E0's lesson: a knob that can change the build must be in the record, or
         # no future session can tell which draw a number came from.
         block=args.block, calib_offset=args.calib_offset,
+        dataset=args.dataset,
         # ``stride``/``ppl_ann``/``eval_ann_s`` are filled per stride at the end;
         # one record per evaluation point, all sharing this one build.
         eval_mode=args.eval_mode, ctx=max_length, stride=None,
