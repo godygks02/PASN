@@ -23,8 +23,19 @@ never seen this project should be able to act from this file alone.
 >
 > **Timestep curve on this build** (E1, 4/4 done 08-10, `results/freeze_e1.json`):
 > `T=16` −0.187% · `T=8` +0.062% · `T=4` +2.137% · `T=2` **+60.97%**, at
-> 1.00 / 3.25 / 5.44 / 9.52× fewer spikes. **Operating point is `T=8`.** Write it
-> as *"degrades gracefully to T=4 and breaks at T=2"*, **not** "we don't break".
+> 1.00 / 3.25 / 5.44 / 9.52× fewer spikes. **Operating point is `T=8`.**
+>
+> **Table 4's axis is `T = 8, 10, 12, 16`** — pinned 2026-08-10 from the PDF; it
+> was nearly *inferred* as 2/4/8/16, which would have made the whole comparison
+> table wrong. **The paper never measures `T=4` or `T=2`.** At `T=8`, its lowest
+> point, GPT-2 goes to **41072** (ANN 22.65) and every other model in the table
+> collapses too (ViT-B 83.44→0.12, ViT-M 85.95→1.17, RoBERTa 89/91→50). We are at
+> **+0.062%** there. Corpus still differs (Wiki-103 vs Wiki-2 → E3).
+>
+> Write it as *"the paper is destroyed at the lowest `T` it reports and we are
+> lossless there"* — **not** "we don't break": we do, at `T=2`, which the paper
+> never measures. And never compare across `T` (their `T=16` vs our `T=4` is a
+> trade, not a result).
 
 > **The research log is NOT in git.** `PASN_vault/` is gitignored (Obsidian, local
 > only). Its index is `PASN_vault/60 - 연구일지/00 - 연구일지 인덱스.md`. If you are
@@ -50,7 +61,8 @@ Measured, all at the paper's own global `T=16`:
 | level | task | paper | PASN | status |
 |---|---|---|---|---|
 | network | GPT-2-medium × WikiText-2 | +1.57% | **−0.19%** | **frozen build**, operator set + T matched |
-| network | GPT-2-medium, reduced `T` | Tab. 4 (Wiki-103), **`T` mapping unverified** | T=8 **+0.06%** · T=4 **+2.14%** · T=2 **+60.97%** | ✅ 4/4 points; **claim narrowed** — graceful to T=4, **breaks at T=2** |
+| network | GPT-2-medium at `T=8` | **41072** — Tab. 4's *lowest* `T`, ANN 22.65 | **+0.062%** | ✅ `T` axis pinned 08-10 (8/10/12/16); corpus differs → E3 |
+| network | GPT-2-medium, `T=4` / `T=2` | *paper never measures these* | +2.14% / **+60.97%** | ✅ 4/4 points; **we break at T=2** |
 | network | RoBERTa-base × SST-2 | −1.09% | **+0.12%** | robust over 3 checkpoints |
 | network | RoBERTa-large × SST-2 | −0.25% | **−0.12%** | hardest cell, still ahead |
 | network | RoBERTa-base × MR | −0.44% | −0.73% … −0.10% | **undecidable** (see §3) |
