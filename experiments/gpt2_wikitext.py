@@ -130,7 +130,7 @@ def perplexity_sliding(model, ids, device, max_length, stride,
 
 
 def load_wikitext_ids(tokenizer, split="test", drop_blank: bool = False,
-                      config: str | None = None):
+                      config: str | None = None, max_rows: int | None = None):
     """Tokenised WikiText split.
 
     Defaults to the canonical recipe, ``"\\n\\n".join(ds["text"])`` with blank lines
@@ -159,7 +159,17 @@ def load_wikitext_ids(tokenizer, split="test", drop_blank: bool = False,
     # ``hf://datasets/wikitext@...`` URI; recent huggingface_hub parsers require
     # repository IDs in ``namespace/name`` form.
     ds = load_dataset(WIKITEXT_DATASET_ID, config or WIKITEXT_CONFIG, split=split)
-    texts = (t for t in ds["text"] if t.strip()) if drop_blank else ds["text"]
+    rows = ds["text"]
+    if max_rows is not None:
+        # Only a prefix of the train split is ever used for calibration, and
+        # wikitext-103's train is 540 MB against wikitext-2's 11 MB. Tokenising
+        # all of it to keep the first ~32k tokens costs minutes and gigabytes.
+        # Truncating at a row boundary is safe for the prefix: rows are joined on
+        # "\n\n" and GPT-2 pre-tokenises on whitespace, so no merge crosses the
+        # cut -- and the cut sits tens of thousands of tokens past the slice the
+        # caller keeps. Verified token-identical on the default config.
+        rows = rows[:max_rows]
+    texts = (t for t in rows if t.strip()) if drop_blank else rows
     return tokenizer("\n\n".join(texts), return_tensors="pt").input_ids[0]
 
 
@@ -253,6 +263,13 @@ def main():
                          "(6.31%% of -2's test words against 1.03%% of -103's), "
                          "which is what makes the paper's 22.34 and 22.65 two "
                          "numbers for one set of documents")
+    ap.add_argument("--calib-max-rows", type=int, default=20000, metavar="ROWS",
+                    help="read at most this many train rows before tokenising. "
+                         "Calibration only ever uses the first ~32k tokens (~440 "
+                         "rows), so this is pure waste avoidance -- and it is what "
+                         "makes wikitext-103 usable at all, whose train split is "
+                         "540 MB against wikitext-2's 11 MB. Verified "
+                         "token-identical to reading every row")
     ap.add_argument("--calib-offset", type=int, default=0, metavar="BLOCKS",
                     help="start the 8-block calibration draw this many blocks into "
                          "the train split (default 0 = the historical draw, so this "
@@ -419,7 +436,9 @@ def main():
         start = args.calib_offset * args.block
         need = start + 8 * args.block
         cids = load_wikitext_ids(tok, "train", args.drop_blank_lines,
-                                 config=args.dataset)[: max(64 * args.block, need)]
+                                 config=args.dataset,
+                                 max_rows=args.calib_max_rows,
+                                 )[: max(64 * args.block, need)]
         if cids.numel() < need:
             raise SystemExit(
                 f"--calib-offset {args.calib_offset} needs {need} train tokens, "
