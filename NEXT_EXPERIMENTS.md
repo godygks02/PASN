@@ -69,7 +69,7 @@ Measured, all at the paper's own global `T=16`:
 | operator | Table XI firing rates | 7 primitives | **6/7 at 2.2–10.3× fewer spikes** | cross-model caveat |
 | operator | whole-op iso-accuracy | — | **10/10 on spikes, 1.23–5.39×** | ✅ recomputed with tying on (E6 §9) |
 | function | Table X MSE vs N | per-function | reproduced and beaten | clean |
-| recipe | ΔPPL across stride 1024/512/256 | recipe unstated | −0.140 … +0.058% | 🔴 **measured on the no-beta build** |
+| recipe | ΔPPL across stride 1024/512/256 | recipe unstated | **−0.181 … +0.057%** (band 0.238 pp) | ✅ **on the frozen build** (E13) |
 | depth | per-layer error, 24 blocks | — | shared fits hold; error saturates | closed |
 
 Budget-rule decomposition on GPT-2 (Stage 2): the value is in `N_j`
@@ -115,19 +115,27 @@ characterisation that makes the SST-2 claim safe.
 
 ## 3. Ranked: what is actually left
 
-### 1 — GPT-2 evaluation-recipe sensitivity · 🔴 **REGRESSED 2026-08-10**
+### ~~1 — GPT-2 evaluation-recipe sensitivity~~ ✅ **RECOVERED 2026-08-11 (E13)**
 
-> **The sweep below is real, but it was run on the `--no-pasn-beta` build.** E0
-> froze the *beta* build as the paper build, and that build has **one stride
-> point** (1024, −0.187%). Until E13 adds a second, write the claim as
-> **"measurably lossless at stride 1024"**, not "under every recipe".
+> **Re-measured on the frozen build** — 3 strides, one build, one box, 13.1 h GPU
+> (`results/e13_stride.json`):
 >
-> Risk is low — the two builds differ by 0.0476 pp at the same stride against a
-> 0.197 pp recipe band, so a roughly uniform shift keeps the sign-flip point
-> (stride 256, +0.058%) inside at +0.011%. **That is an estimate, not a
-> measurement**, and this project has closed things on estimates before and been
-> wrong (`1/x`, twice). Cost to fix: **stride 512 alone ≈ 5 h GPU**; 512+256
-> ≈ 12 h. See `PAPER_PLAN.md` §E13.
+> | stride | ANN | no-beta | **frozen** | gap |
+> |---:|---:|---:|---:|---:|
+> | 1024 | 21.7058 | −0.1397% | **−0.1809%** | 0.0413 pp |
+> | 512 | 18.4629 | −0.0302% | **−0.0321%** | 0.0019 pp |
+> | 256 | 18.0806 | +0.0578% | **+0.0573%** | 0.0006 pp |
+>
+> Band **0.2382 pp**, worst magnitude **0.181%**, margin over the paper's +1.57%
+> **1.75 pp**, band 13.6% of that margin — the same picture the no-beta sweep
+> gave (13%). **The claim holds on the build we ship.**
+>
+> Two things the re-measure changed. **The build gap is not a constant offset**:
+> 0.0413 pp at stride 1024 but 0.0019 / 0.0006 pp at 512 / 256, below the
+> 0.0064 pp box-to-box noise floor — so the estimate this section used to carry
+> ("a roughly uniform shift puts 256 at +0.011%") was wrong, and 256 landed at
+> +0.0573% instead. **And the sign still flips at 256**, so write **"measurably
+> lossless under every recipe"**, never "−0.18% is an improvement".
 
 ### (the sweep, on the no-beta build) ✅ **done 2026-08-04**
 
