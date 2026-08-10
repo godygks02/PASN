@@ -13,8 +13,9 @@ never seen this project should be able to act from this file alone.
 > | tag / file | `freeze-t16-unif` / `results/freeze_e1.json` | `stride-sens-s1024` |
 > | `pasn_beta` | `{"inv": 0.5}` | `{}` (unrecorded at the time) |
 > | bytes / params | **53,888 / 13,472** | ~~49,952 / 12,488~~ |
-> | **ΔPPL** @ stride 1024 | **−0.19%** | ~~−0.14%~~ |
-> | margin over paper's +1.57% | **1.76 pp** | ~~1.71 pp~~ |
+> | **ΔPPL** @ stride 1024 | **−0.18%** (two runs: −0.1873 / −0.1809) | ~~−0.14%~~ |
+> | margin over paper's +1.57% | **1.75 pp** | ~~1.71 pp~~ |
+> | recipe band (3 strides) | **0.238 pp**, worst \|ΔPPL\| **0.181%** | ~~0.197 pp~~ |
 >
 > **`−0.14%`, `49,952` and `12,488` now belong to the `--no-pasn-beta` build
 > only.** Where a no-beta result must still be cited (the stride sweep, the Stage
