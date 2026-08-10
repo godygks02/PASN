@@ -155,6 +155,21 @@ def main():
     ap.add_argument("--no-share-fits", action="store_true",
                     help="fit every site separately. The control arm: if the "
                          "depth profile flattens under this, sharing is the cause")
+    # E2 needs the global-MBE arm profiled at the capacity that actually diverged,
+    # not at ConvertConfig's defaults -- P0.4's matched arms carry
+    # ``mbe_readout_order=2`` while the default is 1, so leaving these unplumbed
+    # would profile a *weaker* baseline than the one under investigation.
+    ap.add_argument("--n-basis-act", type=int, default=None,
+                    help="global-MBE bases on the activation (P0.4 matched: 4 or 6)")
+    ap.add_argument("--n-basis-ln", type=int, default=None,
+                    help="global-MBE bases on LayerNorm (P0.4 matched: 6 or 8)")
+    ap.add_argument("--mbe-readout-order", type=int, default=None,
+                    help="global-MBE readout order. ⚠ trap 8: this does NOT reach "
+                         "the signed activation handler, so GELU stays order 1 "
+                         "however this is set -- that is part of what E2 is for")
+    ap.add_argument("--mbe-id-logsample", action="store_true",
+                    help="draw the global identity's calibration log-uniformly")
+    ap.add_argument("--tag", default=None, help="label stored with the record")
     ap.add_argument("--json", default="results/layer_error_profile.json")
     args = ap.parse_args()
 
@@ -231,11 +246,22 @@ def main():
           f"({len(ann_site_in)} shared-fit sites)", flush=True)
 
     # ---------------------------------------------------------------- build
+    _dflt = cv.ConvertConfig()
     cfg = cv.ConvertConfig(epochs=args.epochs, backend=args.backend,
                            spike_mult=True,
                            pasn_t_fixed=args.pasn_t_fixed,
                            pasn_id_target=args.pasn_id_target,
                            pasn_id_target_rel=args.pasn_id_target_rel,
+                           n_basis_act=(args.n_basis_act
+                                        if args.n_basis_act is not None
+                                        else _dflt.n_basis_act),
+                           n_basis_ln=(args.n_basis_ln
+                                       if args.n_basis_ln is not None
+                                       else _dflt.n_basis_ln),
+                           mbe_readout_order=(args.mbe_readout_order
+                                              if args.mbe_readout_order is not None
+                                              else _dflt.mbe_readout_order),
+                           mbe_id_logsample=args.mbe_id_logsample,
                            share_fits=not args.no_share_fits,
                            verbose_fits=False)
     t0 = time.perf_counter()
@@ -375,7 +401,11 @@ def main():
     esc = [r for r in rows if r["outside_frac"] > 1e-6]
     print(f"\n=== inputs outside the fitted range: {len(esc)}/{len(rows)} sites ===")
     for r in sorted(esc, key=lambda r: -r["outside_frac"])[:12]:
-        print(f"  L{r['layer']:<3} {r['role']:<12} {r['outside_frac'] * 100:6.3f}%  "
+        # ``ln_f`` sits outside the block stack and has no layer index. It only
+        # reaches this loop when it escapes its fitted range, which no PASN run
+        # ever did -- so this formatted None until the global-MBE arm hit it.
+        lab = "L--" if r["layer"] is None else f"L{r['layer']}"
+        print(f"  {lab:<4} {r['role']:<12} {r['outside_frac'] * 100:6.3f}%  "
               f"seen [{r['seen_lo']:.3g},{r['seen_hi']:.3g}] "
               f"fitted [{r['fit_lo']:.3g},{r['fit_hi']:.3g}]")
     if not esc:
@@ -383,10 +413,16 @@ def main():
 
     out = dict(
         model=args.model if not args.smoke else "smoke",
+        tag=args.tag,
         backend=args.backend, scope=args.convert_ops,
         share_fits=cfg.share_fits, epochs=args.epochs,
         pasn_t_fixed=args.pasn_t_fixed, id_target=args.pasn_id_target,
         r=args.pasn_id_target_rel,
+        # E0's lesson: record the knobs that decide the build, not just the ones
+        # this script happens to have flags for.
+        n_basis_act=cfg.n_basis_act, n_basis_ln=cfg.n_basis_ln,
+        mbe_readout_order=cfg.mbe_readout_order,
+        mbe_id_logsample=cfg.mbe_id_logsample,
         seq_len=seq_len, n_seq=len(probes), n_layers=n_layers,
         build_s=build_s, total_s=time.perf_counter() - t_start,
         sites=rows, cumulative=cumulative,
