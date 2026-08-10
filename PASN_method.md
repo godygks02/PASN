@@ -371,13 +371,22 @@ reimplementation (§0). Our reimplementation is retained only as an *internal
 ablation* — the arm with routing removed — and its numbers are not quoted as a
 comparison to the literature.
 
-Three levels, all matched, all measured (2026-08-02):
+Three levels, all matched, all measured. **The network row is the frozen build**
+(E0, 2026-08-10 — `freeze-t16-unif`, `pasn_beta={"inv":0.5}`, 53,888 B /
+13,472 params / 339 primitives, ANN 21.7058 → SNN 21.6652 at stride 1024):
 
 | level | published | PASN | matching |
 |---|---|---|---|
-| **network** (Tab. 3, GPT-2-medium × WikiText-2) | **+1.57%** relative conversion loss | **−0.14%** | operator set verified identical (their Algorithm 1); global ``T=16`` both sides; PASN uses **fewer** bases |
+| **network** (Tab. 3, GPT-2-medium × WikiText-2) | **+1.57%** relative conversion loss | **−0.19%** | operator set verified identical (their Algorithm 1); global ``T=16`` both sides; PASN uses **fewer** bases |
+| **network** (Tab. 4, reduced timesteps) | 22.65 → **41072** at ``T=8`` | **+0.06%** at ``T=8`` | ⚠️ their row is WikiText-103, ours WikiText-2; ``T∈{4,2}`` still to run |
 | **operator** (Tab. XI, firing rates) | 7 primitives | **2.2–10.3x fewer spikes/element on 6 of 7** | ``T=16``; compared through ``T·η·N``, their own energy quantity |
 | **function** (Tab. X, MSE vs N) | per-function MSE | reproduced and beaten | no scope question at this level |
+
+> ⚠️ **``−0.14%`` is a superseded number.** It belongs to the ``--no-pasn-beta``
+> build (49,952 B / 12,488 params), which was the default until 2026-08-06. The
+> stride-sensitivity result — ΔPPL inside a 0.197 pp band across strides
+> 1024/512/256 — was measured on *that* build, so until E13 re-measures it here,
+> state losslessness **at stride 1024**, not "under every recipe".
 
 **Report ``T·η·N``, never the firing rate alone.** A routed bank holds far fewer
 ``(basis, timestep)`` slots, so it fires a *larger fraction* of a much smaller

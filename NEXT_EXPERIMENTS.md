@@ -1,7 +1,30 @@
 # What to run next — cold-start brief
 
-Written 2026-08-03, updated 2026-08-04. Self-contained: a session that has never
-seen this project should be able to act from this file alone.
+Written 2026-08-03, **updated 2026-08-10**. Self-contained: a session that has
+never seen this project should be able to act from this file alone.
+
+> ### ⛔ Read this before quoting any GPT-2 number
+>
+> **The build is frozen (E0, 2026-08-10) and it is the `pasn_beta={"inv":0.5}`
+> build.** Its fingerprint and headline:
+>
+> | | frozen paper build | ~~old headline~~ |
+> |---|---|---|
+> | tag / file | `freeze-t16-unif` / `results/freeze_e1.json` | `stride-sens-s1024` |
+> | `pasn_beta` | `{"inv": 0.5}` | `{}` (unrecorded at the time) |
+> | bytes / params | **53,888 / 13,472** | ~~49,952 / 12,488~~ |
+> | **ΔPPL** @ stride 1024 | **−0.19%** | ~~−0.14%~~ |
+> | margin over paper's +1.57% | **1.76 pp** | ~~1.71 pp~~ |
+>
+> **`−0.14%`, `49,952` and `12,488` now belong to the `--no-pasn-beta` build
+> only.** Where a no-beta result must still be cited (the stride sweep, the Stage
+> 2 originals), name the build. Every record written since 08-09 carries all 37
+> `ConvertConfig` fields in `convert_cfg` — check it against the row above.
+>
+> **Timestep curve on this build** (E1, 4/4 done 08-10, `results/freeze_e1.json`):
+> `T=16` −0.187% · `T=8` +0.062% · `T=4` +2.137% · `T=2` **+60.97%**, at
+> 1.00 / 3.25 / 5.44 / 9.52× fewer spikes. **Operating point is `T=8`.** Write it
+> as *"degrades gracefully to T=4 and breaks at T=2"*, **not** "we don't break".
 
 > **The research log is NOT in git.** `PASN_vault/` is gitignored (Obsidian, local
 > only). Its index is `PASN_vault/60 - 연구일지/00 - 연구일지 인덱스.md`. If you are
@@ -26,18 +49,35 @@ Measured, all at the paper's own global `T=16`:
 
 | level | task | paper | PASN | status |
 |---|---|---|---|---|
-| network | GPT-2-medium × WikiText-2 | +1.57% | **−0.14%** | operator set + T matched, verified |
+| network | GPT-2-medium × WikiText-2 | +1.57% | **−0.19%** | **frozen build**, operator set + T matched |
+| network | GPT-2-medium, reduced `T` | Tab. 4 (Wiki-103), **`T` mapping unverified** | T=8 **+0.06%** · T=4 **+2.14%** · T=2 **+60.97%** | ✅ 4/4 points; **claim narrowed** — graceful to T=4, **breaks at T=2** |
 | network | RoBERTa-base × SST-2 | −1.09% | **+0.12%** | robust over 3 checkpoints |
 | network | RoBERTa-large × SST-2 | −0.25% | **−0.12%** | hardest cell, still ahead |
 | network | RoBERTa-base × MR | −0.44% | −0.73% … −0.10% | **undecidable** (see §3) |
 | operator | Table XI firing rates | 7 primitives | **6/7 at 2.2–10.3× fewer spikes** | cross-model caveat |
+| operator | whole-op iso-accuracy | — | **10/10 on spikes, 1.23–5.39×** | ✅ recomputed with tying on (E6 §9) |
 | function | Table X MSE vs N | per-function | reproduced and beaten | clean |
-| recipe | ΔPPL across stride 1024/512/256 | recipe unstated | **−0.140 … +0.058%** | the assumption is closed |
+| recipe | ΔPPL across stride 1024/512/256 | recipe unstated | −0.140 … +0.058% | 🔴 **measured on the no-beta build** |
 | depth | per-layer error, 24 blocks | — | shared fits hold; error saturates | closed |
 
 Budget-rule decomposition on GPT-2 (Stage 2): the value is in `N_j`
-(**2.392×** spikes, **2.55×** storage); `T_j` is only **1.065×** and free in
-storage. Attention is **86.5%** of the spike budget — activations are 3.3%.
+(**2.4–2.55×** spikes, **2.55×** storage); `T_j` is only **1.065×** and free in
+storage.
+
+**Spike budget by operator — always name the arm** (E0, 2026-08-10). The
+often-quoted "attention is 86.5%" is the *per-bank `T_j`* arm. The headline
+build runs at global `T=16`, where the split is different:
+
+| arm | matmul | softmax | LN | activation | attention |
+|---|---:|---:|---:|---:|---:|
+| per-bank `T_j` (`s2fix-rel-1e-2`) | 48.6% | 37.9% | 10.2% | **3.3%** | **86.5%** |
+| **global `T=16` = frozen build** | 48.3% | 33.5% | 10.0% | **8.1%** | **81.8%** |
+| `T=8` alloc (`e1-t8-alloc`) | 21.7% | 39.2% | 29.6% | 9.6% | 60.9% |
+
+The rule gives activation tails `T≈3`; forcing `T=16` raises exactly that
+(`act_spikes_per_input` 1.52 → 3.82). So the ceiling on activation+LayerNorm
+work is **1.22×** at the headline operating point, not 1.16×. Direction is
+unchanged — attention is still the largest item and fusion is still the target.
 
 ---
 
@@ -63,7 +103,21 @@ characterisation that makes the SST-2 claim safe.
 
 ## 3. Ranked: what is actually left
 
-### ~~1 — GPT-2 evaluation-recipe sensitivity~~ ✅ **done 2026-08-04**
+### 1 — GPT-2 evaluation-recipe sensitivity · 🔴 **REGRESSED 2026-08-10**
+
+> **The sweep below is real, but it was run on the `--no-pasn-beta` build.** E0
+> froze the *beta* build as the paper build, and that build has **one stride
+> point** (1024, −0.187%). Until E13 adds a second, write the claim as
+> **"measurably lossless at stride 1024"**, not "under every recipe".
+>
+> Risk is low — the two builds differ by 0.0476 pp at the same stride against a
+> 0.197 pp recipe band, so a roughly uniform shift keeps the sign-flip point
+> (stride 256, +0.058%) inside at +0.011%. **That is an estimate, not a
+> measurement**, and this project has closed things on estimates before and been
+> wrong (`1/x`, twice). Cost to fix: **stride 512 alone ≈ 5 h GPU**; 512+256
+> ≈ 12 h. See `PAPER_PLAN.md` §E13.
+
+### (the sweep, on the no-beta build) ✅ **done 2026-08-04**
 
 The absolute perplexity moves 16.7% across strides (21.706 / 18.463 / 18.081)
 while ΔPPL stays inside a **0.197 pp band** (−0.140% / −0.030% / **+0.058%**),
@@ -152,8 +206,15 @@ spikes — it was imposing an **accuracy floor on the whole operator**. Lift it 
 softmax reaches the MBE front at a much cheaper build, so at matched accuracy:
 
 * isolated `1/x`: **0.85× → 5.39×**
-* the softmax operator: **1.88× → 6.41×**
+* the softmax operator: **1.88× → 6.41×** (arm `pasn`; on `pasn_rule` it is 4.23×)
 * PASN now wins **10/10 operators** on spikes; it was 9/10.
+
+> ⚠️ **Updated 2026-08-10 (E6 §9).** The often-quoted range **1.61–6.41×** picks
+> the *best arm per operator*. That is fine as a diagnostic — 실험 12's table
+> labels the arm on every row — but it is arm-shopping in a paper, where "the
+> method" reads as one configuration. Recomputed on **`pasn_rule` alone** (what
+> the conversion path actually builds) and with E6's tying on: **10/10 operators,
+> `1.23–5.39×`**, winners' median 3.27×. Bytes remain **0/10**.
 
 So it *is* an energy result; it just arrives through accuracy rather than through
 the reciprocal's own spikes. **The general lesson is the one worth keeping: never
@@ -165,7 +226,8 @@ the operator cost at fixed accuracy". `experiments/inv_router_fix.py` (controlle
 **Tying is on for the identity only — two eligible primitives are not using it.**
 `ConvertConfig.pasn_id_tied = True` is the default and **every** GPT-2 record
 carries `pasn_id_tied=True` (`gpt2_stage2_fixed`, `stride_sens`, both same-box
-decompositions), so the headline −0.14% is a tied number. But the flag reaches
+decompositions), so the headline (−0.14% then, **−0.19%** on the frozen build)
+is a tied number. But the flag reaches
 only `_routed_identity` (`convert.py:619`). `invsqrt` (`convert.py:676`) and `inv`
 (`convert.py:596`) are built without it, and both are positively homogeneous —
 `f(λx) = λ^k f(x)` with `k = −1/2` and `k = −1`, so the router's exponent
@@ -199,7 +261,18 @@ So tying stays **identity-only**, and that is now a measured decision rather tha
 an oversight. It is not additive with the τ row above — `TiedBank` holds a
 *reference*, so a tied bank already shares its τ.
 
-**Related measurement gap — the op-level table understates PASN.**
+**~~Related measurement gap — the op-level table understates PASN.~~ ✅ CLOSED
+2026-08-10 (E6 + its §9 follow-up).** Per-primitive gating (`TIED_PRIMS =
+{"identity"}`) landed, the three ops were re-swept into
+`results/op_pareto_tied.json`, and `experiments/op_pareto_merge.py` folded them
+back with the `mbe` arm as a bit-identical control (45 builds × 9 fields).
+Bytes improved 1.7–2.7× on those rows (`fp_multiply` 0.06→0.11×, `layernorm`
+0.13→0.22×, `attention` 0.18→0.32×) but are **still losses on `pasn_rule`** —
+the memory axis stays 0/10 there. Merged artefacts:
+`results/op_pareto_merged.json`, `_wins.md`, `op_pareto_merged.md`.
+**The original text follows, for provenance.**
+
+**(original) Related measurement gap — the op-level table understates PASN.**
 `experiments/op_pareto.py` never passes `tied=True` (`build_mbe_pasn` defaults it
 `False`) while the conversion path defaults it on, so the sweep's `pasn_rule` arm
 is *not* "the method as it actually is" for the identity-bearing ops, despite the
