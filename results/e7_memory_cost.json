@@ -1,0 +1,85 @@
+{
+ "sites": 339,
+ "total_elements": 481714688,
+ "params_per_basis": 7.353711790393013,
+ "mean_switch_prob": 0.48345905167416303,
+ "pasn_param_reads": 5557461453.8689995,
+ "pasn_state_accesses": 36275306592.0,
+ "mbe_param_reads": 0.0,
+ "mbe_state_accesses": 175314763776.0,
+ "pasn_bytes": 53888,
+ "mbe_bytes": 38148,
+ "access_pj": {
+  "register": 0.1,
+  "sram_8kb": 10.0,
+  "sram_64kb": 20.0
+ },
+ "dram_pj": 640.0,
+ "rows": [
+  {
+   "dataflow": "element-stationary",
+   "access": "register",
+   "access_pj": 0.1,
+   "pasn_pj": 1.1536832054971509,
+   "mbe_pj": 0.0,
+   "ratio": 0.0,
+   "pasn_overhead_vs_compute": 0.01785765247205286
+  },
+  {
+   "dataflow": "element-stationary",
+   "access": "sram_8kb",
+   "access_pj": 10.0,
+   "pasn_pj": 115.3683205497151,
+   "mbe_pj": 0.0,
+   "ratio": 0.0,
+   "pasn_overhead_vs_compute": 1.785765247205286
+  },
+  {
+   "dataflow": "element-stationary",
+   "access": "sram_64kb",
+   "access_pj": 20.0,
+   "pasn_pj": 230.7366410994302,
+   "mbe_pj": 0.0,
+   "ratio": 0.0,
+   "pasn_overhead_vs_compute": 3.571530494410572
+  },
+  {
+   "dataflow": "tensor-stationary",
+   "access": "register",
+   "access_pj": 0.1,
+   "pasn_pj": 8.684137953017743,
+   "mbe_pj": 36.39390040272138,
+   "ratio": 4.190847796248386,
+   "pasn_overhead_vs_compute": 0.13442019164830282
+  },
+  {
+   "dataflow": "tensor-stationary",
+   "access": "sram_8kb",
+   "access_pj": 10.0,
+   "pasn_pj": 868.4137953017743,
+   "mbe_pj": 3639.3900402721374,
+   "ratio": 4.190847796248386,
+   "pasn_overhead_vs_compute": 13.442019164830283
+  },
+  {
+   "dataflow": "tensor-stationary",
+   "access": "sram_64kb",
+   "access_pj": 20.0,
+   "pasn_pj": 1736.8275906035485,
+   "mbe_pj": 7278.780080544275,
+   "ratio": 4.190847796248386,
+   "pasn_overhead_vs_compute": 26.884038329660566
+  }
+ ],
+ "paper_n": {
+  "mlp.act": 4,
+  "rsqrt": 8,
+  "id_dev": 8,
+  "id_istd": 8,
+  "idn": 8,
+  "idn2": 8,
+  "exp": 8,
+  "inv": 8
+ },
+ "source": "results/bank_usage_audit.json (E11, 339 sites)"
+}

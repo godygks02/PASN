@@ -80,7 +80,7 @@ version of the claim.
 | axis | who leads | our position |
 |---|---|---|
 | **Scale** | NLSpike ⓝ (8B-class × 4) | GPT-2-medium (345M) + RoBERTa. **We do not chase this.** E9 mitigates by showing one larger model does not break; it cannot close the gap, and following it hands over the frame. |
-| **Data movement** | NLSpike ⓝ (Table 3 claims in-core execution, zero movement) | **Unmeasured, and bank switching has worse locality than a global neuron.** E7 prices it. **Reported even if we lose.** |
+| **Data movement** | **contested — E7 priced it 2026-08-10** | Bank switching really does break locality: **48.3%** of consecutive elements switch banks. But a site's whole bank set is **under 1 KB** (median 88 B), so the switch is a register/L0 read, and the cost is **1.8% of compute energy** in the dataflow where we lose outright. In the other bracket routing **wins 4.19×**, because state traffic scales with *active* bases (1.57 vs 7.58). **Neither method touches DRAM** — 52.6 KB and 37.3 KB both sit on-chip, so "zero data movement" ⓝ is a claim about SRAM access counts, not off-chip traffic, and there the metric is active bases. ⚠️ A model, not a measurement; NLSpike's own numbers were not reproduced. |
 | **NLU coverage** | NLSpike ⓝ (MR / SST-2 / Subj / SST-5) | SST-2 at both sizes; MR is **undecidable** across checkpoints; SST-5 / Subj have no usable public base fine-tune. Reported as an absence, not filled quietly. |
 | **Identity storage** | MBE (fixed, shared network-wide — G.1) | Our tied identity **matches rather than beats it.** The 1.99× tying saving is against our own untied build. |
 | **Parameter count** | MBE, on the reading its own appendix supports (5,929 vs our 13,472) | We report all three conventions and lose two. Parameters are not a headline claim. |
@@ -154,8 +154,9 @@ scope; it belongs in the ICML cycle if it happens at all.
 
 - [ ] **Re-verify every ⓝ against arXiv:2605.20289.** This document is written
       from a second-hand reading.
-- [ ] **E7** — price data movement. NLSpike claims zero ⓝ; we may lose and must
-      report it either way.
+- [x] ~~**E7** — price data movement.~~ Done 2026-08-10: we lose the worst-case
+      dataflow by 1.8% of compute, win the other bracket 4.19x, and neither
+      method needs DRAM. See the data-movement row above.
 - [ ] **E3** — corpus label on the low-`T` comparison (WikiText-103 vs -2).
 - [ ] Decide whether the orthogonality experiment (§5) is in the ICML scope.
 
