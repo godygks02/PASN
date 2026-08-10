@@ -1,0 +1,141 @@
+{
+ "inventory": [
+  {
+   "op": "activation",
+   "role": "mlp.act",
+   "n": 24,
+   "primitive": "gelu",
+   "paper_n": 4,
+   "polarity_split": true,
+   "is_identity": false,
+   "per_site": 49,
+   "subtotal": 1176
+  },
+  {
+   "op": "layernorm",
+   "role": "rsqrt",
+   "n": 49,
+   "primitive": "invsqrt",
+   "paper_n": 8,
+   "polarity_split": false,
+   "is_identity": false,
+   "per_site": 49,
+   "subtotal": 2401
+  },
+  {
+   "op": "layernorm",
+   "role": "id_dev",
+   "n": 49,
+   "primitive": "identity",
+   "paper_n": 8,
+   "polarity_split": false,
+   "is_identity": true,
+   "per_site": 49,
+   "subtotal": 2401
+  },
+  {
+   "op": "layernorm",
+   "role": "id_istd",
+   "n": 49,
+   "primitive": "identity",
+   "paper_n": 8,
+   "polarity_split": false,
+   "is_identity": true,
+   "per_site": 49,
+   "subtotal": 2401
+  },
+  {
+   "op": "matmul",
+   "role": "idn",
+   "n": 48,
+   "primitive": "identity",
+   "paper_n": 8,
+   "polarity_split": false,
+   "is_identity": true,
+   "per_site": 49,
+   "subtotal": 2352
+  },
+  {
+   "op": "matmul",
+   "role": "idn2",
+   "n": 48,
+   "primitive": "identity",
+   "paper_n": 8,
+   "polarity_split": false,
+   "is_identity": true,
+   "per_site": 49,
+   "subtotal": 2352
+  },
+  {
+   "op": "softmax",
+   "role": "exp",
+   "n": 24,
+   "primitive": "exp2",
+   "paper_n": 8,
+   "polarity_split": false,
+   "is_identity": false,
+   "per_site": 49,
+   "subtotal": 1176
+  },
+  {
+   "op": "softmax",
+   "role": "inv",
+   "n": 24,
+   "primitive": "inv",
+   "paper_n": 8,
+   "polarity_split": false,
+   "is_identity": false,
+   "per_site": 49,
+   "subtotal": 1176
+  },
+  {
+   "op": "softmax",
+   "role": "idn",
+   "n": 24,
+   "primitive": "identity",
+   "paper_n": 8,
+   "polarity_split": false,
+   "is_identity": true,
+   "per_site": 49,
+   "subtotal": 1176
+  }
+ ],
+ "total_sites": 339,
+ "identity_sites": 218,
+ "anchor_16611": 16611,
+ "pasn_params": 13472,
+ "pasn_bytes": 53888,
+ "pasn_params_no_sharing": 30023,
+ "paper_n": {
+  "gelu": 4,
+  "invsqrt": 8,
+  "exp2": 8,
+  "inv": 8,
+  "identity": 8
+ },
+ "conventions": {
+  "g1_identity_fixed": {
+   "label": "paper's G.1 as written -- identity has NO learnable parameters",
+   "mbe": 5929,
+   "pasn": 13472,
+   "ratio": 0.4400979809976247,
+   "pasn_wins": false
+  },
+  "identity_counted_learnable": {
+   "label": "identity counted as a learnable MBE neuron (the old reading)",
+   "mbe": 16611,
+   "pasn": 13472,
+   "ratio": 1.2330017814726841,
+   "pasn_wins": true
+  },
+  "neither_side_shares": {
+   "label": "neutral -- no cross-site sharing on either side",
+   "mbe": 16611,
+   "pasn": 30023,
+   "ratio": 0.5532758218698998,
+   "pasn_wins": false
+  }
+ },
+ "g1_quote": "To mitigate approximation errors in identity mapping, all learnable parameters in the MBE neuron are fixed as [20].",
+ "source": "paper appendix G.1 (p.13 image) + results/bank_usage_audit.json"
+}
