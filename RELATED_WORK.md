@@ -52,12 +52,19 @@ paper's global `N=4` costs **2.4–2.55× spikes and 2.55× storage** at unchang
 accuracy; the `T_j` half is only 1.065×. So "solved budget" is not a framing — it
 is the measured mechanism.
 
-**(b) The rule is insensitive to how it was calibrated (E12).** Across three
-disjoint calibration draws the fitted domains move by 3–4% (max 24%), and yet
-**all 19 recorded per-bank `(N_j, T_j)` decisions are identical**, storage is
-byte-identical, and spikes differ by 0.011%. The rule absorbs calibration noise
-because a 3–4% change in `Δ_j` is 0.05 of a bit inside `log₂` and never crosses a
-threshold. **A solved budget is reproducible in a way a tuned constant is not.**
+**(b) The rule is insensitive to how it was calibrated (E12, and then E3).**
+Across three disjoint calibration draws the fitted domains move by 3–4% (max
+24%), and yet **all 19 recorded per-bank `(N_j, T_j)` decisions are identical**,
+storage is byte-identical, and spikes differ by 0.011%. The rule absorbs
+calibration noise because a 3–4% change in `Δ_j` is 0.05 of a bit inside `log₂`
+and never crosses a threshold.
+
+**E3 then pushed the same test across corpora rather than within one.**
+Calibrating on WikiText-103's word-level train — a 49× larger corpus with `<unk>`
+substitution, a different token distribution entirely — still produced a
+**byte-identical build** (53,888 B / 13,472 params / 339 primitives) and spikes
+within **1.001×**. **A solved budget is reproducible in a way a tuned constant is
+not**, and that now holds across the calibration corpus, not just the draw.
 
 **(c) Hand-picking a global `N` is a fragile design, and the MBE paper's own
 numbers show why (E2).** Fitting error is **not monotone in `N`**: their Table X
@@ -108,8 +115,14 @@ will discount the axes we do win.
    `T=16`. NLSpike reports operator error and task accuracy ⓝ; MBE reports
    function MSE, firing rates and task.
 4. **A more sensitive metric.** Five-way accuracy has ±0.4pp of noise; perplexity
-   lets us argue about 0.19%, and we characterised the recipe sensitivity that
-   makes that argument legitimate.
+   lets us argue about 0.18%, and we characterised the recipe sensitivity that
+   makes that argument legitimate (band 0.238 pp across three strides, on the
+   build we ship).
+4b. **Both of Table 3's rows, at the paper's own `T=16`.** Wiki-2 **−0.181%**
+   against +1.57% (margin 1.75 pp) and Wiki-103 **−0.196%** against **+3.36%**
+   (margin **3.56 pp**, our largest — the paper loses that row by twice as much).
+   ⚠️ Absolute perplexity is not comparable in either row; only the relative loss
+   against each method's own ANN is.
 5. **Low-`T` behaviour, measured on the same axis as the baseline.** At `T=8` —
    the lowest timestep MBE reports — their GPT-2 goes to 41072 from an ANN of
    22.65, and every other model in their Table 4 collapses too (ViT-B 83.44 →
