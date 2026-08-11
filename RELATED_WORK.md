@@ -177,4 +177,4 @@ scope; it belongs in the ICML cycle if it happens at all.
 
 Sources: `PASN_vault/40 - Planning/논문 계획 - 타깃 벤뉴와 실험 로드맵.md` §1 and §4.3
 (NLSpike reading, 2026-08-04); `PASN_vault/50 - Reference/MBE 논문 published 설정과
-수치.md`; journals E1, E2, E5, E6, E11, E12; `results/RESULTS_2026-08-10.md`.
+수치.md`; journals E1, E2, E5, E6, E11, E12; `results/RESULTS_2026-08_cycle.md`.

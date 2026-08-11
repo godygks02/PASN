@@ -1,10 +1,25 @@
 # E13 → E4 → E3(b) queue — resume brief
 
-Written 2026-08-10, while the queue is running. Self-contained: a session that
+> ## ✅ ALL THREE FINISHED 2026-08-11. The box is shut down.
+>
+> Kept as the record of how the queue was run, and because §3–§5 are the
+> reusable parts. **Results and their interpretation live in
+> `results/RESULTS_2026-08_cycle.md`.**
+>
+> | run | result |
+> |---|---|
+> | E13 | band **0.2382 pp** (−0.1809 / −0.0321 / +0.0573%), worst 0.181%, margin 1.75 pp — **C6 recovered** |
+> | E4 | **negative** — S loses 7.73× spikes, 2.49× bytes, no cross-site sharing (1.00× vs 2.23×) |
+> | E3(b) | **−0.196%** against the paper's **+3.36%**, margin **3.56 pp** — Table 3's second row filled |
+>
+> Everything was pulled and committed before shutdown; the box held nothing
+> that is not in `results/`.
+
+Written 2026-08-10, while the queue was running. Self-contained: a session that
 has never seen this run should be able to finish and interpret it from here.
 
-**Box**: `ssh -p 36003 root@85.10.218.46` — RTX 5060 Ti, torch 2.12.0+cu130,
-112 vCPU. Everything lives in `~/pasn`.
+**Box** (gone): `ssh -p 36003 root@85.10.218.46` — RTX 5060 Ti, torch
+2.12.0+cu130, 112 vCPU. Everything lived in `~/pasn`.
 
 **Gate passed before anything else**: ANN `21.7058` at stride 1024, matching every
 prior box to four places. The stride 512 / 256 ANN references also reproduced the
@@ -119,4 +134,4 @@ resume, bring up a new box and repeat §1 — but **run the ANN gate first**
 records once, and nearly took the E1 sweep.
 
 Related: `PAPER_PLAN.md` §E13/§E4/§E3, `experiments/E1_RESUME.md` (same pattern),
-`results/RESULTS_2026-08-10.md`.
+`results/RESULTS_2026-08_cycle.md`.
