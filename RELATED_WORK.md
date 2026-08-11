@@ -24,7 +24,8 @@ copyrighted baseline PDF).
 | where it attaches | the conversion neuron | **post-hoc plugin** behind SpikeLLM / SpikeZIP | the conversion neuron |
 | capacity setting | **hand-set**: `N=4` (GELU/Tanh), `N=8` (others), `T=16` | **hand-set**: `H=5`, `K=64` | **solved per range**: `(N_j, T_j)` from a rule |
 | identity parameters | **fixed**, shared network-wide | LUT | tied prototype, shared network-wide |
-| models | ViT-B/M, RoBERTa, GPT-2-medium | LLaMA-3-8B, LLaMA-2-7B/13B, Mistral-7B, Qwen3-8B, SpikeZIP-BERT | GPT-2-medium, RoBERTa-base/large |
+| models | ViT-B/M, RoBERTa, GPT-2-medium | LLaMA-3-8B, LLaMA-2-7B/13B, Mistral-7B, Qwen3-8B, SpikeZIP-BERT | **ViT-B/16**, GPT-2-medium, RoBERTa-base/large |
+| modalities | CV + NLU + NLG | NLG + NLU ⓝ | **CV + NLU + NLG** |
 | evidence layers | function MSE, firing rates, task | operator error, task accuracy | **function → operator → network** |
 
 **Neither cites the other.** MBE does not appear in NLSpike (a full-text search
@@ -123,6 +124,14 @@ will discount the axes we do win.
    (margin **3.56 pp**, our largest — the paper loses that row by twice as much).
    ⚠️ Absolute perplexity is not comparable in either row; only the relative loss
    against each method's own ANN is.
+4c. **All three modalities, which NLSpike does not have.** CV is the axis they
+   skip: ViT-B/16 × ImageNet-1k over the full 50k validation set, **−0.020%**
+   against the paper's **−0.527%** (margin 0.51 pp). Together with the two NLG
+   rows and SST-2 at both sizes, the same neuron, rule and code cover **CV, NLU
+   and NLG** — the paper's own coverage, matched. ⚠️ Their ViT-M/16 and CNN rows
+   stay empty: those are timm models, whose inline attention and `torch.nn.GELU`
+   our markers do not reach. ⚠️ Our ViT checkpoint is 3.12 pp weaker than theirs,
+   so again only the relative loss is comparable.
 5. **Low-`T` behaviour, measured on the same axis as the baseline.** At `T=8` —
    the lowest timestep MBE reports — their GPT-2 goes to 41072 from an ANN of
    22.65, and every other model in their Table 4 collapses too (ViT-B 83.44 →

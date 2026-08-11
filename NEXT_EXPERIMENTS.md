@@ -69,6 +69,7 @@ Measured, all at the paper's own global `T=16`:
 | network | RoBERTa-base × MR | −0.44% | −0.73% … −0.10% | **undecidable** (see §3) |
 | operator | Table XI firing rates | 7 primitives | **6/7 at 2.2–10.3× fewer spikes** | cross-model caveat |
 | operator | whole-op iso-accuracy | — | **10/10 on spikes, 1.23–5.39×** | ✅ recomputed with tying on (E6 §9) |
+| **network** | **ViT-B/16 × ImageNet-1k (50k)** | **−0.527%** (Tab. 1) | **−0.020%** | ✅ **CV axis open (E8)** — ⚠️ their ViT-M/16 is timm, unreachable |
 | function | Table X MSE vs N | per-function | reproduced and beaten | clean |
 | recipe | ΔPPL across stride 1024/512/256 | recipe unstated | **−0.181 … +0.057%** (band 0.238 pp) | ✅ **on the frozen build** (E13) |
 | depth | per-layer error, 24 blocks | — | shared fits hold; error saturates | closed |
