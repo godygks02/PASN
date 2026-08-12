@@ -128,10 +128,12 @@ will discount the axes we do win.
    skip: ViT-B/16 × ImageNet-1k over the full 50k validation set, **−0.020%**
    against the paper's **−0.527%** (margin 0.51 pp). Together with the two NLG
    rows and SST-2 at both sizes, the same neuron, rule and code cover **CV, NLU
-   and NLG** — the paper's own coverage, matched. ⚠️ Their ViT-M/16 and CNN rows
-   stay empty: those are timm models, whose inline attention and `torch.nn.GELU`
-   our markers do not reach. ⚠️ Our ViT checkpoint is 3.12 pp weaker than theirs,
-   so again only the relative loss is comparable.
+   and NLG** — the paper's own coverage, matched. **Both of their ViT rows are
+   filled**: ViT-M/16, which is a timm model and needed its own markers
+   (`mbe.timm_convert`), comes in at **−0.0024%** against their **−0.745%**.
+   ⚠️ Absolute top-1 is not comparable in either row — our pipeline reads
+   0.8–1.0 pp below published across two models and two frameworks, so the gap
+   is ours, not the checkpoints'. ⚠️ Their CNN rows are still empty.
 5. **Low-`T` behaviour, measured on the same axis as the baseline.** At `T=8` —
    the lowest timestep MBE reports — their GPT-2 goes to 41072 from an ANN of
    22.65, and every other model in their Table 4 collapses too (ViT-B 83.44 →
