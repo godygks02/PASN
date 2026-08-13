@@ -262,6 +262,48 @@ separate designs, not mixed across regions), and per-region precision is handled
 separately by bit-width optimisation (MiniBit). Nothing is spiking; there are no
 timesteps.
 
+### ✅ The [20]–[35] sweep — the inversion that is actually ours (2026-08-13)
+
+FQA's survey chain was the most likely place a direct hit was hiding: if one of them
+allocates **capacity** per region from an error bound, differentiator 1 collapses to
+"spike-domain" alone. It does not happen, and the reason is structural.
+
+| ref | method | what adapts | capacity per region |
+|---|---|---|---|
+| **[24]** Lee TVLSI'09 | hierarchical splines | segment widths (powers of two) | **fixed** — degree-1 and degree-2 are *separate designs* |
+| **[25]** Sun TCAS-I'20 | universal PWL | *"self-adaptive capability to choose the **smallest number of segments** under the constraint of a controllable maximum absolute error"* | **fixed** (linear) |
+| **[26]** PLAC TVLSI'20 · **[29]** ML-PLAC'22 | PWL for all unary fns | bisection segment search | **fixed** (linear) |
+| **[28]** Lyu TVLSI'21 | FP logarithm | *"automatically segmented into several **maximal subsections** … with restrictions on predefined maximum absolute error"* | **fixed** (linear) |
+| **[30]** An, *Electronics*'21 | error-flattened segmenter | *"the segmenter **adaptively selects a minimum number of parabolas**"*; widen each segment until MAE binds | **fixed** (all parabolas) |
+| **[31]** QPA TVLSI'23 | quantization-aware PPA | fractional word lengths **per arithmetic unit** | **fixed** degree |
+
+**Full text read: [24], [30]** (plus [30]: `power of two` **0 hits**, `exponent` 2 hits
+both incidental — its boundaries are arbitrary, which is why this family needs LUT
+cascades ([23] Sasao) or leading-zero detectors ([24]) to find the segment at all).
+Read from abstract or from FQA's own description: [25], [26], [28], [29], [31].
+Not read: [20]–[22], [23], [27], [32]–[35].
+
+### 📌 The contribution, stated correctly at last — we **invert** the knob
+
+> **Every method in this literature fixes the approximation capacity and adapts the
+> region geometry. PASN fixes the region geometry and adapts the capacity.**
+
+They choose *where the boundaries go* at a globally fixed degree; we take the boundaries
+as given (binades — free to index off the exponent field) and vary **`(N_j, T_j)` per
+region**.
+
+**And the literature explains why nobody did it their way.** In fixed-point hardware,
+varying the polynomial degree per segment means variable-latency datapaths and several
+multiplier configurations — the reason [24] ships degree-1 and degree-2 as *separate
+designs* rather than mixing them. **In a spiking neuron that cost does not exist**: each
+bank already carries its own parameter table, so giving bank *j* its own basis count and
+timestep budget is free. **The transplant is not arbitrary — the cost structure that made
+per-region capacity variation unattractive in hardware is absent in the spike domain,
+and that is the whole reason the idea had to wait for this setting.**
+
+⚠️ This is an argument, not a measurement. What *is* measured is E14/E14b: strip the
+per-region capacity and the low-`T` collapse returns on both router axes.
+
 ### ✅ What survives full-text reading of both
 
 **Two of the three survive. The middle one is gone** (Lee et al., above).
@@ -339,10 +381,11 @@ likely place a direct hit is hiding**, since that is where per-region capacity i
 solved from an error bound), and NPE's segmentation reference [3]. Not searched:
 pre-2015 DSP/CORDIC, non-English sources, neuromorphic LUT work.
 
-🔴 **The next reading is [20]–[35], not more searching.** If one of them allocates
-*polynomial order* (not just boundaries) per region from an error bound, then
-differentiator 1 narrows to "spike-domain resource" alone. **Treat this as a first
-pass that closes the "we never looked" gap, not as a novelty clearance.**
+✅ **[20]–[35] swept 2026-08-13** — nobody in that chain varies capacity per region;
+they all vary geometry at fixed capacity, so **differentiator 1 survives and got
+sharper** (see the inversion section above). Still unread: **[20]–[23], [27],
+[32]–[35]**, and BBAL's full text. **Treat this as a first pass that closes the "we
+never looked" gap, not as a novelty clearance.**
 
 📌 Baseline provenance confirmed en route: MBE is **AAAI-26**
 (`ojs.aaai.org/index.php/AAAI/article/download/37195/41157`, arXiv:2508.07710).
