@@ -1,0 +1,21 @@
+[
+ {
+  "tag": "vit-t8-gate",
+  "task": "imagenet-1k",
+  "model": "vit_medium_patch16_reg4_gap_256",
+  "seed": 0,
+  "framework": "timm",
+  "backend": "none",
+  "scope": "all",
+  "device": "cuda",
+  "smoke": false,
+  "epochs": 300,
+  "batch_size": 64,
+  "limit": 2000,
+  "n_eval": 2000,
+  "calib_batches": 4,
+  "stage": null,
+  "started": "2026-08-13T01:59:58",
+  "acc_ann": 85.9
+ }
+]

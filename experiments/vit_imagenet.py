@@ -187,6 +187,12 @@ def main() -> None:
                     default=_DEF.pasn_id_target)
     ap.add_argument("--pasn-id-target-rel", type=float,
                     default=_DEF.pasn_id_target_rel)
+    ap.add_argument("--ann-acc", type=float, default=None, metavar="TOP1",
+                    help="reuse a known ANN top-1 instead of re-running the ANN "
+                         "pass (~3 h). Only valid when the checkpoint, eval set "
+                         "and preprocessing are unchanged -- the record is marked "
+                         "with acc_ann_reused=True so it can never be mistaken "
+                         "for a measurement.")
     ap.add_argument("--pasn-t-fixed", type=int, default=None,
                     help="force the paper's global T=16")
     ap.add_argument("--pasn-n-fixed", type=int, default=None)
@@ -256,9 +262,21 @@ def main() -> None:
                       else 2 if a.convert_ops in ("all", "attention") else 1),
                started=time.strftime("%Y-%m-%dT%H:%M:%S"))
 
-    acc_ann = None if a.build_only else top1(model, batches, device, "ANN")
+    if a.build_only:
+        acc_ann = None
+    elif a.ann_acc is not None:
+        # Reuse a previously measured ANN pass. The ANN is ~3 h of the ~11 h run and
+        # is identical across our low-`T` points -- only the SNN arm changes -- so
+        # re-measuring it per point buys nothing. Gate the box with
+        # ``--backend none --limit 2000`` instead of paying for the full sweep.
+        acc_ann = float(a.ann_acc)
+        rec["acc_ann_reused"] = True
+        print(f"ANN ({a.model}) top-1 = {acc_ann:.3f}  [REUSED via --ann-acc, "
+              f"not measured in this run]")
+    else:
+        acc_ann = top1(model, batches, device, "ANN")
     rec["acc_ann"] = acc_ann
-    if acc_ann is not None:
+    if acc_ann is not None and not a.ann_acc:
         print(f"ANN ({a.model}) top-1 = {acc_ann:.2f}")
 
     if a.backend != "none":

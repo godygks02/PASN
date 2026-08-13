@@ -1,0 +1,81 @@
+{
+ "geometry": {
+  "name": "vit_medium_patch16_reg4_gap_256",
+  "img": 256,
+  "patch": 16,
+  "depth": 12,
+  "dim": 512,
+  "heads": 8,
+  "mlp": 2048,
+  "prefix": 4,
+  "classes": 1000,
+  "patches": 256,
+  "source": "timm",
+  "tokens": 260
+ },
+ "ann_macs": {
+  "per_block": {
+   "qkv": 204472320,
+   "qk": 34611200,
+   "av": 34611200,
+   "proj": 68157440,
+   "fc1": 272629760,
+   "fc2": 272629760
+  },
+  "block": 887111680,
+  "total": 10746515456
+ },
+ "elements": {
+  "gelu": 6389760,
+  "exp2": 6489600,
+  "inv": 24960,
+  "ln_input_identity": 3194880,
+  "ln_inv_identity": 6240,
+  "invsqrt": 6240,
+  "attention_score": 830668800
+ },
+ "e_ann_pj": 49433971097.6,
+ "paper": {
+  "as_printed": {
+   "spikes": 1570492759.7998075,
+   "by_op": {
+    "gelu": 39074660.352,
+    "exp2": 48739491.839999996,
+    "inv": 14936.064,
+    "ln_input_identity": 14113701.888,
+    "ln_inv_identity": 38398.464,
+    "invsqrt": 25229.568,
+    "attention_score": 1468486341.6238077
+   },
+   "pj": 1413443483.8198268
+  },
+  "per_basis": {
+   "spikes": 2128239045.6238077,
+   "by_op": {
+    "gelu": 156298641.408,
+    "exp2": 389915934.71999997,
+    "inv": 119488.512,
+    "ln_input_identity": 112909615.104,
+    "ln_inv_identity": 307187.712,
+    "invsqrt": 201836.544,
+    "attention_score": 1468486341.6238077
+   },
+   "pj": 1915415141.0614269
+  }
+ },
+ "ours": {
+  "spikes": 297938929.15625,
+  "ops": {
+   "cmp": 1562738933.5004883,
+   "ac": 595877858.3125,
+   "mac": 113863276.9460907,
+   "poly": 16192093.60231018,
+   "router": 366967878.0,
+   "bitop": 61161313.0
+  },
+  "strict_pj": 2871280907.354334,
+  "paper_currency_pj": 268145036.240625
+ },
+ "record": "results/e8m_vit_medium.json",
+ "tag": "e8m-vitm16-t16"
+}

@@ -1,0 +1,48 @@
+[
+ {
+  "tag": "mr-base-t8",
+  "task": "mr",
+  "size": "base",
+  "dataset": [
+   "rotten_tomatoes",
+   null,
+   "test",
+   "text"
+  ],
+  "seed": 0,
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "model": "textattack/roberta-base-rotten_tomatoes",
+  "device": "cpu",
+  "smoke": false,
+  "epochs": 300,
+  "stage": 2,
+  "n_eval": 1066,
+  "started": "2026-08-13T02:05:12",
+  "acc_ann": 89.02439024390245,
+  "build_s": 680.627994599985,
+  "spikes_per_input": 419954.3473837209,
+  "by_kind": {
+   "layernorm": 121655059.0,
+   "matmul": 64492218.0,
+   "softmax": 18255008.0,
+   "activation": 84526306.0
+  },
+  "ops_per_input": {
+   "cmp": 2701446.8526382446,
+   "ac": 839908.6947674418,
+   "mac": 383235.8128314018,
+   "poly": 45554.956251621246,
+   "router": 1394646.0,
+   "bitop": 232441.0
+  },
+  "energy_pj_per_input": 6414838.930447024,
+  "stored_params": 6236,
+  "stored_bytes": 24944,
+  "n_primitives": 171,
+  "acc_snn": 88.18011257035647,
+  "delta_pp": -0.8442776735459745,
+  "delta_pct": -0.9483667017913685,
+  "paper_rel_pct": -0.43629041279785274
+ }
+]

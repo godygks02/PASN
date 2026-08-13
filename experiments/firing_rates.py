@@ -132,10 +132,16 @@ def main() -> None:
         print(f"{op:<26} {pap:11.2f}% {got:7.2f}%   "
               f"{pap_spk:18.2f} {got_spk:9.2f} {pap_spk / max(got_spk, 1e-9):7.2f}x"
               f"  {mine}")
-    print("\n  'spikes/elem' is T * eta * N -- the paper's own energy quantity,"
-          " with N from G.1\n  (4 for GELU, 8 elsewhere). ratio > 1 means we emit"
-          " fewer spikes for that op.\n  The rate columns are NOT comparable on"
-          " their own: our N_j is per bank, theirs is fixed.")
+    print("\n  'spikes/elem' is T * eta * B, B = basis count (G.1: 4 for GELU, 8"
+          " elsewhere).\n  ratio > 1 means we emit fewer spikes for that op. The"
+          " rate columns are NOT\n  comparable on their own: our N_j is per bank,"
+          " theirs is fixed.")
+    print("  ⚠ This is NOT 'the paper's own energy quantity' -- G.4's E_MBE ="
+          " T*eta*N*C*N_h\n    defines N as the number of TOKENS and contains no"
+          " basis count at all. The\n    quantity above is what Eq.(5)-(8) imply"
+          " (each basis has its own membrane,\n    threshold and Heaviside spike),"
+          " which charges MBE *more* than its own model\n    does. Report both"
+          " readings; see RELATED_WORK.md and PAPER_TABLE_COMPARISON.md §2.2.")
 
     extra = {k: v for k, v in sorted(ours.items()) if k not in
              {m for _, m, _ in PAPER_TABLE_XI.values()}}

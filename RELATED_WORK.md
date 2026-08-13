@@ -174,6 +174,181 @@ scope; it belongs in the ICML cycle if it happens at all.
 
 ---
 
+## 6b. Prior art on the routing mechanism — first pass, 2026-08-13
+
+**This was the open novelty question** (`PAPER_TABLE_COMPARISON.md` §6: *"지수/binade
+라우팅 선행연구 조사 안 됨"*). Six searches, first pass, **not exhaustive**. The
+finding is negative for the mechanism and it changes how the paper must be framed.
+
+### 🔴 Exponent/binade routing to per-range approximations is established prior art
+
+| source | what it does |
+|---|---|
+| **BBAL**, arXiv:2504.15721 (2025) | *"a segmented lookup table divides function values into segments based on **different exponents**, with lookups performed according to **mantissas** ... split into sub-tables based on the number of exponent bits"* (5 exponent bits → 2⁵×2 sub-tables). **This is exponent-field routing to per-range tables**, in a block-floating-point LLM accelerator. |
+| **US 11163533 / US20210019116A1** (FP exponential unit) | Describes as *existing* practice: *"for each binade/exponent value, the fraction is obtained by a single linear function (A·f+B)"*. Its own contribution is a **fixed** 6-segment scheme, so it is not adaptive-per-binade — but it confirms **per-binade parameters are prior practice.** |
+| **Transcendental function evaluation**, US 10725742 / 11099815 / 11733969 | Same family. |
+
+> **We cannot claim "read the IEEE-754 exponent to pick a range" as a contribution.**
+> It is a known hardware technique with patents.
+
+### 🔴 Non-uniform, error-driven segment allocation is also established
+
+| source | what it does |
+|---|---|
+| **NPE**, arXiv:2104.06535 (FPGA NLP overlay, BERT) | **Full text read 2026-08-13.** Non-uniform continuous piecewise-linear approximation, motivated **verbatim as we motivate ours**: *"functions like GELU(x) and √x which are nearly linear except for a very small nonlinear region near zero. Uniform segmentation would require **orders of magnitude more segments** than non-uniform"*. Segment boundaries come from *"one method for finding an **optimal partition** with non-uniform segmentation"* (their ref [3]). |
+| **FQA**, arXiv:2606.05627 (2026, VLSI) | **Full text read 2026-08-13.** Piecewise **polynomial** approximation for NAFs (Sigmoid/Tanh/KAN). Its "allocation" is **fractional word lengths of arithmetic units** (slope, intercept, multiplier, adder) — *precision per operator*, not capacity per input range. `spiking`: **0 hits**. `exponent`: only "grows exponentially" + a CORDIC citation. **Further from us than the abstract suggested.** |
+| the PPA segmentation literature FQA surveys ([20]–[35], ~16 refs) | **This is the real hit.** *"[25] adopts a sequential approach that starts from the end of each interval and **incrementally searches for the first point satisfying the MAE constraint**"*; *"[26] introduces a bisection method"* to accelerate it. **Determining per-region capacity from an error constraint is the standard practice of this field.** |
+
+> 🔴 **Two things we call contributions are prior art here.** The **GELU near-zero
+> diagnosis** is NPE, near-verbatim. And **"solve the capacity from an error
+> constraint instead of fixing it globally"** — which `§2` of this document calls
+> our central claim — **is what error-bounded non-uniform PPA has always done.**
+> Our `b = log₂(Δ_j/√ε)` is a closed form where they run a search, which is a
+> difference of method, not of idea.
+>
+> ⚠️ So *"both neighbours pick capacity by hand; we solve it"* is novel **only
+> relative to the two SNN papers**, not relative to the field the technique comes
+> from. A reviewer with a hardware-approximation background will say **"this is
+> standard error-bounded non-uniform PPA transplanted into a spiking neuron"** —
+> and on the mechanism, they will be right.
+>
+> 📌 Also note NPE's own caveat, which cuts against our emphasis on the rule's
+> precision: *"even **sub-optimal segmentation** can result in no accuracy loss for
+> BERT inference on the test set."*
+
+### 🟡 MoE routing inside SNNs exists, at a different granularity
+
+**Spiking Transformer with Experts Mixture** (NeurIPS 2024) has a *Spiking Experts
+Mixture Mechanism* with **a spiking router allocating computation**;
+**SpikingMoE** arXiv:2605.23188 (2026) does dynamic expert fusion. Both route
+**blocks/experts**, not **approximation ranges inside one neuron**. The MoE framing
+is taken; the granularity is not.
+
+### 🔴🔴 The closest prior art found — Lee et al., TVLSI 2009 (full text read 2026-08-13)
+
+**D.-U. Lee, R. Cheung, W. Luk, J. Villasenor, "Hierarchical Segmentation for
+Hardware Function Evaluation", IEEE TVLSI 17(1):103–116, 2009** (earlier: FPT 2003).
+Reached via FQA's ref [24]. `doc.ic.ac.uk/~wl/papers/09/tvlsi09dul.pdf`.
+
+This is **the same mechanism as our router**, in fixed-point hardware, seventeen
+years earlier:
+
+| our claim | Lee et al. 2009 |
+|---|---|
+| ranges are **binades** (powers of two) | *"hierarchies involving uniform splines and splines with **size varying by powers of two**"* — and they credit Coleman et al. [14] for a two-level scheme whose *"first segmentation has segments that vary by powers of two"* |
+| the range index is a **free bit read** | *"Computation of the segment address ... is based on **detecting the number of leading zeros** for segments beginning with a zero, and ... **leading ones** for segments beginning with a one."* **Leading-zero count is the binade index.** And it is chosen for exactly our reason: *"we are targeting environments in which the **delay introduced by the coefficient address logic must be kept to a minimum**"* |
+| the budget is **solved from an error target**, not tuned | *"we enable a designer to **specify an error tolerance** and to **automatically** obtain a segmentation that: 1) meets this tolerance; 2) requires a **small number of segments**; and 3) leads to efficient hardware implementation."* |
+| a **two-level** router (near-zero bank + magnitude banks) | hierarchical, multi-level by construction |
+| targets `1/x`, `1/√x`, `log`, `exp` | demonstrated on `√x`, `log₂`, `cos`, `ln(x)`, a high-degree rational, `ln(1+x)`, `1/(1+x)` — **the same primitive family** |
+
+They also survey **balanced-error segmentation** — *"the maximum approximation error
+in all segments is equal ... since it **minimises the number of segments needed to
+meet a given overall approximation error constraint**"* — with Sasao et al. [18]–[20]
+giving an algorithm for it. NPE's ref [8] (Frenzen, Sasao & Butler 2010, *"On the
+number of segments needed in a piecewise linear approximation"*) is the theory of
+that same question.
+
+> 🔴 **Differentiator 2 ("the routing is free because it is an exponent read") is
+> dead.** It is documented prior art with the same motivation. Our version reads an
+> IEEE-754 exponent field where they run a leading-zero detector on fixed-point —
+> cheaper by one small unit, which is an implementation detail, not a contribution.
+>
+> 🔴 **"Solve the budget from an error target rather than fixing it globally" is also
+> theirs**, stated as an explicit design goal and automated.
+
+**What Lee et al. does *not* do:** the per-region capacity is *segment width*; the
+polynomial **degree is global to a design** (they report degree-1 and degree-2 as
+separate designs, not mixed across regions), and per-region precision is handled
+separately by bit-width optimisation (MiniBit). Nothing is spiking; there are no
+timesteps.
+
+### ✅ What survives full-text reading of both
+
+**Two of the three survive. The middle one is gone** (Lee et al., above).
+
+1. ✅ **The allocated resource is spike-domain.** NPE allocates *segment boundaries*;
+   FQA allocates *bit widths*; Lee et al. allocates *segment widths* at a globally
+   fixed polynomial degree. PASN allocates **`N_j` spiking bases and `T_j`
+   timesteps** — the two quantities SNN conversion is actually judged on. Nobody in
+   this literature allocates those, because in fixed-point hardware **there is no
+   such resource**. This is now the **primary** differentiator.
+2. 🔴 ~~**The routing is free.**~~ **Withdrawn** — Lee et al. 2009 computes the
+   segment address by leading-zero detection precisely to minimise address-logic
+   delay, and BBAL indexes sub-tables by exponent. Prior art, same motivation.
+3. ✅ **The failure mode being fixed is SNN-specific.** In fixed-point PPA, too little
+   capacity costs accuracy smoothly. In a spiking neuron it causes the **low-`T`
+   collapse** of the baseline's Table 4. That failure does not exist in NPE's, FQA's
+   or Lee's setting, so **none of them could have reported it.**
+
+> **The residue is one sentence, and it is the whole paper:** *hardware function
+> evaluation has solved per-range capacity from an error target since at least 2009,
+> using binade segmentation addressed by a leading-zero/exponent read; SNN conversion
+> never imported it, and the price of not importing it is that global capacity
+> collapses at low timestep budgets.*
+
+### 📌 Reframing: this literature is an asset, not only a threat
+
+Positioning PASN as *"importing mature error-bounded non-uniform approximation from
+hardware function evaluation into the spiking conversion neuron, where the allocated
+resource becomes spikes and timesteps"* is **stronger and more honest** than claiming
+the routing is new. It gives the method a known-good pedigree, and makes the
+contribution the thing we can actually defend: **SNN conversion has been fixing
+capacity globally by hand while the approximation literature solved this decades ago,
+and the cost of that omission is the low-`T` collapse.**
+
+Cite NPE, FQA, BBAL and the PPA survey chain **in the introduction, not buried in
+Related Work.** A reviewer who finds them after we omitted them will discount
+everything else.
+
+### ✅ What the search did **not** find
+
+- No ANN→SNN conversion work routing by **IEEE-754 exponent inside the conversion
+  neuron**.
+- No work where the allocated per-range capacity is **spike-domain** — a number of
+  spiking bases `N_j` and a timestep budget `T_j` — rather than segments, LUT
+  entries or word lengths.
+- No work **solving** that spike-domain budget from the target's dynamic range over
+  the range (`b = log₂(Δ_j/√ε)`).
+
+### 📌 Consequence for the paper — the mechanism is a transplant, so it cannot be the claim
+
+Every ingredient exists: exponent routing (BBAL, patents), non-uniform error-driven
+allocation (NPE, FQA, PLA), MoE routing in SNNs (SEMM, SpikingMoE). What appears
+unclaimed is **the combination**: a spiking conversion neuron whose per-range budget
+is `(N_j, T_j)` and is solved rather than tuned, with a router that costs **zero
+parameters and zero spikes** because it is an exponent read.
+
+That is a **much narrower** claim than *"we introduce exponent routing"*, and an
+engineering transplant is not on its own an ICML/NeurIPS contribution. **The paper
+therefore has to be carried by the consequence, not the mechanism**:
+
+> the baseline's capacity is fixed globally by hand, **that is what breaks it at low
+> timestep budgets** — its own Table 4 collapses all five models at `T=8` and it
+> diagnoses the cause as wide identity-mapping ranges — **and per-range solved budgets
+> remove that failure mode** at lower spike cost.
+
+⚠️ **This makes the routing ablation (`pasn_e_min` sweep at `T=8`) load-bearing, not
+optional.** Without it the paper claims a known mechanism and an unexplained
+cross-paper win.
+
+### Limits of this pass
+
+Six searches. ✅ **FQA and NPE full text read 2026-08-13** (13 and 11 pages, `pypdf`).
+Still **not** read: BBAL full text, the PPA chain FQA surveys ([20]–[35] — **the most
+likely place a direct hit is hiding**, since that is where per-region capacity is
+solved from an error bound), and NPE's segmentation reference [3]. Not searched:
+pre-2015 DSP/CORDIC, non-English sources, neuromorphic LUT work.
+
+🔴 **The next reading is [20]–[35], not more searching.** If one of them allocates
+*polynomial order* (not just boundaries) per region from an error bound, then
+differentiator 1 narrows to "spike-domain resource" alone. **Treat this as a first
+pass that closes the "we never looked" gap, not as a novelty clearance.**
+
+📌 Baseline provenance confirmed en route: MBE is **AAAI-26**
+(`ojs.aaai.org/index.php/AAAI/article/download/37195/41157`, arXiv:2508.07710).
+
+---
+
 ## 7. What is left before this can be submitted
 
 - [ ] **Re-verify every ⓝ against arXiv:2605.20289.** This document is written

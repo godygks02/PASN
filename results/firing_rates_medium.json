@@ -1,0 +1,44 @@
+{
+ "model": "gpt2-medium",
+ "t_fixed": 16,
+ "ours_rate": {
+  "layernorm rsqrt": 45.117561184630105,
+  "layernorm id_dev": 6.6809385454856764,
+  "layernorm id_istd": 6.339869226784267,
+  "matmul qk": 6.67964621406925,
+  "softmax exp": 23.376127051321543,
+  "softmax inv": 35.4699452718099,
+  "softmax idn": 13.868438873025655,
+  "matmul av": 14.833999621743375,
+  "activation": 24.168192135509035
+ },
+ "ours_spikes_per_elem": {
+  "layernorm rsqrt": 7.218809789540816,
+  "layernorm id_dev": 1.6089972281942562,
+  "layernorm id_istd": 1.5219527264030612,
+  "matmul qk": 1.6086645821730297,
+  "softmax exp": 4.671477456887563,
+  "softmax inv": 5.675191243489583,
+  "softmax idn": 4.321003991103754,
+  "matmul av": 4.671438199632308,
+  "activation": 3.9019983311494193
+ },
+ "paper_rate": {
+  "2^x": 46.94,
+  "LayerNorm_1/x_identity": 38.46,
+  "GELU": 38.22,
+  "LayerNorm_input_identity": 27.61,
+  "1/sqrt(x)": 25.27,
+  "Attention_score": 8.31,
+  "1/x": 3.74
+ },
+ "paper_n": {
+  "2^x": 8,
+  "LayerNorm_1/x_identity": 8,
+  "GELU": 4,
+  "LayerNorm_input_identity": 8,
+  "1/sqrt(x)": 8,
+  "Attention_score": 8,
+  "1/x": 8
+ }
+}
