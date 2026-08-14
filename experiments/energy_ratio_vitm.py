@@ -59,7 +59,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from mbe.metrics import OP_ENERGY_PJ  # noqa: E402
+from mbe.metrics import OP_ENERGY_PJ, op_energy_pj  # noqa: E402
 
 E_AC = OP_ENERGY_PJ["ac"]    # 0.9 pJ -- identical to the paper's G.4 constant
 E_MAC = OP_ENERGY_PJ["mac"]  # 4.6 pJ -- ditto
@@ -161,6 +161,44 @@ def paper_spikes(elems: dict, per_basis: bool) -> dict:
         else:
             mult = PAPER_BASIS[op] if per_basis else 1
             out[op] = T * PAPER_FIRING[op] * mult * n
+    return out
+
+
+def mbe_all_op(elems: dict) -> dict:
+    """MBE's *all-op* energy on the nonlinear operators, per image.
+
+    The paper's G.4 charges spikes only. Our own accounting (``neuron_op_cost``)
+    charges four more classes, and for a plain MBE neuron all of them are closed
+    form -- no run is needed to price MBE the way we price ourselves:
+
+        cmp  = B * T          per element   (Eq. 6: one Heaviside per basis per step)
+        ac   = 2 * spikes                   (each spike decrements u and adds into o)
+        mac  = B * r          r = 1         (Eq. 8 is a linear readout, sum w(n) o(n))
+        poly = B * (r - 1) = 0
+        router = 0                          (no routing to pay for)
+
+    ⚠️ **This forces the per-basis reading.** Charging ``B*T`` compares -- one per
+    basis per timestep -- is incoherent with the as-printed spike count ``T*eta``,
+    which has no basis factor. If every basis has its own threshold it has its own
+    spike train. So an all-op comparison cannot be quoted next to the 5.27x
+    spike-only figure, which uses the as-printed reading: they are two different
+    readings of the same paper.
+
+    🔴 **The FP multiply is excluded and cannot be added without inventing
+    structure.** ``E_FP = T^2*eta1*eta2*MO`` is a coincidence model; the paper never
+    says how the two operands are reconstructed, so MBE's compare count on that path
+    is not derivable. That is exactly the path where our spike-only margin lives
+    (93.5%), so **do not compare this number against a PASN figure that includes
+    matmul.** Nonlinear operators only, both sides.
+    """
+    out = {}
+    for op, n in elems.items():
+        if op == "attention_score":
+            continue
+        B, eta = PAPER_BASIS[op], PAPER_FIRING[op]
+        spikes = T * eta * B * n                  # per-basis reading, see above
+        out[op] = dict(cmp=B * T * n, ac=2.0 * spikes, mac=float(B) * n,
+                       poly=0.0, router=0.0, bitop=0.0, spikes=spikes)
     return out
 
 
@@ -322,6 +360,20 @@ def main() -> None:
     print("  ^ do NOT divide these: different operator sets. The matched")
     print("    statement is per-operator and iso-accuracy, printed below.")
     iso_compare_table()
+
+    # ---- MBE priced the way we price ourselves (nonlinear operators only) ----
+    ma = mbe_all_op(elems)
+    tot = {k: sum(v[k] for v in ma.values())
+           for k in ("cmp", "ac", "mac", "poly", "router", "bitop")}
+    mbe_allop_pj = op_energy_pj(tot)
+    print("\n## MBE under OUR accounting -- nonlinear operators only, per image")
+    print(f"  {'cmp':<8}{tot['cmp']/1e6:>10.1f}M ops{tot['cmp']*E_AC/1e9:>10.3f} mJ")
+    print(f"  {'ac':<8}{tot['ac']/1e6:>10.1f}M ops{tot['ac']*E_AC/1e9:>10.3f} mJ")
+    print(f"  {'mac':<8}{tot['mac']/1e6:>10.1f}M ops{tot['mac']*E_MAC/1e9:>10.3f} mJ")
+    print(f"  {'TOTAL':<8}{'':>10}    {mbe_allop_pj/1e9:>14.3f} mJ")
+    print("  ^ per-basis reading (forced -- see mbe_all_op docstring). FP multiply")
+    print("    EXCLUDED: not derivable. Do NOT divide this by a PASN number that")
+    print("    includes matmul, and do NOT quote it beside the 5.27x spike-only ratio.")
 
     print("\n## Our strict accounting, by class (the classes G.4 omits)")
     for k, v in sorted(ours_ops.items(), key=lambda kv: -kv[1] * OP_ENERGY_PJ.get(kv[0], E_AC)):
