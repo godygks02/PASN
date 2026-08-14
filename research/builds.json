@@ -1,0 +1,67 @@
+{
+  "_comment": [
+    "빌드 지문 대장. 수치를 인용하기 전에 그 수치가 '어느 빌드에서 나왔는지'를",
+    "기계적으로 판정하기 위한 파일이다. research/tools/check_build.py가 읽는다.",
+    "근거: PAPER_PLAN.md §0 (08-10 개정), NEXT_EXPERIMENTS.md 상단 프리즈 박스.",
+    "새 빌드를 프리즈할 때만 사람이 수정한다 — 에이전트가 고치지 않는다."
+  ],
+  "frozen": "beta",
+  "fingerprint_scope_model": "gpt2-medium",
+  "_scope_note": [
+    "bytes/params 지문은 모델 구조에서 나오므로 gpt2-medium 레코드에만 적용된다.",
+    "ViT/RoBERTa 레코드는 지문이 다른 게 정상이다 — 프리즈 대조 대상이 아니고",
+    "status='n/a'로 나온다. 그래도 출처 필드 누락은 똑같이 검사한다."
+  ],
+  "builds": {
+    "beta": {
+      "label": "프리즈 빌드 (논문 빌드)",
+      "frozen_on": "2026-08-10",
+      "citable": true,
+      "fingerprint": {
+        "stored_bytes": 53888,
+        "stored_params": 13472,
+        "n_primitives": 339
+      },
+      "pasn_beta": { "inv": 0.5 },
+      "anchor_record": "results/freeze_e1.json",
+      "anchor_tag": "freeze-t16-unif",
+      "headline": {
+        "delta_pct_at_stride_1024": -0.19,
+        "observed_runs": [-0.187288370992067, -0.1809186341225014],
+        "margin_pp_over_paper": 1.76,
+        "operating_point_T": 8,
+        "paper_axis_T": 16
+      }
+    },
+    "no-beta": {
+      "label": "--no-pasn-beta 빌드 (과거)",
+      "citable": true,
+      "must_name_build": true,
+      "fingerprint": {
+        "stored_bytes": 49952,
+        "stored_params": 12488
+      },
+      "pasn_beta": {},
+      "note": [
+        "−0.14% · 49,952 B · 12,488 p 는 이 빌드에만 속한다.",
+        "인용해야 할 때는 반드시 빌드 이름을 붙인다 (stride 스윕, Stage 2 원본 등)."
+      ]
+    }
+  },
+  "provenance_required_fields": [
+    "tag",
+    "backend",
+    "model",
+    "convert_cfg",
+    "pasn_beta",
+    "stored_bytes",
+    "stored_params",
+    "n_primitives"
+  ],
+  "operating_point_rules": [
+    "한 운영점에서 잰 절감을 다른 점에서 인용하지 않는다.",
+    "op 예산 비중은 arm 없이 인용하지 않는다 (per-bank T_j arm 86.5% vs 전역 T=16 81.8%).",
+    "헤드라인 범위는 한 arm에서 나와야 한다 — op마다 최선 arm을 고르지 않는다.",
+    "절대 정확도/perplexity를 논문과 직접 비교하지 않는다."
+  ]
+}

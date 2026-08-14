@@ -13,8 +13,11 @@ env/
 # Baseline paper: copyrighted PDF + large extracted scans (do not redistribute)
 paper/
 
-# Local Claude Code assistant state / memory (machine-specific)
-.claude/
+# Claude Code: 머신별 상태는 빼고, 에이전트/스킬 정의는 커밋한다.
+# (`.claude/` 를 통째로 무시하면 서브에이전트와 스킬이 리포에 안 남는다)
+.claude/*
+!.claude/agents/
+!.claude/skills/
 
 # Obsidian editor state (keep the notes, drop the workspace/session files)
 PASN_vault/.obsidian/
@@ -38,4 +41,15 @@ Thumbs.db
 .idea/
 
 # Obsidian vault: 연구 노트는 Obsidian 쪽에서 관리 (git 밖)
+# ★ 기록 보존 공간이다. 에이전트도 사람도 여기 쓰지 않는다 — 읽기만.
 PASN_vault/
+
+# 랩미팅 발표자료 — 바이너리라 diff가 안 되고, 슬라이드 원본은 로컬/Obsidian에 있다.
+# 발표 내용이 결론에 들어가면 그건 results/ 나 research/ 에 텍스트로 남긴다.
+*.pptx
+*.pptx.inspect.ndjson
+PASN_lab_meeting_*/
+
+# 중간 산출물 (스모크 테스트 출력, 추출한 operand 텐서 등)
+.tmp/
+
