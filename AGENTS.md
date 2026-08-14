@@ -19,7 +19,8 @@
 |---|---|---|---|---|
 | **planner** | 다음 실험 결정, 가설 카드 | `research/ideas/` | 코드 실행, 수치 인용, `PAPER_PLAN.md` 직접 수정 | Claude |
 | **scout** | 문헌 검색, novelty 후보 | `research/refs/` | 리포 내 다른 경로, novelty **결론** | Claude |
-| **runner** | 실험 코드 작성·실행 | `experiments/`, `results/`(신규만), `src/` | 기존 레코드 덮어쓰기, 결과를 요약해 넘기기 | Claude |
+| **runner** | 실험 코드 작성·실행 | `experiments/`, `results/`(신규만), `src/` | 기존 레코드 덮어쓰기, **결과 해석** | Claude |
+| **analyst** | 레코드 해석, 결과 문서 | `results/`(`.md`만) | 실험 실행, 레코드 수정, 런 세션 서사 인용 | Claude |
 | **verifier** | 반증, 재현성, 지문 대조 | `research/verdicts/` | **모든 쓰기**(read-only 샌드박스) | **Codex** |
 | **writer** | 원고 초안 | `research/manuscript/` | 인용 생성, 수치 창작, 레코드 없는 주장 | Claude |
 
@@ -44,6 +45,10 @@
   *실제*: `pasn_beta=0.5` 기본값이 모든 GPT-2 레코드보다 뒤에 들어와, 헤드라인
   레코드의 빌드를 소급 판정할 수 없게 됐다(E0가 이걸 고치느라 생겼다).
   → 레코드는 `convert_cfg` 37필드를 전부 싣는다.
+- **analyst** — 런 세션의 서사를 물려받는다. 실행자는 "이건 이래서 이렇게 나온 거야"를
+  이미 갖고 있고, 그 서사는 레코드에 없으며 대개 결과를 실제보다 좋게 만든다.
+  → **analyst의 독립성은 다른 모델이라서가 아니라 런을 안 봤기 때문에 나온다.**
+  runner가 대화로 넘긴 요약은 근거가 아니다. 그래서 해석을 runner에서 떼어냈다.
 - **verifier** — 실행자와 같은 모델이라 같은 착각을 공유한다.
   → 그래서 Codex로 나간다. 같은 모델을 쓸 수밖에 없으면 최소한 실행 세션과
   컨텍스트를 공유하지 않는 새 세션에서, **원본 레코드만 보고** 판정한다.
@@ -66,6 +71,35 @@ python research/tools/verify.py results/freeze_e1.json --claim "ΔPPL −0.19%"
 스크립트가 그 사실을 말하고 멈춘다 — **조용히 Claude로 폴백하지 않는다.**
 폴백이 필요하면 사람이 `--fallback-claude`를 명시해야 하고, 판정 파일에
 `"cross_model": false`가 박힌다.
+
+## 사이클 — 역할을 순서로 엮기
+
+```
+planner ──> scout ──> [승인] ──> runner ──> analyst ──> verifier ──> 종료
+   ^          ^                     ^          ^            │
+   └──────────┴─────────────────────┴──────────┴────────────┘
+```
+
+상태는 `research/cycles/<id>/state.json`에 있고 `cycle.py`가 관리한다.
+**에이전트를 자동 실행하지 않는다** — 상태를 기록하고 게이트를 강제할 뿐이다.
+무인 루프는 GPU 비용을 태우고 사전등록 규율을 무너뜨린다.
+
+```bash
+python research/tools/cycle.py status
+python research/tools/cycle.py routing   # 피드백을 어디로 보낼지
+```
+
+**피드백은 올바른 앞 단계로 간다.** 전부 planner로 되돌리면, 레코드 하나 고치면 될
+일에 사이클 전체를 다시 돈다:
+
+| 증상 | 어디로 |
+|---|---|
+| 주장이 레코드보다 과하다 / 빌드 혼합 | analyst |
+| 출처 필드 누락 / 변종 지문 / 측정 누락 / 운영점 미기록 | runner |
+| 선행연구가 전제를 무너뜨림 / 반증 조건이 검증 불가 | planner |
+| **가설이 반증됨** | 되돌리지 않는다 — **결과다** |
+
+자세한 절차는 `research-loop` 스킬, 사용법은 [`docs/HOWTO.md`](docs/HOWTO.md).
 
 ## 승인 게이트 — 사람이 서 있는 자리
 

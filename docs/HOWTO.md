@@ -16,7 +16,8 @@
 |---|---|---|
 | **스크립트** 직접 | `python research/tools/check_build.py` | 확실하고 빠름. 재시작 불필요 |
 | **스킬** (`/이름`) | `/claim-audit 발표자료 점검` | 절차가 정해진 반복 작업 |
-| **에이전트** (말로) | "verifier로 이 주장 검증해줘" | 여러 단계를 맡길 때 |
+| **에이전트** (말로) | "verifier로 이 주장 검증해줘" | 한 역할에 일을 맡길 때 |
+| **사이클** | `/research-loop idea-001 진행해줘` | 가설부터 검증까지 한 바퀴 (§5.5) |
 
 무엇을 쓰든 **결과는 항상 파일로 남는다.** 대화창의 요약은 참고용이고, 근거는 파일이다.
 
@@ -157,7 +158,7 @@ python research/tools/verify.py --explore --claim "<주장>" results/freeze_e1.j
 
 ---
 
-## 5. 에이전트 5개 — 말로 시킨다
+## 5. 에이전트 6개 — 말로 시킨다
 
 이름을 부르거나 그냥 일을 설명하면 된다.
 
@@ -165,12 +166,86 @@ python research/tools/verify.py --explore --claim "<주장>" results/freeze_e1.j
 |---|---|---|
 | "planner로 다음 실험 정해줘" | 우선순위 판단, 가설 카드 | `research/ideas/` |
 | "scout으로 관련 논문 찾아줘" | 문헌 검색, novelty 후보 | `research/refs/` |
-| "runner로 이 실험 돌려줘" | 실험 작성·실행 | `experiments/`, `results/` |
+| "runner로 이 실험 돌려줘" | 실험 작성·실행 (**해석은 안 함**) | `experiments/`, `results/*.json` |
+| "analyst로 결과 해석해줘" | 레코드만 읽고 결과 문서 | `results/*.md` |
 | "verifier로 이 주장 검증해줘" | Codex 검증 실행·정리 | `research/verdicts/` |
 | "writer로 결과 절 초안 써줘" | 원고 초안 | `research/manuscript/` |
 
+**runner와 analyst가 왜 나뉘어 있나**: 실행자가 해석까지 하면 자기 결과를 자기가
+채점한다. 그리고 실행자는 런을 지켜봤기 때문에 "이건 이래서 이렇게 나온 거야"라는
+서사를 이미 갖고 있는데, 그 서사는 레코드에 없고 대개 결과를 실제보다 좋게 만든다.
+analyst는 **런을 안 봤다는 것**이 독립성의 근거다.
+
 **각 에이전트는 자기 경로에만 쓴다.** verifier는 `experiments/`를 못 고치고, writer는
 수치를 창작할 수 없다. 경계는 `AGENTS.md`에 표로 있다.
+
+---
+
+## 5.5. 사이클 — 가설부터 검증까지 한 바퀴
+
+```
+planner ──> scout ──> [승인] ──> runner ──> analyst ──> verifier ──> 종료
+   ^          ^                     ^          ^            │
+   └──────────┴─────────────────────┴──────────┴────────────┘
+                        문제가 생기면 해당 단계로
+```
+
+```
+/research-loop idea-001 사이클 시작해줘
+```
+
+**무인 루프가 아니다.** 에이전트를 자동 실행하지 않고, 상태를 기록하고 게이트를
+강제한다. 단계마다 멈춰서 확인하고, 특히 `runner` 직전(GPU 쓰기 직전)에는 반드시 멈춘다.
+
+### 직접 몰기
+
+```bash
+python research/tools/cycle.py new --idea research/ideas/idea-001.md --title "저온 붕괴"
+python research/tools/cycle.py status                      # 지금 어디인가
+python research/tools/cycle.py advance --artifact results/e15.json
+python research/tools/cycle.py approve hypothesis          # 사람만
+python research/tools/cycle.py close --conclusion refuted
+```
+
+**상태는 `research/cycles/<id>/state.json`에 있다.** 세션이 끊겨도 `status`로 이어서 한다.
+
+### 자동으로 막히는 것
+
+| 시도 | 결과 |
+|---|---|
+| 산출물 파일 없이 전진 | ✗ 거부 — 대화 요약은 산출물이 아니다 |
+| 승인 없이 runner로 | ✗ 거부 — GPU 쓰기 전 마지막 지점 |
+| 변종 빌드(`??`) 레코드로 해석 단계 진입 | ✗ 거부 — 인용 불가능한 수치가 문서에 들어간다 |
+| 열린 피드백을 두고 전진 | ✗ 거부 — 고치지 않고 넘어가는 것 방지 |
+| verifier 판정 없이 `supported`로 종료 | ✗ 거부 |
+
+의도한 경우에는 `--force`.
+
+### 피드백 — 어디로 되돌릴지가 핵심
+
+```bash
+python research/tools/cycle.py routing     # 표 보기
+python research/tools/cycle.py feedback --to analyst --reason "5.27x가 arm 미명시"
+python research/tools/cycle.py resolve --note "arm 명시하고 주장 축소"
+```
+
+| 증상 | 어디로 | 왜 |
+|---|---|---|
+| 주장이 레코드보다 과하다 / 빌드 혼합 | **analyst** | 데이터는 멀쩡. 해석만 고치면 됨 |
+| 출처 필드 누락 / 변종 지문 | **runner** | 레코드를 다시 만들어야 함 |
+| `unverifiable` — 근거 자체가 없음 | **runner** | 측정이 빠짐. 해석으로 못 메움 |
+| 운영점 미기록 | **runner** | 나중에 인용 불가능해짐 |
+| 선행연구가 전제를 무너뜨림 | **planner** | 설계부터 다시 |
+| 반증 조건이 검증 불가능한 형태 | **planner** | 카드가 잘못 만들어짐 |
+| **가설이 반증됨** | **되돌리지 않음** | 결과다 → `close --conclusion refuted` |
+
+**전부 planner로 되돌리지 말 것.** 레코드 하나 고치면 될 일에 사이클 전체를 다시 도는
+것이 이 루프가 망가지는 방식이다.
+
+### 반증은 실패가 아니다
+
+가설이 틀렸다고 나오면 사이클이 **성공한** 것이다. 반증 조건을 사전에 숫자로 적어둔
+이유가 그것이다. **밴드를 사후에 넓혀 supported로 만들지 않는다.**
 
 ---
 
@@ -225,9 +300,11 @@ research/
 ├── ideas/       가설 카드          ← planner, /hypothesis-card
 ├── refs/        문헌 비교표         ← scout
 ├── verdicts/    검증 판정 JSON/MD   ← verify.py, /claim-audit
+├── cycles/      사이클 상태         ← cycle.py  (세션이 끊겨도 여기 남는다)
 └── manuscript/  원고 초안          ← writer
 
-results/         레코드 JSON + 해석 MD  ← runner, /experiment-report
+results/         레코드 JSON        ← runner
+                 해석 MD           ← analyst, /experiment-report
 ```
 
 `research/verdicts/`의 JSON에는 판정·근거·문제·"무엇이 나오면 뒤집히나"가 들어 있다.
