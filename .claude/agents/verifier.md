@@ -40,6 +40,13 @@ python research/tools/verify.py --claim "<주장 한 문장>" <레코드>.json [
 
 종료 코드: `0` supported · `1` refuted · `2` unverifiable · `3` 실행 실패.
 
+**헤드라인 주장이면 `--explore`를 붙인다.** 검증자가 지정 레코드 밖까지 뒤져서 반증을
+찾는다. 느리고 토큰을 더 쓰니 전부에 쓰지는 말고, 논문·발표에 올라갈 주장에만 쓴다.
+
+```bash
+python research/tools/verify.py --explore --claim "<주장>" results/<레코드>.json
+```
+
 ### 4. 실패하면 멈춘다
 
 `verify.py`가 3으로 죽으면 (codex 없음/인증 안 됨) **네가 대신 판정하지 않는다.**

@@ -59,13 +59,38 @@ python research/tools/verify.py --claim "<주장>" results/<레코드>.json
 세 번째가 중요하다 — 근거가 없을 때 채우지 않는 것이 이 역할의 핵심이고,
 그게 실제로 확인됐다.
 
+## Windows 샌드박스 — 원인과 수동 수정 (2026-08-14 해결)
+
+`codex exec -s read-only`가 셸을 못 띄우고 죽었다:
+`orchestrator_helper_launch_failed: helper=codex-windows-sandbox-setup.exe, error=program not found`.
+
+**헬퍼가 없어서가 아니라 codex가 못 찾아서였다.** standalone Windows 빌드는 헬퍼를
+*실행 파일 옆*에서 찾는데, PATH에 걸린 `codex.exe`는 shim이고 헬퍼는 릴리스 패키지의
+형제 디렉터리에 있다. 로그가 그대로 말해준다:
+
+```
+helper copy failed for command-runner: helper not found next to current executable
+  or under codex-resources: ...\Programs\OpenAI\Codex\bin\codex.exe
+```
+
+`codex update`(0.144.1 → 0.147.0)로는 안 고쳐졌다. 헬퍼 두 개를 shim 옆에 복사해서 해결:
+
+```bash
+cp ~/.codex/packages/standalone/releases/0.147.0-x86_64-pc-windows-msvc/codex-resources/{codex-windows-sandbox-setup.exe,codex-command-runner.exe} \
+   "$LOCALAPPDATA/Programs/OpenAI/Codex/bin/"
+```
+
+> ⚠️ **codex를 업데이트하면 다시 해야 할 수 있다.** 버전이 올라가면 릴리스 경로가
+> 바뀌고, shim 옆의 헬퍼는 옛 버전으로 남는다. 증상이 다시 나오면 위 명령을 새 버전
+> 경로로 다시 돌린다. 확인은 `codex sandbox cmd /c echo hello`.
+
 ## 알려진 한계
 
-- **Windows에서 `codex exec -s read-only` 샌드박스 헬퍼가 없다**
-  (`codex-windows-sandbox-setup.exe` 미설치). 그래서 검증자가 파일을 직접 못 읽는다.
-  레코드 원문을 프롬프트에 싣는 방식으로 우회했고, 결과적으로 경계는 더 단단해졌지만
-  **검증자가 리포를 탐색해 반증 근거를 스스로 찾지는 못한다.** 근거로 삼을 레코드를
-  사람이 지정해야 한다.
+- **셸로 읽으면 한글이 깨진다** (Windows 콘솔 cp949). 이 리포는 문서 상당수가 한글이라
+  실제 위험이다. 그래서 `verify.py`의 **기본값은 여전히 embed 모드** — 파이썬이 UTF-8로
+  읽어 프롬프트에 싣는다. 탐색이 필요할 때만 `--explore`를 쓰고, 그 모드의 프롬프트는
+  "깨진 텍스트를 근거로 삼지 말고 problems에 적으라"고 지시한다.
+- `--explore`는 느리고 토큰을 더 쓴다. 헤드라인 주장에만 쓰는 게 좋다.
 - 레코드 총량이 240K자를 넘으면 뒤쪽이 잘린다. 잘리면 그 사실을 프롬프트에 명시한다.
 - `check_build.py`의 bytes/params 지문은 **`gpt2-medium` 전용**이다. ViT/RoBERTa
   레코드는 `n/a`로 빠진다 — 모델이 다르면 지문이 다른 게 정상이기 때문이다.

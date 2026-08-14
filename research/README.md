@@ -40,9 +40,22 @@ python research/tools/check_build.py results/freeze_e1.json
 python research/tools/verify.py --claim "<주장>" results/freeze_e1.json
 ```
 
-`verify.py`는 레코드 **원문을 프롬프트에 실어** 보낸다. 파일 경로만 주면 검증자가 셸과
-샌드박스에 의존하게 되는데, 이 환경에서 그게 실제로 깨졌다(Windows 샌드박스 헬퍼 부재).
-내용을 직접 실으면 검증자는 파일시스템에 손댈 일이 없고, 쓰기 경계가 절대적이 된다.
+### 두 가지 모드
+
+기본은 **embed** — 레코드 원문을 파이썬이 UTF-8로 읽어 프롬프트에 싣는다. 결정론적이고,
+검증자가 파일시스템에 손댈 일이 없다. 한글 문서가 많은 이 리포에서 특히 중요한데,
+셸로 읽으면 Windows 콘솔 cp949 때문에 한글이 깨지기 때문이다.
+
+지정한 레코드 밖에서 반증을 찾게 하려면 `--explore`:
+
+```bash
+python research/tools/verify.py --explore --claim "<주장>" results/freeze_e1.json
+```
+
+읽기 전용 샌드박스에서 저장소를 직접 뒤진다. 느리고 토큰을 더 쓰니 **헤드라인 주장에만**
+쓴다. 실제로 이 모드는 `freeze_e1.json`만 주고 5.27× 주장을 던졌을 때, 주지도 않은
+파일에서 `strict_pj`와 범위 불일치를 찾아내 refuted를 냈다 —
+`FEEDBACK_2026-08-14.md`가 지적한 것과 같은 결론에 독립적으로 도달했다.
 
 Codex가 없거나 인증이 안 되어 있으면 **조용히 Claude로 폴백하지 않는다** — 그러면
 자기가 자기를 채점하는 것이고, 이 단계의 목적이 없어진다. 스크립트가 그 사실을 말하고 멈춘다.
