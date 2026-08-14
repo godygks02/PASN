@@ -59,17 +59,41 @@ python research/tools/cycle.py new --idea research/ideas/idea-001.md --title "�
 python research/tools/cycle.py advance --artifact results/e15.json
 ```
 
-### 승인 게이트 — `runner` 앞
+### 승인 게이트 — `runner` 앞에 둘
 
 ```bash
 python research/tools/cycle.py approve hypothesis --note "반증 조건 확인함"
+python research/tools/cycle.py approve gpu --note "vast.ai 4090 열었음"
 ```
 
-**사람만 승인한다.** 에이전트가 대신 누르지 않는다. 승인 전에 확인할 것:
+**사람만 승인한다.** 에이전트가 대신 누르지 않는다.
 
+`hypothesis` 승인 전에 확인할 것:
 - 반증 조건이 **숫자로** 적혀 있는가
 - 프리즈 빌드로 돌리는가
 - 운영점(T, arm, stride)을 정했는가
+
+`gpu`는 **사용자가 vast.ai 인스턴스를 열어줘야** 눌린다. 인스턴스가 없으면 진행하지
+말고 요청한다 — 무엇이 필요한지(GPU 종류, 예상 시간, 돌릴 스크립트)를 같이 말한다.
+
+### GPU를 끄는 시점 — 커밋이 먼저다
+
+**runner를 떠날 때 `advance`가 레코드가 커밋됐는지 확인한다.** 안 됐으면 끄지 말라고
+막는다. 닫힌 박스가 P0.4 Block C와 Stage 2 원본을 통째로 가져간 적이 있다.
+
+```bash
+python research/tools/cycle.py gpu-off      # 꺼도 되는지 확인
+```
+
+커밋 안 된 레코드가 있으면 목록과 함께 거부한다. 통과하면 사용자에게 명확히 알린다:
+
+```
+[런 완료] results/e15.json — 검사 통과, 커밋·푸시 완료
+✅ vast.ai 인스턴스를 꺼도 됩니다.
+```
+
+박스는 시간당 과금된다. **끝났다는 사실을 알리지 않는 것도 비용이다.**
+런이 실패했을 때도 실패 레코드를 커밋한 뒤 똑같이 알린다.
 
 ### 자동 검사 — `runner` 다음
 

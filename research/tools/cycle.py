@@ -45,8 +45,12 @@ STAGE_INFO = {
 
 # 게이트: 이 단계로 넘어가려면 사람이 승인해야 한다.
 GATES = {
-    "runner": ("hypothesis", "반증 조건이 숫자로 적혀 있고 사람이 승인했는가 "
-                             "(GPU를 쓰기 전 마지막 지점)"),
+    "runner": [
+        ("hypothesis", "반증 조건이 숫자로 적혀 있고 사람이 승인했는가 "
+                       "(GPU를 쓰기 전 마지막 지점)"),
+        ("gpu", "vast.ai 인스턴스가 떠 있고 tmux 안에서 돌릴 준비가 됐는가 "
+                "— 사람이 박스를 열어줘야 시작할 수 있다"),
+    ],
 }
 
 # 피드백이 어디로 가야 하는가. 이걸 안 정해두면 전부 planner로 돌아가고,
@@ -179,10 +183,17 @@ def cmd_status(args) -> int:
 
     if s["status"] == "active":
         print(f"\n현재: {stage} ({label}) · 산출물은 {out}")
-        need = GATES.get(_next_stage(stage))
-        if need and not s["gates"].get(need[0], {}).get("approved"):
-            print(f"⚠ 다음 단계로 가려면 승인 필요: `cycle.py approve {need[0]}`")
-            print(f"   ({need[1]})")
+        pending = [(g, why) for g, why in GATES.get(_next_stage(stage), [])
+                   if not s["gates"].get(g, {}).get("approved")]
+        for g, why in pending:
+            print(f"⚠ 승인 필요: `cycle.py approve {g}` — {why}")
+
+        if stage == "runner":
+            dirty = _uncommitted(s["artifacts"].get("runner", []))
+            if dirty:
+                print(f"🔴 커밋 안 된 레코드 {len(dirty)}건 — 박스를 끄면 사라진다")
+            elif s["artifacts"].get("runner"):
+                print("✅ 레코드 커밋됨 — vast.ai 인스턴스를 꺼도 된다")
     else:
         print(f"\n종료됨 — 결론: {s.get('conclusion')}")
     return 0
@@ -190,6 +201,20 @@ def cmd_status(args) -> int:
 
 def _next_stage(stage: str) -> str:
     return STAGES[min(STAGES.index(stage) + 1, len(STAGES) - 1)]
+
+
+def _uncommitted(paths: list[str]) -> list[str]:
+    """아직 git에 안 들어간 레코드. 박스를 끄기 전에 반드시 비어야 한다.
+
+    닫힌 vast.ai 박스가 P0.4 Block C와 Stage 2 원본 레코드를 통째로 가져간 적이
+    있다. 원격 박스는 언제든 사라지고, 커밋 안 된 레코드는 같이 사라진다.
+    """
+    if not paths:
+        return []
+    proc = subprocess.run(["git", "status", "--porcelain", "--", *paths],
+                          cwd=REPO, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
+    return [ln[3:].strip() for ln in proc.stdout.splitlines() if ln.strip()]
 
 
 def _check_records(paths: list[str]) -> tuple[bool, str]:
@@ -251,10 +276,12 @@ def cmd_advance(args) -> int:
             print("   레코드를 고치거나, 의도한 변종이면 --force.")
             return 1
 
-    gate = GATES.get(nxt)
-    if gate and not s["gates"].get(gate[0], {}).get("approved"):
-        print(f"⚠ {nxt} 로 가려면 승인이 필요하다: `cycle.py approve {gate[0]}`")
-        print(f"   {gate[1]}")
+    pending = [(g, why) for g, why in GATES.get(nxt, [])
+               if not s["gates"].get(g, {}).get("approved")]
+    if pending:
+        print(f"⚠ {nxt} 로 가려면 승인이 필요하다:")
+        for g, why in pending:
+            print(f"   `cycle.py approve {g}`  — {why}")
         return 1
 
     # 산출물은 전진이 확정된 뒤에만 기록한다. 막힌 시도에서 기록하면
@@ -268,10 +295,58 @@ def cmd_advance(args) -> int:
     save(s)
 
     print(f"{cid}: {stage} → {nxt}")
+
+    # runner를 떠났다 = GPU 작업이 끝났다. 박스를 꺼도 되는지 여기서 판정한다.
+    if stage == "runner":
+        dirty = _uncommitted(arts)
+        print()
+        if dirty:
+            print("🔴 vast.ai 인스턴스를 아직 끄지 마라 — 커밋 안 된 레코드가 있다:")
+            for d in dirty:
+                print(f"     {d}")
+            print("   닫힌 박스가 Block C와 Stage 2 원본을 가져간 적이 있다.")
+            print("   커밋·푸시한 뒤 `cycle.py gpu-off` 로 다시 확인한다.")
+        else:
+            print("✅ 레코드가 전부 커밋됐다 — vast.ai 인스턴스를 꺼도 된다.")
+            _release_gpu(s)
+
     if nxt == "closed":
         print("  `cycle.py close --conclusion supported|refuted|abandoned` 로 마무리")
     else:
         print(f"  다음 산출물: {STAGE_INFO[nxt][1]}")
+    save(s)
+    return 0
+
+
+def _release_gpu(state: dict) -> None:
+    """GPU 게이트를 내린다. 다음 런은 박스를 다시 열고 다시 승인받아야 한다."""
+    if state["gates"].get("gpu", {}).get("approved"):
+        state["gates"]["gpu"] = {"approved": False, "at": now(),
+                                 "note": "런 종료 후 자동 해제 (박스 꺼도 됨)"}
+        log(state, "gpu_released")
+
+
+def cmd_gpu_off(args) -> int:
+    """박스를 꺼도 되는지 확인한다. runner 산출 레코드가 전부 커밋됐는가."""
+    cid = args.cycle or active_cycle()
+    s = load(cid)
+    arts = s["artifacts"].get("runner", [])
+    if not arts:
+        print("runner 산출 레코드가 없다. 끌 게 있는지 사람이 판단한다.")
+        return 0
+
+    dirty = _uncommitted(arts)
+    if dirty:
+        print("🔴 아직 끄면 안 된다 — 커밋 안 된 레코드:")
+        for d in dirty:
+            print(f"     {d}")
+        return 1
+
+    print(f"✅ 레코드 {len(arts)}건 전부 커밋됨 — vast.ai 인스턴스를 꺼도 된다.")
+    for a in arts:
+        print(f"     {a}")
+    _release_gpu(s)
+    save(s)
     return 0
 
 
@@ -402,9 +477,12 @@ def main() -> int:
     p.set_defaults(fn=cmd_resolve)
 
     p = sub.add_parser("approve", help="게이트 승인 (사람)")
-    p.add_argument("gate", choices=sorted({g for g, _ in GATES.values()}))
+    p.add_argument("gate", choices=sorted({g for gs in GATES.values() for g, _ in gs}))
     p.add_argument("--note")
     p.set_defaults(fn=cmd_approve)
+
+    p = sub.add_parser("gpu-off", help="vast.ai 박스를 꺼도 되는지 확인")
+    p.set_defaults(fn=cmd_gpu_off)
 
     p = sub.add_parser("close", help="사이클 종료")
     p.add_argument("--conclusion", required=True,
