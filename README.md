@@ -33,6 +33,18 @@ Phases 1–4 are implemented and verified on CPU (16/16 unit tests):
 
 Project knowledge base (Obsidian): [`PASN_vault/`](PASN_vault/).
 
+## Research automation
+
+Agent layer for the paper push — hypothesis cards, run records, and a
+cross-model verifier that checks claims against the records they came from.
+Start at [`docs/HOWTO.md`](docs/HOWTO.md); roles and write boundaries are in
+[`AGENTS.md`](AGENTS.md).
+
+```bash
+python research/tools/check_build.py                       # 이 레코드 인용해도 되나
+python research/tools/verify.py --claim "<주장>" results/freeze_e1.json   # 근거 있나
+```
+
 Next: apply the PASN conversion to a real pretrained model (GPT-2 × WikiText-2) on
 GPU (vast.ai); ImageNet/NLU/NLG benchmarks are further out (see the plan).
 

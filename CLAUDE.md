@@ -14,6 +14,7 @@ IEEE-754 지수 비트 라우터가 입력을 binade 구간으로 나누고, 각
 
 | 무엇 | 어디 |
 |---|---|
+| **사용법 — 뭘 시킬 수 있고 결과를 어디서 보나** | [`docs/HOWTO.md`](docs/HOWTO.md) |
 | **실험 우선순위의 단일 출처** | [`PAPER_PLAN.md`](PAPER_PLAN.md) §2 (E0–E14, 의존 순서) |
 | **계측 규약** — 어기면 숫자가 무의미 | [`PAPER_PLAN.md`](PAPER_PLAN.md) §4 |
 | **하지 말 것** | [`PAPER_PLAN.md`](PAPER_PLAN.md) §5 + [`NEXT_EXPERIMENTS.md`](NEXT_EXPERIMENTS.md) §4 |

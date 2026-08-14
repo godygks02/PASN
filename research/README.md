@@ -1,5 +1,8 @@
 # research/ — 에이전트 레이어
 
+> 실제 사용법(명령어, 결과 보는 법, 막힐 때)은 [`docs/HOWTO.md`](../docs/HOWTO.md).
+> 이 문서는 왜 이 구조인지를 설명한다.
+
 기존 구조를 대체하지 않는다. `experiments/`·`results/`·`PAPER_PLAN.md`는 그대로고,
 여기는 **에이전트가 읽고 쓰는 얇은 층**만 얹는다.
 
