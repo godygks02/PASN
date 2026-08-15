@@ -33,12 +33,12 @@ Phases 1–4 are implemented and verified on CPU (16/16 unit tests):
 
 Project knowledge base (Obsidian): [`PASN_vault/`](PASN_vault/).
 
-## Research automation
+## Verification tooling
 
-Agent layer for the paper push — hypothesis cards, run records, and a
-cross-model verifier that checks claims against the records they came from.
-Start at [`docs/HOWTO.md`](docs/HOWTO.md); roles and write boundaries are in
-[`AGENTS.md`](AGENTS.md).
+Two scripts guard the gap between records and claims: one classifies which build
+a record came from, one sends a claim to a different model to be checked against
+the records it rests on. Neither costs Claude tokens. See
+[`docs/HOWTO.md`](docs/HOWTO.md).
 
 ```bash
 python research/tools/check_build.py                       # 이 레코드 인용해도 되나

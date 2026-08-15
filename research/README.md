@@ -1,10 +1,10 @@
-# research/ — 에이전트 레이어
+# research/ — 검증 레이어
 
-> 실제 사용법(명령어, 결과 보는 법, 막힐 때)은 [`docs/HOWTO.md`](../docs/HOWTO.md).
+> 사용법(명령어, 결과 보는 법, 막힐 때)은 [`docs/HOWTO.md`](../docs/HOWTO.md).
 > 이 문서는 왜 이 구조인지를 설명한다.
 
 기존 구조를 대체하지 않는다. `experiments/`·`results/`·`PAPER_PLAN.md`는 그대로고,
-여기는 **에이전트가 읽고 쓰는 얇은 층**만 얹는다.
+여기는 **수치와 그 출처를 묶어두는 얇은 층**만 얹는다.
 
 ```
 research/
@@ -13,10 +13,12 @@ research/
 ├── ideas/               가설 카드 (스테이징. 승인되면 사람이 PAPER_PLAN §2로 승격)
 ├── refs/                문헌 비교표 (식별자 없으면 "미확인 후보"로 격리)
 ├── verdicts/            교차모델 검증 판정 (codex 출력, 자동 생성)
+├── cycles/              실험 사이클 장부 (cycle.py 상태)
 ├── manuscript/          원고 초안 — paper/ 는 베이스라인 PDF 자리라 못 쓴다
 └── tools/
     ├── check_build.py       레코드가 어느 빌드인지 기계 판정
     ├── verify.py            주장을 Codex로 교차검증
+    ├── cycle.py             사이클 장부 + vast.ai 커밋-전-종료 확인
     └── verdict.schema.json  판정 출력 스키마
 ```
 

@@ -1,6 +1,35 @@
-# 에이전트 세팅 — 가이드에서 무엇을 따랐고 무엇을 바꿨나
+# 에이전트 세팅 — 무엇을 만들었고 왜 되돌렸나
 
 2026-08-14. 원본 지시서는 [`RESEARCH_AGENT_SETUP.md`](RESEARCH_AGENT_SETUP.md)에 그대로 보존.
+
+> ## ⛔ 롤백됨 — 서브에이전트와 스킬은 제거했다 (같은 날)
+>
+> 에이전트 6개(planner·scout·runner·analyst·verifier·writer)와 스킬 4개를 만들었고,
+> 실제로 한 사이클을 돌려봤다. **토큰이 실험 예산을 잡아먹어서 뺐다.**
+>
+> 원인은 설계 자체에 있었다. 모든 에이전트 정의에 *"`PAPER_PLAN.md` §2를 읽고
+> 시작하라"*고 써놨는데 그 파일이 **28k 토큰**이고, `NEXT_EXPERIMENTS.md`가 8k다.
+> 에이전트는 콜드 스타트라 매번 처음부터 다시 읽는다:
+>
+> | | 토큰 |
+> |---|---|
+> | 에이전트 1개 오리엔테이션 | ~36k |
+> | 사이클 한 바퀴 (에이전트 5개) | **~180k** — 실제 작업 전에 |
+> | `check_build.py`로 레코드 74건 판정 | **0** |
+>
+> **교훈: 맥락이 큰 프로젝트에서 멀티에이전트는 맥락 비용을 에이전트 수만큼 곱한다.**
+> 역할 분리의 논리(실행과 해석을 나눈다, 검증은 다른 모델로)는 여전히 옳지만,
+> 그걸 사는 값이 이 리포에서는 너무 비쌌다.
+>
+> **남긴 것** — 전부 Claude 토큰 0:
+> - `research/tools/check_build.py` — 빌드 지문 판정 (변종 13건을 실제로 찾아냈다)
+> - `research/tools/verify.py` — Codex 교차검증 (**ChatGPT 할당량**이라 실험과 별개 예산)
+> - `research/tools/cycle.py` — 사이클 장부 + vast.ai 커밋-전-종료 확인
+> - `research/builds.json` · `RECORD_SCHEMA.md` · `ideas/TEMPLATE.md`
+>
+> **제거한 것**: `.claude/agents/` · `.claude/skills/` · `AGENTS.md`.
+> 되살리려면 `git revert` 대상은 이 파일 아래 커밋 목록이 아니라
+> `git log --diff-filter=D -- .claude/agents` 로 찾는다.
 
 가이드는 **빈 리포를 전제로 쓰였다.** 이 리포는 이미 E0–E14 실험 체계, 빌드 프리즈,
 사전등록 게이트, 계측 규약을 갖고 있어서, 가이드의 스켈레톤을 그대로 씌우면 기존
