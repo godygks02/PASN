@@ -1,0 +1,12 @@
+{
+ "experiment": "e48_greedy_hybrid_gpt2",
+ "status": "failed",
+ "tag": "greedy-hybrid-g1-medium-t16-e10",
+ "attempt": 1,
+ "commit": "04862ac5ac4639df057c98b2682df1143f88c5a5",
+ "host": "vast.ai RTX 3090 (151.237.25.16:20471)",
+ "started": "2026-10-10T07:22:44Z",
+ "error": "OSError: offline model load could not find gpt2-medium -- the container pre-sets HF_HOME=/workspace/.hf_home, so the driver's ${HF_HOME:-/workspace/.hf_fresh} default never applied and the prefetched cache in /workspace/.hf_fresh was not used. Failed before any conversion; nothing built or evaluated.",
+ "fix": "relaunched 07:23:27Z with HF_HOME=/workspace/.hf_fresh; driver now sets E48_HF_HOME explicitly",
+ "remote_log": "results/greedy_hybrid_g1_medium_t16_e10_attempt1_failed.log"
+}

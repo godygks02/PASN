@@ -18,7 +18,9 @@ set -euo pipefail
 
 cd "${PASN_ROOT:-/workspace/pasn_current}"
 mkdir -p results
-export HF_HOME="${HF_HOME:-/workspace/.hf_fresh}"
+# The vast base image pre-sets HF_HOME=/workspace/.hf_home, so a ${HF_HOME:-...}
+# default never applies (attempt 1 failed on it). Set it explicitly.
+export HF_HOME="${E48_HF_HOME:-/workspace/.hf_fresh}"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 export HF_DATASETS_OFFLINE="${HF_DATASETS_OFFLINE:-1}"
 export HF_HUB_DISABLE_XET=1
