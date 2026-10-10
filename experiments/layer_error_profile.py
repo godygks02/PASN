@@ -47,6 +47,7 @@ import torch.nn as nn  # noqa: E402
 import torch.nn.functional as F  # noqa: E402
 
 from mbe import convert as cv  # noqa: E402
+from mbe import spiking_ops as so  # noqa: E402
 from mbe.gpt2_convert import make_spikable, make_attention_spikable  # noqa: E402
 
 from gpt2_wikitext import load_wikitext_ids  # noqa: E402
@@ -171,7 +172,19 @@ def main():
                     help="draw the global identity's calibration log-uniformly")
     ap.add_argument("--tag", default=None, help="label stored with the record")
     ap.add_argument("--json", default="results/layer_error_profile.json")
+    # E31: the global-MBE path fitted every primitive once, while the routed path
+    # has always tried two alpha placements and kept the better. Adding the tau
+    # initialisation `tau = dt/ln 2` (ratio 0.5, an exact SAR encoder) to the
+    # global path's search cut the catastrophic `ln_id` cell 743x on E2's own
+    # domain. This flag asks the question that decides E15: does that carry to the
+    # network, i.e. is the divergence our fit or the wide domain?
+    ap.add_argument("--fit-tau-search", action="store_true",
+                    help="global MBE: also try tau=dt/ln2 and keep the better fit")
     args = ap.parse_args()
+
+    if args.fit_tau_search:
+        so.FIT_TAU_SEARCH = True
+        print("[fit] tau-init search ON for the global-MBE path", flush=True)
 
     device = torch.device("cpu")
     t_start = time.perf_counter()

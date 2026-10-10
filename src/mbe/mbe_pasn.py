@@ -76,13 +76,38 @@ class PrefixRouter:
     Neither is learnable by gradient descent: the bank index is piecewise constant
     in both, so the gradient is zero almost everywhere. They are *calibrated* --
     scored on the same objective used to pick a budget.
+
+    **Mantissa prefix (``m_bits``).** The exponent read cuts the line into
+    binades; reading the top ``m_bits`` of the mantissa as well cuts every
+    magnitude binade into ``2^m_bits`` equal sub-ranges
+    ``[2^e (1 + j/2^m), 2^e (1 + (j+1)/2^m))``. It is still a bit-read -- the
+    bank index is ``(sign, exponent, mantissa[:m])`` -- so the extra resolution
+    costs no spikes, only stored banks. The near-zero region is not split: it has
+    no exponent to anchor a mantissa to. ``m_bits=0`` builds exactly the original
+    banks in the original order.
+
+    ``m_bits`` may also be a mapping ``{(sign, e): m}`` -- a per-binade depth, i.e.
+    a variable-depth prefix tree (missing binades read no mantissa bits). Only the
+    binades that need the resolution pay for the extra banks (E39 §8).
     """
 
     def __init__(self, lo: float, hi: float, e_min: int = -2,
                  e_max: int | None = None, near0: str = "single",
-                 beta: float = 0.0, gamma_log2: int = 0):
+                 beta: float = 0.0, gamma_log2: int = 0, m_bits=0):
         if near0 not in ("single", "signed"):
             raise ValueError(f"near0 must be 'single' or 'signed', got {near0!r}")
+        if isinstance(m_bits, dict):
+            m_of = {(float(k[0]), int(k[1])): int(v) for k, v in m_bits.items()}
+            self.m_bits = dict(m_of)
+            default_m = 0
+        else:
+            m_of, default_m = {}, int(m_bits)
+            self.m_bits = default_m
+        if default_m < 0 or any(v < 0 for v in m_of.values()):
+            raise ValueError(f"m_bits must be >= 0, got {m_bits!r}")
+        # ``split`` is False only for the original exponent-only router, whose
+        # bank keys stay ``(sign, e)``; any mantissa reading keys ``(sign, e, j)``.
+        self.split = bool(m_of) or default_m > 0
         self.near0 = near0
         self.beta = float(beta)
         self.gamma_log2 = int(gamma_log2)
@@ -110,12 +135,31 @@ class PrefixRouter:
                 self.near0_idx[s] = len(self.banks)
                 self.banks.append(dict(kind="near0s", raw=False, sign=s,
                                        x_min=0.0, x_scale=self.near0_span))
-        self.key_to_idx: dict[tuple[float, int], int] = {}
+        # Keys are ``(sign, e)`` without a mantissa read (unchanged) and
+        # ``(sign, e, j)`` with one. Banks are laid out sign-major, then e, then j;
+        # ``_m_tab`` / ``_off_tab`` hold each binade's depth and first bank index.
+        self.key_to_idx: dict[tuple, int] = {}
+        self.signs = signs
+        self.m_of: dict[tuple[float, int], int] = {}
+        m_tab, off_tab = [], []
         for s in signs:
             for e in range(self.e_min, self.e_max):
-                self.key_to_idx[(s, e)] = len(self.banks)
-                self.banks.append(dict(kind="mag", raw=False, sign=s, e=e,
-                                       x_min=2.0 ** e, x_scale=2.0 ** e))
+                m = m_of.get((s, e), default_m)
+                self.m_of[(s, e)] = m
+                m_tab.append(m)
+                off_tab.append(len(self.banks))
+                n_sub = 2 ** m
+                for j in range(n_sub):
+                    key = (s, e, j) if self.split else (s, e)
+                    self.key_to_idx[key] = len(self.banks)
+                    w = 2.0 ** e / n_sub
+                    spec = dict(kind="mag", raw=False, sign=s, e=e,
+                                x_min=2.0 ** e + j * w, x_scale=w)
+                    if self.split:
+                        spec["sub"], spec["m"] = j, m
+                    self.banks.append(spec)
+        self._m_tab = torch.tensor(m_tab, dtype=torch.int64)
+        self._off_tab = torch.tensor(off_tab, dtype=torch.int64)
 
     # -- affine placement ---------------------------------------------------
     def to_key(self, x):
@@ -138,8 +182,8 @@ class PrefixRouter:
         if spec["kind"] == "near0s":
             return ((0.0, self.near0_span) if spec["sign"] > 0
                     else (-self.near0_span, 0.0))
-        e, s = spec["e"], spec["sign"]
-        lo, hi = 2.0 ** e, 2.0 ** (e + 1)
+        s = spec["sign"]
+        lo, hi = spec["x_min"], spec["x_min"] + spec["x_scale"]
         return (lo, hi) if s > 0 else (-hi, -lo)
 
     def bank_interval(self, bi: int) -> tuple[float, float]:
@@ -172,10 +216,26 @@ class PrefixRouter:
         e = torch.floor(torch.log2(mag.clamp(min=self.near0_span)))
         e = e.clamp(self.e_min, self.e_max - 1).to(torch.int64)
         s = torch.where(x_flat < 0, -1.0, 1.0)
-        idx = torch.zeros_like(x_flat, dtype=torch.int64)   # default -> near0 (0)
-        for (sk, ek), bi in self.key_to_idx.items():
-            m = (~near0) & (s == sk) & (e == ek)
-            idx = torch.where(m, torch.full_like(idx, bi), idx)
+        # Magnitude index by arithmetic on (sign, e, mantissa prefix) -- the bank
+        # list is laid out sign-major, then e, then j, so this is the same index
+        # ``key_to_idx`` holds. A sign the router has no banks for (negative input
+        # to an unsigned router) keeps the default 0, as before.
+        n_e = self.e_max - self.e_min
+        pos = (s > 0).to(torch.int64)              # signs are laid out [-1, +1]
+        sign_pos = pos if self.signed else torch.zeros_like(pos)
+        binade = sign_pos * n_e + (e - self.e_min)
+        off = self._off_tab.to(x_flat.device)[binade]
+        if self.split:
+            m = self._m_tab.to(x_flat.device)[binade]
+            n_sub = torch.pow(2, m)
+            frac = mag / torch.exp2(e.to(mag.dtype)) - 1.0     # exact: 2^e scaling
+            j = torch.floor(frac * n_sub.to(mag.dtype)).to(torch.int64)
+            j = torch.minimum(j.clamp(min=0), n_sub - 1)
+            mag_idx = off + j
+        else:
+            mag_idx = off
+        ok = (~near0) & ((s > 0) | torch.tensor(self.signed))
+        idx = torch.where(ok, mag_idx, torch.zeros_like(mag_idx))  # default near0
         if self.near0 == "single":
             return torch.where(near0, torch.zeros_like(idx), idx)
         for sk, bi in self.near0_idx.items():
@@ -492,31 +552,55 @@ def _build_tied(fn, router, domain, reach, N, T, epochs, seed, device,
         ta, tb = router.to_key(a), router.to_key(b)
         return min(abs(ta), abs(tb)), max(abs(ta), abs(tb))
 
-    ref = mags[0]
-    lo_r, _ = key_span(ref)
-    h = fn(router.from_key(router.banks[ref]["sign"] * (lo_r * (1.0 + rho))))
-    h = h / max(float(h.pow(2).mean().sqrt()), 1e-30)      # 단위 스케일로 정규화
+    def span(bi):
+        """``(lo, width)`` of the key magnitudes bank ``bi`` covers. A whole
+        binade has ``width == lo``; a mantissa sub-range ``[2^e(1+j/2^m),
+        2^e(1+(j+1)/2^m))`` is narrower, and its shape is shared with sub-range
+        ``j`` of every other binade -- one prototype per ``j``."""
+        if not router.split:
+            lo_b, _ = key_span(bi)
+            return lo_b, lo_b
+        spec = router.banks[bi]
+        return spec["x_min"], spec["x_scale"]
 
-    cfg = MBEConfig(n_basis=N, n_steps=T, x_min=0.0, x_scale=1.0,
-                    alpha_v=_uniform_alpha(N), use_bias=True)
-    proto = MBENeuron(cfg).to(device)
-    fit_model(proto, rho, h, seed=seed, epochs=epochs)
+    def keys(bi):
+        lo_b, w_b = span(bi)
+        # m=0 keeps the original expression so existing builds stay bit-identical
+        # (``lo_b`` is domain-clipped there and need not be a power of two).
+        return lo_b * (1.0 + rho) if not router.split else lo_b + w_b * rho
 
     banks: list = [None] * router.n_banks
-    for bi in mags:
-        lo_b, _ = key_span(bi)
-        g = fn(router.from_key(router.banks[bi]["sign"] * (lo_b * (1.0 + rho))))
-        s, resid = _tie_scale(g, h)
-        if resid > tol:
-            raise ValueError(
-                f"target is not self-similar across binades (bank {bi}: relative "
-                f"residual {resid:.2e} > tol {tol:.0e}); tied=True only applies to "
-                f"positively homogeneous targets")
-        banks[bi] = TiedBank(proto, lo_b, lo_b, s)
-        if verbose:
-            print(f"    bank {bi:2d} tied scale={s:+.4g} resid={resid:.1e}",
-                  flush=True)
-    return banks, proto
+    protos = {}
+    # One prototype per sub-range *shape* ``(m, j)``: sub-range j of an m-bit
+    # binade is the same unit-interval slice in every binade of that depth.
+    def shape(bi):
+        return router.banks[bi].get("m", 0), router.banks[bi].get("sub", 0)
+    for sub in sorted({shape(bi) for bi in mags}):
+        group = [bi for bi in mags if shape(bi) == sub]
+        ref = group[0]
+        h = fn(router.from_key(router.banks[ref]["sign"] * keys(ref)))
+        h = h / max(float(h.pow(2).mean().sqrt()), 1e-30)      # 단위 스케일로 정규화
+
+        cfg = MBEConfig(n_basis=N, n_steps=T, x_min=0.0, x_scale=1.0,
+                        alpha_v=_uniform_alpha(N), use_bias=True)
+        proto = MBENeuron(cfg).to(device)
+        fit_model(proto, rho, h, seed=seed, epochs=epochs)
+        protos[sub] = proto
+
+        for bi in group:
+            lo_b, w_b = span(bi)
+            g = fn(router.from_key(router.banks[bi]["sign"] * keys(bi)))
+            s, resid = _tie_scale(g, h)
+            if resid > tol:
+                raise ValueError(
+                    f"target is not self-similar across binades (bank {bi}: relative "
+                    f"residual {resid:.2e} > tol {tol:.0e}); tied=True only applies to "
+                    f"positively homogeneous targets")
+            banks[bi] = TiedBank(proto, lo_b, w_b, s)
+            if verbose:
+                print(f"    bank {bi:2d} tied scale={s:+.4g} resid={resid:.1e}",
+                      flush=True)
+    return banks, protos[min(protos)]
 
 
 def _fit_bank_adaptive(tgt, feed_lo, feed_hi, target_mse, n_max,
@@ -535,6 +619,97 @@ def _fit_bank_adaptive(tgt, feed_lo, feed_hi, target_mse, n_max,
     return best
 
 
+def _bank_eps(y: torch.Tensor, target: str, target_mse: float,
+              target_rel: float) -> float:
+    """A bank's MSE budget from its target values ``y`` on its own range.
+
+    * ``"absolute"`` -- ``target_mse`` everywhere.
+    * ``"relative"`` -- ``(target_rel * rms(y))^2``: scales with the output.
+    * ``"hybrid"``   -- ``max((target_rel * rms(y))^2, target_mse)``: relative,
+      floored by an absolute budget. A relative budget alone becomes unreachable
+      where the output goes to zero (GELU's negative tail asks for 1e-13, E43);
+      an absolute one alone is unreachable where the output is large (GELU's
+      outlier binades, E42). The floor is what the network can resolve anyway.
+    """
+    if target == "absolute":
+        return target_mse
+    rel = (target_rel * max(float(y.pow(2).mean().sqrt()), 1e-30)) ** 2
+    if target == "relative":
+        return rel
+    if target == "hybrid":
+        return max(rel, target_mse)
+    raise ValueError(f"target must be 'absolute', 'relative' or 'hybrid', got {target!r}")
+
+
+def bank_energy_pj(n_basis: int, n_steps: int, readout_order: int,
+                   spikes: float, fused_readout: bool = False) -> float:
+    """Energy of one evaluation of one bank, per input element (pJ).
+
+    The terms ``metrics.neuron_op_cost`` charges, minus the router (it is the
+    same for every bank of a neuron, so it cannot change which bank wins):
+    ``N*T`` threshold compares, two accumulates per spike, and the readout --
+    ``N*order`` MACs plus ``N*(order-1)`` powers, or, when an order-1 readout is
+    *fused* (``w`` folded into the decode kernel ``d[t]``), one bias add.
+    """
+    from .metrics import OP_ENERGY_PJ as E
+    if fused_readout and readout_order != 1:
+        raise ValueError("only an order-1 readout folds into the decode kernel")
+    e = E["cmp"] * n_basis * n_steps + E["ac"] * 2.0 * spikes
+    if fused_readout:
+        return e + E["ac"]
+    return e + E["mac"] * (n_basis * readout_order + n_basis * (readout_order - 1))
+
+
+def _fit_bank_budget(tgt, feed_lo, feed_hi, target_mse, n_grid, t_grid,
+                     epochs, seed, device, *, alpha_init="auto",
+                     readout_order=1, learn_tau=True, tau_range=None,
+                     spike_lambda=0.0, select="spikes", fused_readout=False):
+    """Select a fitted ``(N, T)`` using held-out error and measured spikes.
+
+    A candidate must meet the bank's error target. Among feasible candidates,
+    choose fewer spikes, then fewer stored bases, then fewer timesteps. If no
+    candidate is feasible, return the lowest-error fit and expose that miss in
+    the diagnostics; silently treating it as feasible would bias comparisons.
+
+    ``select="energy"`` ranks feasible candidates by :func:`bank_energy_pj`
+    instead of spikes (E46): compares are paid every timestep whether or not a
+    basis fires, so the fewest-spike candidate need not be the cheapest one.
+    """
+    if select not in ("spikes", "energy"):
+        raise ValueError(f"select must be 'spikes' or 'energy', got {select!r}")
+    if not n_grid or not t_grid:
+        raise ValueError("fit budget needs nonempty N and T grids")
+    x_sel = _grid(feed_lo, feed_hi, 1024, 0.75, device)
+    y_sel = tgt(x_sel)
+    candidates = []
+    for N in n_grid:
+        for T in t_grid:
+            bank, _ = _fit_bank(
+                tgt, feed_lo, feed_hi, N, T, epochs, seed, device,
+                alpha_init=alpha_init, readout_order=readout_order,
+                learn_tau=learn_tau, tau_range=tau_range,
+                spike_lambda=spike_lambda,
+            )
+            with torch.no_grad():
+                mse = float((bank(x_sel) - y_sel).pow(2).mean())
+                spikes = float(bank.firing_rate(x_sel)) * N * T
+            cand = dict(N=N, T=T, mse=mse, spikes=spikes,
+                        feasible=mse <= target_mse)
+            if select == "energy":
+                cand["energy"] = bank_energy_pj(N, T, readout_order, spikes,
+                                                fused_readout)
+            candidates.append((bank, cand))
+    feasible = [c for c in candidates if c[1]["feasible"]]
+    cost = "energy" if select == "energy" else "spikes"
+    if feasible:
+        bank, chosen = min(feasible, key=lambda c: (
+            c[1][cost], c[1]["N"], c[1]["T"], c[1]["mse"]))
+    else:
+        bank, chosen = min(candidates, key=lambda c: (
+            c[1]["mse"], c[1]["spikes"], c[1]["N"], c[1]["T"]))
+    return bank, chosen, [c[1] for c in candidates]
+
+
 def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
                    e_max: int | None = None, n_local: int = 2, n_near0: int = 4,
                    n_steps: int = 16, epochs: int = 300, seed: int = 0,
@@ -542,10 +717,12 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
                    near0: str = "signed", budget: str = "fixed",
                    target: str = "absolute", target_rel: float = 1e-3,
                    tied: bool = False, tied_tol: float = 1e-3,
-                   beta: float = 0.0, gamma_log2: int = 0,
+                   near0_rule: bool = False,
+                   beta: float = 0.0, gamma_log2: int = 0, m_bits=0,
                    readout_order: int = 1, learn_tau: bool = True,
                    tau_range: tuple | None = None, rule_ac: tuple | None = None,
                    spike_lambda: float = 0.0, t_fixed: int | None = None,
+                   select: str = "spikes", fused_readout: bool = False,
                    n_fixed: int | None = None,
                    alpha_init: str = "auto", verbose: bool = False,
                    device: torch.device | str = "cpu") -> MBEPASNNeuron:
@@ -574,6 +751,9 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
       banks that genuinely need the resolution get a long spike train. This is
       where the energy saving comes from -- ``T`` was a global constant before, and
       it is a *linear* factor in the spike count.
+    * ``"fit"`` -- fit every candidate ``N=1..n_max`` and ``T`` in ``T_GRID`` up
+      to ``n_steps``; select by held-out MSE and measured spikes per bank. This is
+      an experimental, offline search, not differentiable architecture learning.
 
     ``target`` says what the rule's error budget *means*:
 
@@ -598,6 +778,13 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
     routing on ``(x - beta) / 2^{gamma_log2}`` puts the log-dense ranges at ``beta``
     rather than at zero. Calibrate them, do not train them.
 
+    ``near0_rule=True`` lets ``budget="rule"`` reach the **near-zero** banks of a
+    ``tied`` build. It has no effect otherwise: the untied path already rules every
+    bank, and ``budget="fixed"`` rules none. Default ``False`` because turning it on
+    moves the frozen fingerprint (53,888 B / 13,472 p / 339 prims) -- it is a
+    numerics change, not a re-accounting, so it needs its own network re-eval
+    before it can become the default.
+
     ``tied=True`` fits **one** prototype on the unit residual and gives each
     magnitude bank that prototype with its readout scaled by the routed key -- exact
     for positively homogeneous targets, and the storage then stops growing with the
@@ -611,9 +798,15 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
     bank straddles zero** -- see :class:`PrefixRouter`. This is what removes the
     error floor that a single near-zero bank has on targets whose bend sits at 0.
     """
-    if budget not in ("fixed", "rule"):
-        raise ValueError(f"budget must be 'fixed' or 'rule', got {budget!r}")
-    if tied and budget == "rule" and target == "absolute":
+    if budget not in ("fixed", "rule", "fit"):
+        raise ValueError(f"budget must be 'fixed', 'rule', or 'fit', got {budget!r}")
+    if budget == "fit" and adaptive:
+        raise ValueError("budget='fit' replaces the older adaptive=True N-only sweep")
+    if target not in ("absolute", "relative", "hybrid"):
+        raise ValueError(f"target must be 'absolute', 'relative' or 'hybrid', got {target!r}")
+    if tied and target == "hybrid":
+        raise ValueError("tied=True budgets on the unit residual; 'hybrid' is untied only")
+    if tied and budget in ("rule", "fit") and target == "absolute":
         # Not a coding gap -- the two are incompatible. Tying fits one prototype on
         # the *unit* residual and hands every magnitude bank that same prototype
         # scaled by the routed key, so the relative error is flat across banks by
@@ -634,7 +827,8 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
         )
     fn, _ = functions.REGISTRY[name]
     router = PrefixRouter(domain[0], domain[1], e_min=e_min, e_max=e_max,
-                          near0=near0, beta=beta, gamma_log2=gamma_log2)
+                          near0=near0, beta=beta, gamma_log2=gamma_log2,
+                          m_bits=m_bits)
     reach = {bi: sp for bi in range(router.n_banks)
              if (sp := router.reachable(bi, domain[0], domain[1])) is not None}
 
@@ -673,26 +867,114 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
                                 (target_rel * float(h.pow(2).mean().sqrt())) ** 2,
                                 n_max=min(n_max, 4), a=ra, c=rc, t_grid=t_grid)
                     if budget == "rule" else (n_local, n_steps))
+        tied_search = None
+        if budget == "fit":
+            # One shared prototype serves every magnitude bank. Search its joint
+            # architecture once; searching each magnitude bank independently would
+            # break parameter tying and silently change the memory accounting.
+            mag_bi = next(bi for bi in reach
+                          if router.banks[bi]["kind"] == "mag")
+            tgt, flo, fhi = bank_target(mag_bi)
+            search_ns = (n_fixed,) if n_fixed is not None else tuple(range(1, n_max + 1))
+            search_ts = (t_fixed,) if t_fixed is not None else t_grid
+            # With a mantissa prefix one binade is 2^m sub-banks (one prototype
+            # each); score the whole binade, not one sub-range of it.
+            spec0 = router.banks[mag_bi]
+            sel_bis = [bi for bi in reach if router.banks[bi]["kind"] == "mag"
+                       and router.banks[bi]["sign"] == spec0["sign"]
+                       and router.banks[bi]["e"] == spec0["e"]]
+            sel = []
+            for bi in sel_bis:
+                t_b, lo_b, hi_b = bank_target(bi)
+                xs = _grid(lo_b, hi_b, 1024 // len(sel_bis), 0.75, device)
+                sel.append((bi, xs, t_b(xs)))
+            y_all = torch.cat([y for _, _, y in sel])
+            tied_eps = (target_rel * max(float(y_all.pow(2).mean().sqrt()), 1e-30)) ** 2
+            tied_options = []
+            for N in search_ns:
+                for T in search_ts:
+                    candidate_banks, _ = _build_tied(
+                        fn, router, domain, reach, N, T, epochs, seed,
+                        device, alpha_init, tied_tol, 512, False)
+                    with torch.no_grad():
+                        mse = float(torch.cat([candidate_banks[bi](xs) - ys
+                                               for bi, xs, ys in sel]).pow(2).mean())
+                        spikes = sum(float(candidate_banks[bi].firing_rate(xs))
+                                     for bi, xs, _ in sel) / len(sel) * N * T
+                    tied_options.append((candidate_banks, dict(
+                        N=N, T=T, mse=mse, spikes=spikes,
+                        feasible=mse <= tied_eps)))
+            feasible = [c for c in tied_options if c[1]["feasible"]]
+            if feasible:
+                banks, tied_search = min(feasible, key=lambda c: (
+                    c[1]["spikes"], c[1]["N"], c[1]["T"], c[1]["mse"]))
+            else:
+                banks, tied_search = min(tied_options, key=lambda c: (
+                    c[1]["mse"], c[1]["spikes"], c[1]["N"], c[1]["T"]))
+            tied_candidates = [c[1] for c in tied_options]
+            N_t, T_t = tied_search["N"], tied_search["T"]
         if t_fixed is not None:
             T_t = t_fixed
         if n_fixed is not None:
             N_t = n_fixed
-        banks, _ = _build_tied(fn, router, domain, reach, N_t, T_t, epochs, seed,
-                               device, alpha_init, tied_tol, 512, verbose)
+        if budget != "fit":
+            banks, _ = _build_tied(fn, router, domain, reach, N_t, T_t, epochs, seed,
+                                   device, alpha_init, tied_tol, 512, verbose)
+        fit_budget_diagnostics = []
         for bi in reach:                      # near-zero banks are not homogeneous
             if banks[bi] is None:
                 tgt, flo, fhi = bank_target(bi)
-                banks[bi], _ = _fit_bank(tgt, flo, fhi, n_fixed or n_near0,
-                                         t_fixed or n_steps,
-                                         epochs, seed, device,
-                                         alpha_init=alpha_init,
-                                         readout_order=readout_order,
-                                         learn_tau=learn_tau,
-                                         tau_range=tau_range,
-                                         spike_lambda=spike_lambda)
-        return MBEPASNNeuron(router, fill_unreachable(router, banks))
+                # ``near0_rule`` closes a gap between the two branches: the untied
+                # path solves ``(N_j, T_j)`` for *every* bank, but here the tied
+                # prototype covers only the magnitude banks and the near-zero
+                # leftovers fall through to the fixed ``n_near0`` / ``n_steps``,
+                # so ``budget="rule"`` never reaches them. Measured on the identity
+                # at op level (the only tied primitive, and the one inside
+                # fp_multiply / layernorm / attention / softmax): dropping the
+                # near-zero bank from N=4 to N=1 cut storage 2.29x and spikes
+                # slightly while leaving nrmse identical to four figures -- those
+                # bases were buying nothing, because the identity is exactly
+                # linear on ``[0, 2^e_min)``.
+                cap, steps = n_near0, n_steps
+                if (near0_rule and budget == "rule") or budget == "fit":
+                    y = tgt(_grid(flo, fhi, 512, 0.0))
+                    eps = _bank_eps(y, target, target_mse, target_rel)
+                    if budget == "rule":
+                        cap, steps = rule_budget(float(y.max() - y.min()), eps,
+                                                 n_max=min(n_max, 4), a=ra, c=rc,
+                                                 t_grid=t_grid)
+                if budget == "fit":
+                    ns = (n_fixed,) if n_fixed is not None else tuple(range(1, n_max + 1))
+                    ts = (t_fixed,) if t_fixed is not None else t_grid
+                    banks[bi], chosen, candidates = _fit_bank_budget(
+                        tgt, flo, fhi, eps, ns, ts, epochs, seed, device,
+                        alpha_init=alpha_init, readout_order=readout_order,
+                        learn_tau=learn_tau, tau_range=tau_range,
+                        spike_lambda=spike_lambda, select=select,
+                        fused_readout=fused_readout,
+                    )
+                    fit_budget_diagnostics.append(dict(bank=bi, target_mse=eps,
+                                                       selected=chosen,
+                                                       candidates=candidates))
+                else:
+                    banks[bi], _ = _fit_bank(tgt, flo, fhi, n_fixed or cap,
+                                              t_fixed or steps,
+                                              epochs, seed, device,
+                                              alpha_init=alpha_init,
+                                              readout_order=readout_order,
+                                              learn_tau=learn_tau,
+                                              tau_range=tau_range,
+                                              spike_lambda=spike_lambda)
+        result = MBEPASNNeuron(router, fill_unreachable(router, banks))
+        if budget == "fit":
+            result.fit_budget_diagnostics = [dict(bank="tied_magnitude",
+                                                  target_mse=tied_eps,
+                                                  selected=tied_search,
+                                                  candidates=tied_candidates)] + fit_budget_diagnostics
+        return result
 
     banks: list[MBENeuron | None] = []
+    fit_budget_diagnostics = []
     for bi, spec in enumerate(router.banks):
         # Clamp every fit to the calibrated domain. Banks the domain never reaches
         # are filled in afterwards from their nearest reachable neighbour -- an
@@ -709,21 +991,34 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
         tgt, flo, fhi = bank_target(bi)
         cap = n_local if spec["kind"] == "mag" else n_near0
         steps = n_steps
-        if budget == "rule":
+        if budget in ("rule", "fit"):
             y = tgt(_grid(flo, fhi, 512, 0.0))
-            eps = target_mse
-            if target == "relative":
-                rms = float(y.pow(2).mean().sqrt())
-                eps = (target_rel * max(rms, 1e-30)) ** 2
-            ra, rc = rule_ac or bit_law(readout_order, learn_tau)
-            cap, steps = rule_budget(float(y.max() - y.min()), eps,
-                                     n_max=min(n_max, 4), a=ra, c=rc,
-                                     t_grid=t_grid)
+            eps = _bank_eps(y, target, target_mse, target_rel)
+            if budget == "rule":
+                ra, rc = rule_ac or bit_law(readout_order, learn_tau)
+                cap, steps = rule_budget(float(y.max() - y.min()), eps,
+                                         n_max=min(n_max, 4), a=ra, c=rc,
+                                         t_grid=t_grid)
         if t_fixed is not None:
             steps = t_fixed
         if n_fixed is not None:
             cap = n_fixed
-        if adaptive:
+        if budget == "fit":
+            search_ns = (n_fixed,) if n_fixed is not None else tuple(range(1, n_max + 1))
+            search_ts = (t_fixed,) if t_fixed is not None else t_grid
+            bank, chosen, candidates = _fit_bank_budget(
+                tgt, flo, fhi, eps, search_ns, search_ts, epochs, seed, device,
+                alpha_init=alpha_init, readout_order=readout_order,
+                learn_tau=learn_tau, tau_range=tau_range,
+                spike_lambda=spike_lambda, select=select,
+                fused_readout=fused_readout,
+            )
+            mse = chosen["mse"]
+            fit_budget_diagnostics.append(dict(bank=bi, kind=spec["kind"],
+                                               sign=spec.get("sign"),
+                                               target_mse=eps, selected=chosen,
+                                               candidates=candidates))
+        elif adaptive:
             bank, mse = _fit_bank_adaptive(tgt, flo, fhi, target_mse,
                                            n_max, steps, epochs, seed, device)
         else:
@@ -747,7 +1042,217 @@ def build_mbe_pasn(name: str, domain: tuple[float, float], e_min: int = -2,
                 f"mse={mse:.2e}",
                 flush=True,
             )
-    return MBEPASNNeuron(router, fill_unreachable(router, banks))
+    result = MBEPASNNeuron(router, fill_unreachable(router, banks))
+    if budget == "fit":
+        result.fit_budget_diagnostics = fit_budget_diagnostics
+    return result
+
+
+def build_mbe_pasn_split(name: str, domain: tuple[float, float], e_min: int = -2,
+                         e_max: int | None = None, m_max: int = 3,
+                         n_basis: int = 1, n_steps: int = 8, epochs: int = 100,
+                         seed: int = 0, target_mse: float = 1e-4,
+                         target: str = "absolute", target_rel: float = 1e-3,
+                         near0: str = "signed", beta: float = 0.0,
+                         gamma_log2: int = 0, readout_order: int = 1,
+                         learn_tau: bool = True, alpha_init: str = "auto",
+                         byte_budget: int | None = None,
+                         sample: torch.Tensor | None = None,
+                         min_gain: float = 0.0,
+                         select: str = "spikes", fused_readout: bool = False,
+                         verbose: bool = False,
+                         device: torch.device | str = "cpu") -> MBEPASNNeuron:
+    """Greedy per-binade mantissa depth: split only where the target is missed.
+
+    Every bank has ``n_basis`` bases (1 by default) and ``T`` chosen by the fit
+    selector (:func:`_fit_bank_budget`). Start every binade at ``m = 0``; a binade
+    with any sub-bank above its error target is re-fitted one mantissa bit deeper,
+    up to ``m_max``. Banks already fitted are never refitted, so the build costs
+    exactly the sub-ranges it visits. A binade still short at ``m_max`` keeps
+    ``m_max`` and is reported in the diagnostics.
+
+    This is the variable-depth prefix tree of E39 §8: bank count, not bases per
+    bank, is the resolution knob, and only the binades that need it pay. Untied
+    targets only (a tied prototype is shared across binades, so a per-binade depth
+    would need the prototypes regrouped by depth -- not wired here).
+
+    **Spending a byte budget (E41).** With ``byte_budget`` (total stored bytes) and
+    a calibration ``sample``, a second phase spends what the target-driven phase
+    left over on spikes: repeatedly take the open binade with the largest
+    *current* sample-weighted spike contribution per added byte, fit it one level
+    deeper (only that binade), and keep the split if every new sub-bank still meets
+    the target and the binade's spikes drop by more than ``min_gain`` (relative);
+    otherwise the binade is closed. Only the path taken is fitted -- unlike the
+    exhaustive frontier, which fits every depth of every binade.
+    ``result.spend_trajectory`` records each accepted step.
+    """
+    from .metrics import storage_bytes
+    fn, _ = functions.REGISTRY[name]
+    t_grid = tuple(t for t in T_GRID if t <= n_steps) or (T_GRID[0],)
+    m_map: dict[tuple[float, int], int] = {}
+    open_binades: set | None = None              # None: every binade, level 0
+    cache: dict[tuple, tuple] = {}
+    diagnostics = []
+
+    def key_of(spec):
+        if spec["kind"] != "mag":
+            return (spec["kind"], spec.get("sign"))
+        return ("mag", spec["sign"], spec["e"], spec.get("m", 0), spec.get("sub", 0))
+
+    def fit_one(router, bi, spec, level):
+        """Fit bank ``bi`` of ``router`` unless its range is already cached."""
+        k = key_of(spec)
+        if k in cache:
+            return cache[k]
+        span = router.reachable(bi, domain[0], domain[1])
+        ta, tb = router.to_key(span[0]), router.to_key(span[1])
+        if spec["kind"] == "near0":
+            tgt = (lambda v, r=router: fn(r.from_key(v)))
+            flo, fhi = min(ta, tb), max(ta, tb)
+        else:
+            tgt = (lambda v, s=spec["sign"], r=router: fn(r.from_key(s * v)))
+            flo, fhi = min(abs(ta), abs(tb)), max(abs(ta), abs(tb))
+        eps = _bank_eps(tgt(_grid(flo, fhi, 512, 0.0)), target, target_mse,
+                        target_rel)
+        bank, chosen, candidates = _fit_bank_budget(
+            tgt, flo, fhi, eps, (n_basis,), t_grid, epochs, seed, device,
+            alpha_init=alpha_init, readout_order=readout_order,
+            learn_tau=learn_tau, select=select, fused_readout=fused_readout)
+        cache[k] = (bank, chosen)
+        diagnostics.append(dict(bank=k, level=level, target_mse=eps,
+                                selected=chosen, candidates=candidates))
+        if verbose:
+            print(f"    L{level} {k} T={chosen['T']} mse={chosen['mse']:.2e} "
+                  f"{'ok' if chosen['feasible'] else 'MISS'}", flush=True)
+        return cache[k]
+
+    def make_router(mm):
+        return PrefixRouter(domain[0], domain[1], e_min=e_min, e_max=e_max,
+                            near0=near0, beta=beta, gamma_log2=gamma_log2,
+                            m_bits=dict(mm))
+
+    for level in range(m_max + 1):
+        router = PrefixRouter(domain[0], domain[1], e_min=e_min, e_max=e_max,
+                              near0=near0, beta=beta, gamma_log2=gamma_log2,
+                              m_bits=dict(m_map))
+        if open_binades is None:
+            open_binades = set(router.m_of)
+        for bi, spec in enumerate(router.banks):
+            if router.reachable(bi, domain[0], domain[1]) is None:
+                continue
+            if spec["kind"] == "mag":
+                if (spec["sign"], spec["e"]) not in open_binades:
+                    continue
+            elif level > 0:
+                continue                           # near-zero is fitted once
+            fit_one(router, bi, spec, level)
+        # Deepen every open binade that still misses its target.
+        nxt = set()
+        for (s, e) in open_binades:
+            subs = [cache[key_of(sp)] for bi, sp in enumerate(router.banks)
+                    if sp["kind"] == "mag" and sp["sign"] == s and sp["e"] == e
+                    and key_of(sp) in cache]
+            if subs and not all(c[1]["feasible"] for c in subs) and level < m_max:
+                m_map[(s, e)] = level + 1
+                nxt.add((s, e))
+        open_binades = nxt
+        if not open_binades:
+            break
+
+    trajectory = []
+    if byte_budget is not None:
+        if sample is None:
+            raise ValueError("byte_budget needs a calibration sample to weight spikes")
+        x = sample.reshape(-1).to(device)
+
+        def subs_of(router, b):
+            return [(bi, sp) for bi, sp in enumerate(router.banks)
+                    if sp["kind"] == "mag" and (sp["sign"], sp["e"]) == b
+                    and router.reachable(bi, domain[0], domain[1]) is not None]
+
+        def binade_spikes(router, b):
+            """Sample-weighted cost of binade ``b``: spikes, or with
+            ``select="energy"`` the :func:`bank_energy_pj` of each sub-bank."""
+            idx = router.route(x)
+            tot = 0.0
+            for bi, sp in subs_of(router, b):
+                sel = idx == bi
+                c = int(sel.sum())
+                if c:
+                    bank = cache[key_of(sp)][0]
+                    inp = router.to_key(x[sel]).abs()
+                    spk = (float(bank.firing_rate(inp)) * bank.cfg.n_basis
+                           * bank.cfg.n_steps)
+                    if select == "energy":
+                        spk = bank_energy_pj(bank.cfg.n_basis, bank.cfg.n_steps,
+                                             bank.cfg.readout_order, spk,
+                                             fused_readout)
+                    tot += spk * c
+            return tot / max(x.numel(), 1)
+
+        def total_bytes(router):
+            seen = {}
+            for bi, sp in enumerate(router.banks):
+                if router.reachable(bi, domain[0], domain[1]) is not None:
+                    bank = cache[key_of(sp)][0]
+                    seen[id(bank)] = storage_bytes(bank)
+            return sum(seen.values())
+
+        router = make_router(m_map)
+        cur_bytes = total_bytes(router)
+        cur_sp = {b: binade_spikes(router, b) for b in router.m_of if subs_of(router, b)}
+        # A binade still short of its target at m_max is not spare capacity.
+        open_b = {b for b in cur_sp
+                  if m_map.get(b, 0) < m_max
+                  and all(cache[key_of(sp)][1]["feasible"] for _, sp in subs_of(router, b))}
+        while open_b:
+            best = None
+            for b in sorted(open_b):
+                m0 = m_map.get(b, 0)
+                n_old = len(subs_of(router, b))
+                for m1 in range(m0 + 1, m_max + 1):      # first depth that adds banks
+                    trial = make_router({**m_map, b: m1})
+                    n_new = len(subs_of(trial, b))
+                    if n_new > n_old:
+                        break
+                else:
+                    continue
+                per = storage_bytes(cache[key_of(subs_of(router, b)[0][1])][0])
+                dbytes = (n_new - n_old) * per
+                if cur_bytes + dbytes > byte_budget:
+                    continue
+                pr = cur_sp[b] / dbytes
+                if best is None or pr > best[0]:
+                    best = (pr, b, m1, trial)
+            if best is None:
+                break
+            _, b, m1, trial = best
+            for bi, sp in subs_of(trial, b):
+                fit_one(trial, bi, sp, m1)
+            new_sp = binade_spikes(trial, b)
+            ok = all(cache[key_of(sp)][1]["feasible"] for _, sp in subs_of(trial, b))
+            if ok and new_sp < cur_sp[b] * (1.0 - min_gain):
+                m_map[b] = m1
+                router = trial
+                cur_bytes = total_bytes(router)
+                cur_sp[b] = new_sp
+                trajectory.append(dict(binade=b, m=m1, bytes=cur_bytes,
+                                       spikes=sum(cur_sp.values()),
+                                       fitted=len(diagnostics)))
+                if m1 >= m_max:
+                    open_b.discard(b)
+            else:
+                open_b.discard(b)
+
+    router = make_router(m_map)
+    banks = [cache[key_of(sp)][0]
+             if router.reachable(bi, domain[0], domain[1]) is not None else None
+             for bi, sp in enumerate(router.banks)]
+    result = MBEPASNNeuron(router, fill_unreachable(router, banks))
+    result.fit_budget_diagnostics = diagnostics
+    result.m_map = dict(m_map)
+    result.spend_trajectory = trajectory
+    return result
 
 
 def fill_unreachable(router: PrefixRouter, banks: list) -> list:

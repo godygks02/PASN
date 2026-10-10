@@ -1,0 +1,16 @@
+{
+ "experiment": "e47_multiply",
+ "status": "failed",
+ "layer": 6,
+ "argv": [
+  "--layer",
+  "6",
+  "--threads",
+  "8",
+  "--json",
+  "results/e47_multiply_L6.json"
+ ],
+ "failed_at": "2026-10-10 (before first record write)",
+ "error": "Segmentation fault (exit 139) while running in parallel with --layer 18 (two gpt2-medium processes, 8 threads each); no rows written. Rerun solo.",
+ "log": "logs/e47_L6.log"
+}

@@ -1,0 +1,200 @@
+{
+ "experiment": "e47_multiply",
+ "status": "ok",
+ "argv": [
+  "--layer",
+  "6",
+  "--threads",
+  "12",
+  "--ops",
+  "pv",
+  "--e-min",
+  "-12",
+  "--json",
+  "results/e47_multiply_pv_emin12_L6.json"
+ ],
+ "started": "2026-10-10T08:36:07",
+ "layer": 6,
+ "e_min": -12,
+ "ops": [
+  "pv"
+ ],
+ "energy": {
+  "ac": 0.9,
+  "cmp": 0.9,
+  "mac": 4.6,
+  "router_ops": 6.0
+ },
+ "exact_pj_per_term": 4.6,
+ "rows": [
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    1.7697515487670898,
+    35.681758880615234
+   ],
+   "coincidences_per_term": 62.44948959350586,
+   "out_nrmse": 0.016301054507493973,
+   "pj_per_term": 58.40475853681564,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 384,
+   "readout_order": 1,
+   "encoder": "mbe",
+   "target_rel": null,
+   "e_min": null,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.07876070572401003
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    1.609734058380127,
+    3.1049537658691406
+   ],
+   "coincidences_per_term": 4.999136447906494,
+   "out_nrmse": 0.005462802480906248,
+   "pj_per_term": 10.9114027954638,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 160,
+   "readout_order": 1,
+   "encoder": "pasn_rule",
+   "target_rel": 0.01,
+   "e_min": -12,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.42157732477004317
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    0.4298832416534424,
+    2.440103530883789
+   ],
+   "coincidences_per_term": 1.0477464199066162,
+   "out_nrmse": 0.008884931914508343,
+   "pj_per_term": 5.484930527210236,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 840,
+   "readout_order": 1,
+   "encoder": "greedy_ro1",
+   "target_rel": 0.01,
+   "e_min": -12,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.8386614884509153
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    0.43116116523742676,
+    2.4581451416015625
+   ],
+   "coincidences_per_term": null,
+   "out_nrmse": 0.008713824674487114,
+   "pj_per_term": 5.001648219674825,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 960,
+   "readout_order": 2,
+   "encoder": "greedy_ro2",
+   "target_rel": 0.01,
+   "e_min": -12,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.9196968275188018
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    1.7697515487670898,
+    35.681758880615234
+   ],
+   "coincidences_per_term": 62.44948959350586,
+   "out_nrmse": 0.016301054507493973,
+   "pj_per_term": 58.40475853681564,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 384,
+   "readout_order": 1,
+   "encoder": "mbe",
+   "target_rel": null,
+   "e_min": null,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.07876070572401003
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    2.011120319366455,
+    5.315715789794922
+   ],
+   "coincidences_per_term": 10.697118759155273,
+   "out_nrmse": 0.00540197966620326,
+   "pj_per_term": 18.444857088476418,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 208,
+   "readout_order": 1,
+   "encoder": "pasn_rule",
+   "target_rel": 0.003,
+   "e_min": -12,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.24939201089684174
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    0.9452447891235352,
+    2.943897247314453
+   ],
+   "coincidences_per_term": 2.7825992107391357,
+   "out_nrmse": 0.0034877914004027843,
+   "pj_per_term": 8.027541482448578,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 1960,
+   "readout_order": 1,
+   "encoder": "greedy_ro1",
+   "target_rel": 0.003,
+   "e_min": -12,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.573027247515001
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    0.9453179836273193,
+    2.9756031036376953
+   ],
+   "coincidences_per_term": null,
+   "out_nrmse": 0.0028752158395946026,
+   "pj_per_term": 5.0657126441597935,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 2240,
+   "readout_order": 2,
+   "encoder": "greedy_ro2",
+   "target_rel": 0.003,
+   "e_min": -12,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.9080657200923726
+  }
+ ],
+ "finished": "2026-10-10T08:46:42"
+}

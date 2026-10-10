@@ -1,0 +1,270 @@
+[
+ {
+  "model": "gpt2-medium",
+  "smoke": false,
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "stage": 2,
+  "n_basis_act": 6,
+  "mbe_readout_order": 1,
+  "device": "cpu",
+  "epochs": 300,
+  "n_steps": 16,
+  "block": 512,
+  "calib_offset": 0,
+  "dataset": "wikitext-2-raw-v1",
+  "experiment": "E21",
+  "started": "2026-08-19T02:45:17",
+  "tag": "e29-untied-copy",
+  "arm": "copy",
+  "share_fit_refs": false,
+  "pasn_beta": {
+   "inv": 0.5
+  },
+  "convert_cfg": {
+   "n_basis_act": 6,
+   "n_basis_ln": 8,
+   "n_basis_sm": 8,
+   "n_basis_mm": 8,
+   "n_steps": 16,
+   "mbe_readout_order": 1,
+   "mbe_id_logsample": false,
+   "epochs": 300,
+   "seed": 0,
+   "spike_mult": true,
+   "margin": 0.05,
+   "backend": "mbe_pasn",
+   "pasn_e_min": -3,
+   "pasn_id_e_min": -6,
+   "pasn_n_local": 2,
+   "pasn_budget": "rule",
+   "pasn_target_mse": 1e-05,
+   "pasn_t_fixed": 16,
+   "pasn_n_fixed": null,
+   "pasn_near0": "signed",
+   "pasn_id_tied": false,
+   "pasn_invsqrt_tied": false,
+   "pasn_alpha_init": "auto",
+   "pasn_id_target": "relative",
+   "pasn_id_target_rel": 0.01,
+   "pasn_id_signed": false,
+   "pasn_beta": {
+    "inv": 0.5
+   },
+   "pasn_beta_binades": 6,
+   "pasn_readout_order": 2,
+   "pasn_T": 6,
+   "pasn_order": 2,
+   "pasn_s_n_shared": 4,
+   "pasn_s_spike_budget": null,
+   "pasn_s_restarts": 3,
+   "fit_device": null,
+   "verbose_fits": false,
+   "share_fits": true,
+   "share_fit_refs": false
+  },
+  "stored_params": 27739,
+  "stored_bytes": 110956,
+  "stored_bytes_naive": 114860,
+  "stored_shared_factor": 1.0351851184253218,
+  "stored_by_role": {
+   "alpha": 15356,
+   "tau": 61424,
+   "readout": 20068,
+   "bias": 14108
+  },
+  "n_primitives": 339,
+  "distinct_neuron_objects": {
+   "sites": 145,
+   "activation_objects": 24,
+   "layernorm_objects": 49
+  },
+  "spikes_per_token": 2243819.05859375,
+  "total_spikes": 1148835358.0,
+  "by_kind": {
+   "layernorm": 237800415.0,
+   "matmul": 166851601.0,
+   "softmax": 547853601.0,
+   "activation": 196329741.0
+  },
+  "ops_per_input": {
+   "cmp": 22143184.15625,
+   "ac": 4487638.1171875,
+   "mac": 1729178.01953125,
+   "poly": 345229.009765625,
+   "router": 8004390.0,
+   "bitop": 1334065.0
+  },
+  "energy_pj_per_input": 40713963.380859375,
+  "build_s": 3396.324034999998,
+  "ppl_ann": null,
+  "ppl_snn": null,
+  "delta_pct": null,
+  "status": "ok",
+  "comparison": null
+ },
+ {
+  "model": "gpt2-medium",
+  "smoke": false,
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "stage": 2,
+  "n_basis_act": 6,
+  "mbe_readout_order": 1,
+  "device": "cpu",
+  "epochs": 300,
+  "n_steps": 16,
+  "block": 512,
+  "calib_offset": 0,
+  "dataset": "wikitext-2-raw-v1",
+  "experiment": "E21",
+  "started": "2026-08-19T02:45:17",
+  "tag": "e29-untied-ref",
+  "arm": "ref",
+  "share_fit_refs": true,
+  "pasn_beta": {
+   "inv": 0.5
+  },
+  "convert_cfg": {
+   "n_basis_act": 6,
+   "n_basis_ln": 8,
+   "n_basis_sm": 8,
+   "n_basis_mm": 8,
+   "n_steps": 16,
+   "mbe_readout_order": 1,
+   "mbe_id_logsample": false,
+   "epochs": 300,
+   "seed": 0,
+   "spike_mult": true,
+   "margin": 0.05,
+   "backend": "mbe_pasn",
+   "pasn_e_min": -3,
+   "pasn_id_e_min": -6,
+   "pasn_n_local": 2,
+   "pasn_budget": "rule",
+   "pasn_target_mse": 1e-05,
+   "pasn_t_fixed": 16,
+   "pasn_n_fixed": null,
+   "pasn_near0": "signed",
+   "pasn_id_tied": false,
+   "pasn_invsqrt_tied": false,
+   "pasn_alpha_init": "auto",
+   "pasn_id_target": "relative",
+   "pasn_id_target_rel": 0.01,
+   "pasn_id_signed": false,
+   "pasn_beta": {
+    "inv": 0.5
+   },
+   "pasn_beta_binades": 6,
+   "pasn_readout_order": 2,
+   "pasn_T": 6,
+   "pasn_order": 2,
+   "pasn_s_n_shared": 4,
+   "pasn_s_spike_budget": null,
+   "pasn_s_restarts": 3,
+   "fit_device": null,
+   "verbose_fits": false,
+   "share_fits": true,
+   "share_fit_refs": true
+  },
+  "stored_params": 10759,
+  "stored_bytes": 43036,
+  "stored_bytes_naive": 43132,
+  "stored_shared_factor": 1.0022306905846268,
+  "stored_by_role": {
+   "alpha": 5984,
+   "tau": 23936,
+   "readout": 7276,
+   "bias": 5840
+  },
+  "n_primitives": 172,
+  "distinct_neuron_objects": {
+   "sites": 145,
+   "activation_objects": 1,
+   "layernorm_objects": 1
+  },
+  "spikes_per_token": 2243819.05859375,
+  "total_spikes": 1148835358.0,
+  "by_kind": {
+   "layernorm": 237800415.0,
+   "matmul": 166851601.0,
+   "softmax": 547853601.0,
+   "activation": 196329741.0
+  },
+  "ops_per_input": {
+   "cmp": 22143184.15625,
+   "ac": 4487638.1171875,
+   "mac": 1729178.01953125,
+   "poly": 345229.009765625,
+   "router": 8004390.0,
+   "bitop": 1334065.0
+  },
+  "energy_pj_per_input": 40713963.380859375,
+  "build_s": 3639.9781092000194,
+  "ppl_ann": null,
+  "ppl_snn": null,
+  "delta_pct": null,
+  "status": "ok",
+  "comparison": {
+   "gates": {
+    "R1_stored_params": {
+     "value": 10759,
+     "threshold": 5500,
+     "pass": false,
+     "note": ""
+    },
+    "R2_spikes_exact": {
+     "value": [
+      true,
+      true
+     ],
+     "pass": true
+    },
+    "R3_by_kind": {
+     "value": 0.0,
+     "threshold": 0.0001,
+     "pass": true
+    },
+    "R5_bitwise": {
+     "value": {
+      "params_bitwise_equal": true,
+      "logits_bitwise_equal": true,
+      "params_max_abs_delta": 0.0,
+      "logits_max_abs_delta": 0.0,
+      "logits_all_finite": true
+     },
+     "pass": true
+    }
+   },
+   "verdict": "refuted",
+   "params": {
+    "bitwise_equal": true,
+    "n_differing": 0,
+    "differing": [],
+    "max_abs_delta": 0.0,
+    "worst_tensor": null,
+    "tensors_checked": 25641,
+    "unpaired": [],
+    "n_unpaired": 0
+   },
+   "spikes": {
+    "total_spikes_copy": 1148835358.0,
+    "total_spikes_ref": 1148835358.0,
+    "total_spikes_equal": true,
+    "spikes_per_input_copy": 2243819.05859375,
+    "spikes_per_input_ref": 2243819.05859375,
+    "spikes_per_input_equal": true,
+    "by_kind_max_rel": 0.0,
+    "by_kind_rel": {
+     "activation": 0.0,
+     "layernorm": 0.0,
+     "matmul": 0.0,
+     "softmax": 0.0
+    }
+   },
+   "logits_bitwise_equal": true,
+   "logits_max_abs_delta": 0.0,
+   "logits_all_finite": true
+  }
+ }
+]

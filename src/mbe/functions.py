@@ -102,7 +102,8 @@ def make_config(name: str, n_basis: int, n_steps: int = 16, decay: bool = True,
 
 def make_signed(name: str, n_pos: int, n_neg: int, pivot: float = 0.0,
                 n_steps: int = 16, decay: bool = True,
-                domain: tuple[float, float] | None = None, spread: float = 6.0):
+                domain: tuple[float, float] | None = None, spread: float = 6.0,
+                **overrides):
     """Build a :class:`SignedMBENeuron` for a target function (polarity split).
 
     The positive bank encodes ``relu(x-pivot)`` over ``[0, hi-pivot]`` and the
@@ -118,10 +119,12 @@ def make_signed(name: str, n_pos: int, n_neg: int, pivot: float = 0.0,
     pos_cfg = MBEConfig(
         n_basis=n_pos, n_steps=n_steps, decay=decay, x_min=0.0, x_scale=span_p,
         alpha_v=curvature_alpha(lambda t: fn(pivot + t), 0.0, span_p, n_pos, spread),
+        **overrides,
     )
     neg_cfg = MBEConfig(
         n_basis=n_neg, n_steps=n_steps, decay=decay, x_min=0.0, x_scale=span_n,
         alpha_v=curvature_alpha(lambda t: fn(pivot - t), 0.0, span_n, n_neg, spread),
+        **overrides,
     )
     return SignedMBENeuron(pos_cfg, neg_cfg, pivot=pivot)
 

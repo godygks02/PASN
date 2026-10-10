@@ -1,0 +1,525 @@
+{
+  "experiment": "offline_fit_budget",
+  "quick": false,
+  "config": {
+    "functions": [
+      "exp2"
+    ],
+    "epochs": 30,
+    "max_n": 2,
+    "max_t": 8,
+    "target_mse": 0.001,
+    "eval_samples": 2048,
+    "seed": 0
+  },
+  "rows": [
+    {
+      "function": "exp2",
+      "budget": "rule",
+      "mse": 0.000321848172461614,
+      "spikes": 1.232421875,
+      "bytes": 140,
+      "stored_bases": 5,
+      "bank_budget": [
+        [
+          0,
+          "near0s",
+          1,
+          2
+        ],
+        [
+          1,
+          "mag",
+          1,
+          2
+        ],
+        [
+          2,
+          "mag",
+          1,
+          2
+        ],
+        [
+          3,
+          "mag",
+          1,
+          2
+        ],
+        [
+          4,
+          "mag",
+          1,
+          3
+        ]
+      ]
+    },
+    {
+      "function": "exp2",
+      "budget": "fit",
+      "mse": 0.000321848172461614,
+      "spikes": 1.232421875,
+      "bytes": 140,
+      "stored_bases": 5,
+      "bank_budget": [
+        [
+          0,
+          "near0s",
+          1,
+          2
+        ],
+        [
+          1,
+          "mag",
+          1,
+          2
+        ],
+        [
+          2,
+          "mag",
+          1,
+          2
+        ],
+        [
+          3,
+          "mag",
+          1,
+          2
+        ],
+        [
+          4,
+          "mag",
+          1,
+          3
+        ]
+      ],
+      "selection": [
+        {
+          "bank": 0,
+          "kind": "near0s",
+          "sign": 1.0,
+          "target_mse": 0.001,
+          "selected": {
+            "N": 1,
+            "T": 2,
+            "mse": 1.0363393812440336e-05,
+            "spikes": 1.0068359375,
+            "feasible": true
+          },
+          "candidates": [
+            {
+              "N": 1,
+              "T": 2,
+              "mse": 1.0363393812440336e-05,
+              "spikes": 1.0068359375,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 3,
+              "mse": 2.8440956612030277e-06,
+              "spikes": 1.4306640625,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 4,
+              "mse": 9.991430260924972e-07,
+              "spikes": 1.697265625,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 6,
+              "mse": 2.3459546127924114e-07,
+              "spikes": 2.6484375,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 8,
+              "mse": 2.6940543307318876e-07,
+              "spikes": 4.673828125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 2,
+              "mse": 9.17664419830544e-06,
+              "spikes": 2.0263671875,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 3,
+              "mse": 2.0566772036545444e-06,
+              "spikes": 2.703125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 4,
+              "mse": 1.0894302704400616e-06,
+              "spikes": 3.4423828125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 6,
+              "mse": 8.069219461503963e-07,
+              "spikes": 5.419921875,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 8,
+              "mse": 5.553450250772585e-07,
+              "spikes": 7.2236328125,
+              "feasible": true
+            }
+          ]
+        },
+        {
+          "bank": 1,
+          "kind": "mag",
+          "sign": 1.0,
+          "target_mse": 0.001,
+          "selected": {
+            "N": 1,
+            "T": 2,
+            "mse": 1.1297222044959199e-05,
+            "spikes": 1.0078125,
+            "feasible": true
+          },
+          "candidates": [
+            {
+              "N": 1,
+              "T": 2,
+              "mse": 1.1297222044959199e-05,
+              "spikes": 1.0078125,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 3,
+              "mse": 3.112186504949932e-06,
+              "spikes": 1.427734375,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 4,
+              "mse": 1.0876656233449467e-06,
+              "spikes": 1.6982421875,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 6,
+              "mse": 2.5392120051037637e-07,
+              "spikes": 2.6494140625,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 8,
+              "mse": 2.9670835033357434e-07,
+              "spikes": 4.671875,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 2,
+              "mse": 1.0004781870520674e-05,
+              "spikes": 2.0263671875,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 3,
+              "mse": 2.2559970602742396e-06,
+              "spikes": 2.7001953125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 4,
+              "mse": 1.1785813285314362e-06,
+              "spikes": 3.4423828125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 6,
+              "mse": 8.831150353216799e-07,
+              "spikes": 5.4169921875,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 8,
+              "mse": 6.066329660825431e-07,
+              "spikes": 7.2265625,
+              "feasible": true
+            }
+          ]
+        },
+        {
+          "bank": 2,
+          "kind": "mag",
+          "sign": 1.0,
+          "target_mse": 0.001,
+          "selected": {
+            "N": 1,
+            "T": 2,
+            "mse": 5.155377584742382e-05,
+            "spikes": 1.009765625,
+            "feasible": true
+          },
+          "candidates": [
+            {
+              "N": 1,
+              "T": 2,
+              "mse": 5.155377584742382e-05,
+              "spikes": 1.009765625,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 3,
+              "mse": 1.4177074262988754e-05,
+              "spikes": 1.43359375,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 4,
+              "mse": 4.9340578698320314e-06,
+              "spikes": 1.7080078125,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 6,
+              "mse": 1.2196734360259143e-06,
+              "spikes": 2.681640625,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 8,
+              "mse": 1.4346477428262006e-06,
+              "spikes": 4.689453125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 2,
+              "mse": 4.59826915175654e-05,
+              "spikes": 2.0234375,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 3,
+              "mse": 1.0117753845406696e-05,
+              "spikes": 2.796875,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 4,
+              "mse": 5.573444923356874e-06,
+              "spikes": 3.4423828125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 6,
+              "mse": 3.563992322597187e-06,
+              "spikes": 5.361328125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 8,
+              "mse": 2.7811024665425066e-06,
+              "spikes": 6.505859375,
+              "feasible": true
+            }
+          ]
+        },
+        {
+          "bank": 3,
+          "kind": "mag",
+          "sign": 1.0,
+          "target_mse": 0.001,
+          "selected": {
+            "N": 1,
+            "T": 2,
+            "mse": 0.000264642178080976,
+            "spikes": 0.9873046875,
+            "feasible": true
+          },
+          "candidates": [
+            {
+              "N": 1,
+              "T": 2,
+              "mse": 0.000264642178080976,
+              "spikes": 0.9873046875,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 3,
+              "mse": 7.401441689580679e-05,
+              "spikes": 1.4404296875,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 4,
+              "mse": 2.080012382066343e-05,
+              "spikes": 1.8466796875,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 6,
+              "mse": 4.691331923822872e-06,
+              "spikes": 2.783203125,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 8,
+              "mse": 4.031762728118338e-06,
+              "spikes": 4.1953125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 2,
+              "mse": 0.00023218136630021036,
+              "spikes": 2.0439453125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 3,
+              "mse": 5.510280971066095e-05,
+              "spikes": 2.80078125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 4,
+              "mse": 3.161300264764577e-05,
+              "spikes": 3.3681640625,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 6,
+              "mse": 6.4410746745124925e-06,
+              "spikes": 4.7841796875,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 8,
+              "mse": 1.5717016594862798e-06,
+              "spikes": 5.6875,
+              "feasible": true
+            }
+          ]
+        },
+        {
+          "bank": 4,
+          "kind": "mag",
+          "sign": 1.0,
+          "target_mse": 0.001,
+          "selected": {
+            "N": 1,
+            "T": 3,
+            "mse": 0.0004968520952388644,
+            "spikes": 1.4716796875,
+            "feasible": true
+          },
+          "candidates": [
+            {
+              "N": 1,
+              "T": 2,
+              "mse": 0.0018124812049791217,
+              "spikes": 0.986328125,
+              "feasible": false
+            },
+            {
+              "N": 1,
+              "T": 3,
+              "mse": 0.0004968520952388644,
+              "spikes": 1.4716796875,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 4,
+              "mse": 0.00018015263776760548,
+              "spikes": 1.8701171875,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 6,
+              "mse": 6.73213871777989e-05,
+              "spikes": 2.84765625,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 8,
+              "mse": 6.345378642436117e-05,
+              "spikes": 3.958984375,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 2,
+              "mse": 0.0016544210957363248,
+              "spikes": 2.0341796875,
+              "feasible": false
+            },
+            {
+              "N": 2,
+              "T": 3,
+              "mse": 0.00039024936268106103,
+              "spikes": 2.732421875,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 4,
+              "mse": 0.00029306585201993585,
+              "spikes": 3.3251953125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 6,
+              "mse": 8.373428136110306e-05,
+              "spikes": 4.3330078125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 8,
+              "mse": 2.5691049813758582e-05,
+              "spikes": 4.7646484375,
+              "feasible": true
+            }
+          ]
+        }
+      ],
+      "infeasible_banks": 0
+    }
+  ]
+}

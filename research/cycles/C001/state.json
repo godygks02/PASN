@@ -1,0 +1,36 @@
+{
+  "cycle_id": "C001",
+  "title": "E16 대칭 all-op 에너지 계상",
+  "idea": "research/ideas/idea-001.md",
+  "created": "2026-08-14T22:19:55",
+  "status": "active",
+  "stage": "scout",
+  "iteration": 1,
+  "gates": {},
+  "artifacts": {
+    "planner": [
+      "research/ideas/idea-001.md"
+    ],
+    "scout": [],
+    "runner": [],
+    "analyst": [],
+    "verifier": []
+  },
+  "open_feedback": [],
+  "history": [
+    {
+      "at": "2026-08-14T22:19:55",
+      "event": "new",
+      "idea": "research/ideas/idea-001.md"
+    },
+    {
+      "at": "2026-08-14T22:20:27",
+      "event": "advance",
+      "from": "planner",
+      "to": "scout",
+      "artifacts": [
+        "research/ideas/idea-001.md"
+      ]
+    }
+  ]
+}

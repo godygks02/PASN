@@ -739,12 +739,28 @@ def main():
     ap.add_argument("--smoke", action="store_true",
                     help="tiny grid, for checking the wiring")
     ap.add_argument("--json", default="results/op_pareto.json")
+    # E31/E32: the `mbe` arm here fits each primitive **once**, while the routed
+    # arms have always tried two alpha placements and kept the better. That is a
+    # handicap on the baseline that has nothing to do with routing, and it is
+    # large -- adding the `tau = dt/ln2` initialisation to the global path's
+    # search cut the network profile's per-site error median 16.6x (E32). Every
+    # number in `op_pareto_merged_wins.md` (10/10 spikes, 1.23-5.39x) was measured
+    # against the single-shot baseline, so this flag exists to re-measure them
+    # against a baseline we did not weaken. It touches `spiking_ops` only, so the
+    # routed arms are bit-identical with it on or off.
+    ap.add_argument("--fit-tau-search", action="store_true",
+                    help="global-MBE arm: also try tau=dt/ln2 and keep the better")
     cfg = ap.parse_args()
 
     if cfg.smoke:
         cfg.mbe_N, cfg.pasn_N, cfg.Ts = [2, 4], [2], [8]
         cfg.rule_Ts, cfg.rule_targets = [8], [1e-1, 1e-2]
         cfg.epochs, cfg.m_eval = 40, 512
+
+    if cfg.fit_tau_search:
+        so.FIT_TAU_SEARCH = True
+        print("[fit] tau-init search ON -- the `mbe` arm is the strengthened "
+              "baseline; routed arms are unaffected", flush=True)
 
     torch.manual_seed(cfg.seed)
     torch.set_num_threads(os.cpu_count() or 4)

@@ -1,0 +1,258 @@
+[
+ {
+  "model": "gpt2-medium",
+  "smoke": false,
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "stage": 2,
+  "device": "cpu",
+  "epochs": 300,
+  "n_steps": 16,
+  "block": 512,
+  "calib_offset": 0,
+  "dataset": "wikitext-2-raw-v1",
+  "experiment": "E21",
+  "started": "2026-08-15T22:39:27",
+  "tag": "e21-sharedrefs-copy",
+  "arm": "copy",
+  "share_fit_refs": false,
+  "pasn_beta": {
+   "inv": 0.5
+  },
+  "convert_cfg": {
+   "n_basis_act": 6,
+   "n_basis_ln": 8,
+   "n_basis_sm": 8,
+   "n_basis_mm": 8,
+   "n_steps": 16,
+   "mbe_readout_order": 1,
+   "mbe_id_logsample": false,
+   "epochs": 300,
+   "seed": 0,
+   "spike_mult": true,
+   "margin": 0.05,
+   "backend": "mbe_pasn",
+   "pasn_e_min": -3,
+   "pasn_id_e_min": -6,
+   "pasn_n_local": 2,
+   "pasn_budget": "rule",
+   "pasn_target_mse": 1e-05,
+   "pasn_t_fixed": 16,
+   "pasn_n_fixed": null,
+   "pasn_near0": "signed",
+   "pasn_id_tied": true,
+   "pasn_invsqrt_tied": false,
+   "pasn_alpha_init": "auto",
+   "pasn_id_target": "relative",
+   "pasn_id_target_rel": 0.01,
+   "pasn_id_signed": false,
+   "pasn_beta": {
+    "inv": 0.5
+   },
+   "pasn_beta_binades": 6,
+   "pasn_readout_order": 2,
+   "pasn_T": 6,
+   "pasn_order": 2,
+   "pasn_s_n_shared": 4,
+   "pasn_s_spike_budget": null,
+   "pasn_s_restarts": 3,
+   "fit_device": null,
+   "verbose_fits": false,
+   "share_fits": true,
+   "share_fit_refs": false
+  },
+  "stored_params": 13472,
+  "stored_bytes": 53888,
+  "stored_bytes_naive": 120092,
+  "stored_shared_factor": 2.2285480997624703,
+  "stored_by_role": {
+   "alpha": 7328,
+   "tau": 29312,
+   "readout": 12040,
+   "bias": 5208
+  },
+  "n_primitives": 339,
+  "distinct_neuron_objects": {
+   "sites": 145,
+   "activation_objects": 24,
+   "layernorm_objects": 49
+  },
+  "spikes_per_token": 4947579.0625,
+  "total_spikes": 2533160480.0,
+  "by_kind": {
+   "layernorm": 244490427.0,
+   "matmul": 1150785559.0,
+   "softmax": 941446730.0,
+   "activation": 196437764.0
+  },
+  "ops_per_input": {
+   "cmp": 34944399.53125,
+   "ac": 9895158.125,
+   "mac": 2529233.232421875,
+   "poly": 345208.26171875,
+   "router": 8004390.0,
+   "bitop": 1334065.0
+  },
+  "energy_pj_per_input": 60781983.763671875,
+  "build_s": 1397.425709699979,
+  "ppl_ann": null,
+  "ppl_snn": null,
+  "delta_pct": null,
+  "status": "ok",
+  "comparison": null
+ },
+ {
+  "model": "gpt2-medium",
+  "smoke": false,
+  "backend": "mbe_pasn",
+  "scope": "all",
+  "stage": 2,
+  "device": "cpu",
+  "epochs": 300,
+  "n_steps": 16,
+  "block": 512,
+  "calib_offset": 0,
+  "dataset": "wikitext-2-raw-v1",
+  "experiment": "E21",
+  "started": "2026-08-15T22:39:27",
+  "tag": "e21-sharedrefs-ref",
+  "arm": "ref",
+  "share_fit_refs": true,
+  "pasn_beta": {
+   "inv": 0.5
+  },
+  "convert_cfg": {
+   "n_basis_act": 6,
+   "n_basis_ln": 8,
+   "n_basis_sm": 8,
+   "n_basis_mm": 8,
+   "n_steps": 16,
+   "mbe_readout_order": 1,
+   "mbe_id_logsample": false,
+   "epochs": 300,
+   "seed": 0,
+   "spike_mult": true,
+   "margin": 0.05,
+   "backend": "mbe_pasn",
+   "pasn_e_min": -3,
+   "pasn_id_e_min": -6,
+   "pasn_n_local": 2,
+   "pasn_budget": "rule",
+   "pasn_target_mse": 1e-05,
+   "pasn_t_fixed": 16,
+   "pasn_n_fixed": null,
+   "pasn_near0": "signed",
+   "pasn_id_tied": true,
+   "pasn_invsqrt_tied": false,
+   "pasn_alpha_init": "auto",
+   "pasn_id_target": "relative",
+   "pasn_id_target_rel": 0.01,
+   "pasn_id_signed": false,
+   "pasn_beta": {
+    "inv": 0.5
+   },
+   "pasn_beta_binades": 6,
+   "pasn_readout_order": 2,
+   "pasn_T": 6,
+   "pasn_order": 2,
+   "pasn_s_n_shared": 4,
+   "pasn_s_spike_budget": null,
+   "pasn_s_restarts": 3,
+   "fit_device": null,
+   "verbose_fits": false,
+   "share_fits": true,
+   "share_fit_refs": true
+  },
+  "stored_params": 4988,
+  "stored_bytes": 19952,
+  "stored_bytes_naive": 46060,
+  "stored_shared_factor": 2.3085404971932637,
+  "stored_by_role": {
+   "alpha": 2756,
+   "tau": 11024,
+   "readout": 4048,
+   "bias": 2124
+  },
+  "n_primitives": 172,
+  "distinct_neuron_objects": {
+   "sites": 145,
+   "activation_objects": 1,
+   "layernorm_objects": 1
+  },
+  "spikes_per_token": 4947579.0625,
+  "total_spikes": 2533160480.0,
+  "by_kind": {
+   "layernorm": 244490427.0,
+   "matmul": 1150785559.0,
+   "softmax": 941446730.0,
+   "activation": 196437764.0
+  },
+  "ops_per_input": {
+   "cmp": 34944399.53125,
+   "ac": 9895158.125,
+   "mac": 2529233.232421875,
+   "poly": 345208.26171875,
+   "router": 8004390.0,
+   "bitop": 1334065.0
+  },
+  "energy_pj_per_input": 60781983.763671875,
+  "build_s": 1256.3967287999985,
+  "ppl_ann": null,
+  "ppl_snn": null,
+  "delta_pct": null,
+  "status": "ok",
+  "comparison": {
+   "gates": {
+    "R1_stored_params": {
+     "value": 4988,
+     "threshold": 5500,
+     "pass": true,
+     "note": ""
+    },
+    "R2_spikes_exact": {
+     "value": [
+      true,
+      true
+     ],
+     "pass": true
+    },
+    "R3_by_kind": {
+     "value": 0.0,
+     "threshold": 0.0001,
+     "pass": true
+    },
+    "R5_bitwise": {
+     "value": {
+      "params_max_abs_delta": 0.0,
+      "logits_max_abs_delta": 0.0
+     },
+     "pass": true
+    }
+   },
+   "verdict": "supported",
+   "params": {
+    "max_abs_delta": 0.0,
+    "worst_tensor": null,
+    "tensors_checked": 25641,
+    "unpaired": [],
+    "n_unpaired": 0
+   },
+   "spikes": {
+    "total_spikes_copy": 2533160480.0,
+    "total_spikes_ref": 2533160480.0,
+    "total_spikes_equal": true,
+    "spikes_per_input_copy": 4947579.0625,
+    "spikes_per_input_ref": 4947579.0625,
+    "spikes_per_input_equal": true,
+    "by_kind_max_rel": 0.0,
+    "by_kind_rel": {
+     "activation": 0.0,
+     "layernorm": 0.0,
+     "matmul": 0.0,
+     "softmax": 0.0
+    }
+   },
+   "logits_max_abs_delta": 0.0
+  }
+ }
+]

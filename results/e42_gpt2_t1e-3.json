@@ -1,0 +1,887 @@
+{
+ "experiment": "e42_gpt2_dist",
+ "status": "ok",
+ "started": "2026-10-09T14:10:04",
+ "argv": [
+  "--target-mse",
+  "1e-3",
+  "--json",
+  "results/e42_gpt2_t1e-3.json",
+  "--save-dir",
+  "logs/e42_neurons"
+ ],
+ "samples": "logs/e42_gpt2_samples.pt",
+ "sample_meta": {
+  "model": "gpt2-medium",
+  "block": 512,
+  "blocks": 8,
+  "keep": 200000,
+  "split": "train",
+  "calib_offset": 0
+ },
+ "threads": 4,
+ "rows": [
+  {
+   "function": "gelu",
+   "target_fn": "gelu_tanh",
+   "arm": "rule",
+   "domain": [
+    -39.13425884246826,
+    82.28855953216552
+   ],
+   "route": {
+    "e_min": -3,
+    "e_max": 7
+   },
+   "target_mse": 0.001,
+   "build_s": 20.18,
+   "n_cal": 200000,
+   "n_eval": 200000,
+   "eval_mse": 6.933614349691197e-05,
+   "eval_nrmse": 0.04276016148401227,
+   "eval_max_abs": 0.07745695114135742,
+   "spikes_per_input": 0.999965,
+   "near0_mass": 0.06560000032186508,
+   "near0_spike_share": 0.06555729450530769,
+   "storage_bytes": 784,
+   "params": 196,
+   "n_banks": 22,
+   "N_used": [
+    1,
+    2
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/gelu__rule__1e-03.pt"
+  },
+  {
+   "function": "gelu",
+   "target_fn": "gelu_tanh",
+   "arm": "n_adapt",
+   "domain": [
+    -39.13425884246826,
+    82.28855953216552
+   ],
+   "route": {
+    "e_min": -3,
+    "e_max": 7
+   },
+   "target_mse": 0.001,
+   "build_s": 394.02,
+   "n_cal": 200000,
+   "n_eval": 200000,
+   "eval_mse": 4.8375059122918174e-05,
+   "eval_nrmse": 0.03571661150139533,
+   "eval_max_abs": 0.07745695114135742,
+   "spikes_per_input": 1.00975,
+   "near0_mass": 0.06560000032186508,
+   "near0_spike_share": 0.06492201039861352,
+   "storage_bytes": 896,
+   "params": 224,
+   "n_banks": 22,
+   "N_used": [
+    1,
+    3
+   ],
+   "infeasible_banks": 3,
+   "saved": "logs/e42_neurons/gelu__n_adapt__1e-03.pt"
+  },
+  {
+   "function": "gelu",
+   "target_fn": "gelu_tanh",
+   "arm": "greedy",
+   "domain": [
+    -39.13425884246826,
+    82.28855953216552
+   ],
+   "route": {
+    "e_min": -3,
+    "e_max": 7
+   },
+   "target_mse": 0.001,
+   "build_s": 230.96,
+   "n_cal": 200000,
+   "n_eval": 200000,
+   "eval_mse": 4.8375059122918174e-05,
+   "eval_nrmse": 0.03571661150139533,
+   "eval_max_abs": 0.07745695114135742,
+   "spikes_per_input": 1.00975,
+   "near0_mass": 0.06560000032186508,
+   "near0_spike_share": 0.06492201039861352,
+   "storage_bytes": 1088,
+   "params": 272,
+   "n_banks": 40,
+   "m_map": {
+    "+1,5": 3,
+    "+1,6": 3,
+    "+1,3": 1,
+    "+1,4": 2
+   },
+   "banks_fitted": 49,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 2,
+   "saved": "logs/e42_neurons/gelu__greedy__1e-03.pt"
+  },
+  {
+   "function": "gelu",
+   "target_fn": "gelu_tanh",
+   "arm": "spend_x1.5",
+   "domain": [
+    -39.13425884246826,
+    82.28855953216552
+   ],
+   "route": {
+    "e_min": -3,
+    "e_max": 7
+   },
+   "target_mse": 0.001,
+   "build_s": 388.12,
+   "n_cal": 200000,
+   "n_eval": 200000,
+   "eval_mse": 4.625837755156681e-05,
+   "eval_nrmse": 0.03492646997951915,
+   "eval_max_abs": 0.07745695114135742,
+   "spikes_per_input": 0.98914,
+   "near0_mass": 0.06560000032186508,
+   "near0_spike_share": 0.06627474371676406,
+   "storage_bytes": 1632,
+   "params": 408,
+   "n_banks": 57,
+   "m_map": {
+    "+1,5": 3,
+    "+1,6": 3,
+    "+1,3": 1,
+    "+1,4": 2,
+    "-1,-2": 3,
+    "-1,-3": 3,
+    "+1,-1": 1,
+    "+1,0": 1,
+    "-1,2": 1
+   },
+   "banks_fitted": 97,
+   "byte_budget": 1632,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 2,
+   "saved": "logs/e42_neurons/gelu__spend_x1.5__1e-03.pt"
+  },
+  {
+   "function": "gelu",
+   "target_fn": "gelu_tanh",
+   "arm": "spend_x2",
+   "domain": [
+    -39.13425884246826,
+    82.28855953216552
+   ],
+   "route": {
+    "e_min": -3,
+    "e_max": 7
+   },
+   "target_mse": 0.001,
+   "build_s": 598.17,
+   "n_cal": 200000,
+   "n_eval": 200000,
+   "eval_mse": 4.604785135597922e-05,
+   "eval_nrmse": 0.03484690253350439,
+   "eval_max_abs": 0.036188721656799316,
+   "spikes_per_input": 0.98403,
+   "near0_mass": 0.06560000032186508,
+   "near0_spike_share": 0.06661890389520646,
+   "storage_bytes": 2144,
+   "params": 536,
+   "n_banks": 73,
+   "m_map": {
+    "+1,5": 3,
+    "+1,6": 3,
+    "+1,3": 1,
+    "+1,4": 2,
+    "-1,-2": 3,
+    "-1,-3": 3,
+    "+1,-1": 1,
+    "+1,0": 2,
+    "-1,2": 3,
+    "+1,1": 3,
+    "+1,2": 1
+   },
+   "banks_fitted": 143,
+   "byte_budget": 2176,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 2,
+   "saved": "logs/e42_neurons/gelu__spend_x2__1e-03.pt"
+  },
+  {
+   "function": "gelu",
+   "target_fn": "gelu_tanh",
+   "arm": "spend_x3",
+   "domain": [
+    -39.13425884246826,
+    82.28855953216552
+   ],
+   "route": {
+    "e_min": -3,
+    "e_max": 7
+   },
+   "target_mse": 0.001,
+   "build_s": 728.16,
+   "n_cal": 200000,
+   "n_eval": 200000,
+   "eval_mse": 4.6046618081163615e-05,
+   "eval_nrmse": 0.03484643588746354,
+   "eval_max_abs": 0.036188721656799316,
+   "spikes_per_input": 0.98391,
+   "near0_mass": 0.06560000032186508,
+   "near0_spike_share": 0.06662702889491925,
+   "storage_bytes": 2336,
+   "params": 584,
+   "n_banks": 79,
+   "m_map": {
+    "+1,5": 3,
+    "+1,6": 3,
+    "+1,3": 1,
+    "+1,4": 2,
+    "-1,-2": 3,
+    "-1,-3": 3,
+    "+1,-1": 1,
+    "+1,0": 2,
+    "-1,2": 3,
+    "+1,1": 3,
+    "+1,2": 3
+   },
+   "banks_fitted": 167,
+   "byte_budget": 3264,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 2,
+   "saved": "logs/e42_neurons/gelu__spend_x3__1e-03.pt"
+  },
+  {
+   "function": "exp2",
+   "target_fn": "exp2",
+   "arm": "rule",
+   "domain": [
+    0.0,
+    1.0
+   ],
+   "route": {
+    "e_min": -3,
+    "e_max": 0
+   },
+   "target_mse": 0.001,
+   "build_s": 2.53,
+   "n_cal": 914940,
+   "n_eval": 914940,
+   "eval_mse": 0.00030680341296829283,
+   "eval_nrmse": 0.011920156988971926,
+   "eval_max_abs": 0.04486680030822754,
+   "spikes_per_input": 1.2143790849673202,
+   "near0_mass": 0.12972435355186462,
+   "near0_spike_share": 0.10095456329134432,
+   "storage_bytes": 128,
+   "params": 32,
+   "n_banks": 4,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/exp2__rule__1e-03.pt"
+  },
+  {
+   "function": "exp2",
+   "target_fn": "exp2",
+   "arm": "n_adapt",
+   "domain": [
+    0.0,
+    1.0
+   ],
+   "route": {
+    "e_min": -3,
+    "e_max": 0
+   },
+   "target_mse": 0.001,
+   "build_s": 74.18,
+   "n_cal": 914940,
+   "n_eval": 914940,
+   "eval_mse": 0.00030680341296829283,
+   "eval_nrmse": 0.011920156988971926,
+   "eval_max_abs": 0.04486680030822754,
+   "spikes_per_input": 1.2143790849673202,
+   "near0_mass": 0.12972435355186462,
+   "near0_spike_share": 0.10095456329134432,
+   "storage_bytes": 128,
+   "params": 32,
+   "n_banks": 4,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/exp2__n_adapt__1e-03.pt"
+  },
+  {
+   "function": "exp2",
+   "target_fn": "exp2",
+   "arm": "greedy",
+   "domain": [
+    0.0,
+    1.0
+   ],
+   "route": {
+    "e_min": -3,
+    "e_max": 0
+   },
+   "target_mse": 0.001,
+   "build_s": 15.95,
+   "n_cal": 914940,
+   "n_eval": 914940,
+   "eval_mse": 0.00030680341296829283,
+   "eval_nrmse": 0.011920156988971926,
+   "eval_max_abs": 0.04486680030822754,
+   "spikes_per_input": 1.2143790849673202,
+   "near0_mass": 0.12972435355186462,
+   "near0_spike_share": 0.10095456329134432,
+   "storage_bytes": 128,
+   "params": 32,
+   "n_banks": 4,
+   "m_map": {},
+   "banks_fitted": 4,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/exp2__greedy__1e-03.pt"
+  },
+  {
+   "function": "exp2",
+   "target_fn": "exp2",
+   "arm": "spend_x1.5",
+   "domain": [
+    0.0,
+    1.0
+   ],
+   "route": {
+    "e_min": -3,
+    "e_max": 0
+   },
+   "target_mse": 0.001,
+   "build_s": 37.8,
+   "n_cal": 914940,
+   "n_eval": 914940,
+   "eval_mse": 0.00030223073554225266,
+   "eval_nrmse": 0.011830992959262711,
+   "eval_max_abs": 0.04149949550628662,
+   "spikes_per_input": 0.9807823463833694,
+   "near0_mass": 0.12972435355186462,
+   "near0_spike_share": 0.12499930351019718,
+   "storage_bytes": 160,
+   "params": 40,
+   "n_banks": 5,
+   "m_map": {
+    "+1,-1": 1
+   },
+   "banks_fitted": 10,
+   "byte_budget": 192,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/exp2__spend_x1.5__1e-03.pt"
+  },
+  {
+   "function": "exp2",
+   "target_fn": "exp2",
+   "arm": "spend_x2",
+   "domain": [
+    0.0,
+    1.0
+   ],
+   "route": {
+    "e_min": -3,
+    "e_max": 0
+   },
+   "target_mse": 0.001,
+   "build_s": 51.95,
+   "n_cal": 914940,
+   "n_eval": 914940,
+   "eval_mse": 0.00030223073554225266,
+   "eval_nrmse": 0.011830992959262711,
+   "eval_max_abs": 0.04149949550628662,
+   "spikes_per_input": 0.9807823463833694,
+   "near0_mass": 0.12972435355186462,
+   "near0_spike_share": 0.12499930351019718,
+   "storage_bytes": 160,
+   "params": 40,
+   "n_banks": 5,
+   "m_map": {
+    "+1,-1": 1
+   },
+   "banks_fitted": 14,
+   "byte_budget": 256,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/exp2__spend_x2__1e-03.pt"
+  },
+  {
+   "function": "exp2",
+   "target_fn": "exp2",
+   "arm": "spend_x3",
+   "domain": [
+    0.0,
+    1.0
+   ],
+   "route": {
+    "e_min": -3,
+    "e_max": 0
+   },
+   "target_mse": 0.001,
+   "build_s": 52.08,
+   "n_cal": 914940,
+   "n_eval": 914940,
+   "eval_mse": 0.00030223073554225266,
+   "eval_nrmse": 0.011830992959262711,
+   "eval_max_abs": 0.04149949550628662,
+   "spikes_per_input": 0.9807823463833694,
+   "near0_mass": 0.12972435355186462,
+   "near0_spike_share": 0.12499930351019718,
+   "storage_bytes": 160,
+   "params": 40,
+   "n_banks": 5,
+   "m_map": {
+    "+1,-1": 1
+   },
+   "banks_fitted": 14,
+   "byte_budget": 384,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/exp2__spend_x3__1e-03.pt"
+  },
+  {
+   "function": "inv",
+   "target_fn": "inv",
+   "arm": "rule",
+   "domain": [
+    0.5,
+    1.0
+   ],
+   "route": {
+    "e_min": -7,
+    "e_max": -1,
+    "beta": 0.5
+   },
+   "target_mse": 0.001,
+   "build_s": 4.16,
+   "n_cal": 4680,
+   "n_eval": 4680,
+   "eval_mse": 0.000333108298946172,
+   "eval_nrmse": 0.01188590728757741,
+   "eval_max_abs": 0.048676252365112305,
+   "spikes_per_input": 0.9713675213675214,
+   "near0_mass": 0.021581197157502174,
+   "near0_spike_share": 0.01891772987241531,
+   "storage_bytes": 224,
+   "params": 56,
+   "n_banks": 7,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/inv__rule__1e-03.pt"
+  },
+  {
+   "function": "inv",
+   "target_fn": "inv",
+   "arm": "n_adapt",
+   "domain": [
+    0.5,
+    1.0
+   ],
+   "route": {
+    "e_min": -7,
+    "e_max": -1,
+    "beta": 0.5
+   },
+   "target_mse": 0.001,
+   "build_s": 119.14,
+   "n_cal": 4680,
+   "n_eval": 4680,
+   "eval_mse": 0.000333108298946172,
+   "eval_nrmse": 0.01188590728757741,
+   "eval_max_abs": 0.048676252365112305,
+   "spikes_per_input": 0.9713675213675214,
+   "near0_mass": 0.021581197157502174,
+   "near0_spike_share": 0.01891772987241531,
+   "storage_bytes": 224,
+   "params": 56,
+   "n_banks": 7,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/inv__n_adapt__1e-03.pt"
+  },
+  {
+   "function": "inv",
+   "target_fn": "inv",
+   "arm": "greedy",
+   "domain": [
+    0.5,
+    1.0
+   ],
+   "route": {
+    "e_min": -7,
+    "e_max": -1,
+    "beta": 0.5
+   },
+   "target_mse": 0.001,
+   "build_s": 25.7,
+   "n_cal": 4680,
+   "n_eval": 4680,
+   "eval_mse": 0.000333108298946172,
+   "eval_nrmse": 0.01188590728757741,
+   "eval_max_abs": 0.048676252365112305,
+   "spikes_per_input": 0.9713675213675214,
+   "near0_mass": 0.021581197157502174,
+   "near0_spike_share": 0.01891772987241531,
+   "storage_bytes": 224,
+   "params": 56,
+   "n_banks": 7,
+   "m_map": {},
+   "banks_fitted": 7,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/inv__greedy__1e-03.pt"
+  },
+  {
+   "function": "inv",
+   "target_fn": "inv",
+   "arm": "spend_x1.5",
+   "domain": [
+    0.5,
+    1.0
+   ],
+   "route": {
+    "e_min": -7,
+    "e_max": -1,
+    "beta": 0.5
+   },
+   "target_mse": 0.001,
+   "build_s": 74.47,
+   "n_cal": 4680,
+   "n_eval": 4680,
+   "eval_mse": 0.0002490251499693841,
+   "eval_nrmse": 0.010276878384544639,
+   "eval_max_abs": 0.048676252365112305,
+   "spikes_per_input": 0.972008547008547,
+   "near0_mass": 0.021581197157502174,
+   "near0_spike_share": 0.018905253901956475,
+   "storage_bytes": 320,
+   "params": 80,
+   "n_banks": 10,
+   "m_map": {
+    "+1,-3": 1,
+    "+1,-5": 1,
+    "+1,-6": 1
+   },
+   "banks_fitted": 21,
+   "byte_budget": 336,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/inv__spend_x1.5__1e-03.pt"
+  },
+  {
+   "function": "inv",
+   "target_fn": "inv",
+   "arm": "spend_x2",
+   "domain": [
+    0.5,
+    1.0
+   ],
+   "route": {
+    "e_min": -7,
+    "e_max": -1,
+    "beta": 0.5
+   },
+   "target_mse": 0.001,
+   "build_s": 95.33,
+   "n_cal": 4680,
+   "n_eval": 4680,
+   "eval_mse": 0.00024774420307949185,
+   "eval_nrmse": 0.0102504129699969,
+   "eval_max_abs": 0.048676252365112305,
+   "spikes_per_input": 0.9713675213675214,
+   "near0_mass": 0.021581197157502174,
+   "near0_spike_share": 0.01891772987241531,
+   "storage_bytes": 416,
+   "params": 104,
+   "n_banks": 13,
+   "m_map": {
+    "+1,-3": 1,
+    "+1,-5": 2,
+    "+1,-6": 1,
+    "+1,-7": 1
+   },
+   "banks_fitted": 27,
+   "byte_budget": 448,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/inv__spend_x2__1e-03.pt"
+  },
+  {
+   "function": "inv",
+   "target_fn": "inv",
+   "arm": "spend_x3",
+   "domain": [
+    0.5,
+    1.0
+   ],
+   "route": {
+    "e_min": -7,
+    "e_max": -1,
+    "beta": 0.5
+   },
+   "target_mse": 0.001,
+   "build_s": 179.83,
+   "n_cal": 4680,
+   "n_eval": 4680,
+   "eval_mse": 0.0002477220259606838,
+   "eval_nrmse": 0.010249954170737466,
+   "eval_max_abs": 0.048676252365112305,
+   "spikes_per_input": 0.9717948717948718,
+   "near0_mass": 0.021581197157502174,
+   "near0_spike_share": 0.018909410729991204,
+   "storage_bytes": 480,
+   "params": 120,
+   "n_banks": 15,
+   "m_map": {
+    "+1,-3": 1,
+    "+1,-5": 2,
+    "+1,-6": 1,
+    "+1,-7": 2
+   },
+   "banks_fitted": 51,
+   "byte_budget": 672,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/inv__spend_x3__1e-03.pt"
+  },
+  {
+   "function": "invsqrt",
+   "target_fn": "invsqrt",
+   "arm": "rule",
+   "domain": [
+    0.5,
+    2.0
+   ],
+   "route": {
+    "e_min": -2,
+    "e_max": 1
+   },
+   "target_mse": 0.001,
+   "build_s": 1.26,
+   "n_cal": 4777,
+   "n_eval": 4778,
+   "eval_mse": 0.0007341033779084682,
+   "eval_nrmse": 0.025720175516867498,
+   "eval_max_abs": 0.06761324405670166,
+   "spikes_per_input": 0.9905818334030976,
+   "near0_mass": 0.0,
+   "near0_spike_share": 0.0,
+   "storage_bytes": 64,
+   "params": 16,
+   "n_banks": 4,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/invsqrt__rule__1e-03.pt"
+  },
+  {
+   "function": "invsqrt",
+   "target_fn": "invsqrt",
+   "arm": "n_adapt",
+   "domain": [
+    0.5,
+    2.0
+   ],
+   "route": {
+    "e_min": -2,
+    "e_max": 1
+   },
+   "target_mse": 0.001,
+   "build_s": 39.59,
+   "n_cal": 4777,
+   "n_eval": 4778,
+   "eval_mse": 0.0007341033779084682,
+   "eval_nrmse": 0.025720175516867498,
+   "eval_max_abs": 0.06761324405670166,
+   "spikes_per_input": 0.9905818334030976,
+   "near0_mass": 0.0,
+   "near0_spike_share": 0.0,
+   "storage_bytes": 64,
+   "params": 16,
+   "n_banks": 4,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/invsqrt__n_adapt__1e-03.pt"
+  },
+  {
+   "function": "invsqrt",
+   "target_fn": "invsqrt",
+   "arm": "greedy",
+   "domain": [
+    0.5,
+    2.0
+   ],
+   "route": {
+    "e_min": -2,
+    "e_max": 1
+   },
+   "target_mse": 0.001,
+   "build_s": 8.77,
+   "n_cal": 4777,
+   "n_eval": 4778,
+   "eval_mse": 0.0007341033779084682,
+   "eval_nrmse": 0.025720175516867498,
+   "eval_max_abs": 0.06761324405670166,
+   "spikes_per_input": 0.9905818334030976,
+   "near0_mass": 0.0,
+   "near0_spike_share": 0.0,
+   "storage_bytes": 64,
+   "params": 16,
+   "n_banks": 4,
+   "m_map": {},
+   "banks_fitted": 2,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/invsqrt__greedy__1e-03.pt"
+  },
+  {
+   "function": "invsqrt",
+   "target_fn": "invsqrt",
+   "arm": "spend_x1.5",
+   "domain": [
+    0.5,
+    2.0
+   ],
+   "route": {
+    "e_min": -2,
+    "e_max": 1
+   },
+   "target_mse": 0.001,
+   "build_s": 23.15,
+   "n_cal": 4777,
+   "n_eval": 4778,
+   "eval_mse": 0.0005667078658007085,
+   "eval_nrmse": 0.022598256668980007,
+   "eval_max_abs": 0.06761324405670166,
+   "spikes_per_input": 0.9805357890330683,
+   "near0_mass": 0.0,
+   "near0_spike_share": 0.0,
+   "storage_bytes": 96,
+   "params": 24,
+   "n_banks": 5,
+   "m_map": {
+    "+1,0": 1
+   },
+   "banks_fitted": 6,
+   "byte_budget": 96,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/invsqrt__spend_x1.5__1e-03.pt"
+  },
+  {
+   "function": "invsqrt",
+   "target_fn": "invsqrt",
+   "arm": "spend_x2",
+   "domain": [
+    0.5,
+    2.0
+   ],
+   "route": {
+    "e_min": -2,
+    "e_max": 1
+   },
+   "target_mse": 0.001,
+   "build_s": 23.84,
+   "n_cal": 4777,
+   "n_eval": 4778,
+   "eval_mse": 0.0005667078658007085,
+   "eval_nrmse": 0.022598256668980007,
+   "eval_max_abs": 0.06761324405670166,
+   "spikes_per_input": 0.9805357890330683,
+   "near0_mass": 0.0,
+   "near0_spike_share": 0.0,
+   "storage_bytes": 96,
+   "params": 24,
+   "n_banks": 5,
+   "m_map": {
+    "+1,0": 1
+   },
+   "banks_fitted": 6,
+   "byte_budget": 128,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/invsqrt__spend_x2__1e-03.pt"
+  },
+  {
+   "function": "invsqrt",
+   "target_fn": "invsqrt",
+   "arm": "spend_x3",
+   "domain": [
+    0.5,
+    2.0
+   ],
+   "route": {
+    "e_min": -2,
+    "e_max": 1
+   },
+   "target_mse": 0.001,
+   "build_s": 37.03,
+   "n_cal": 4777,
+   "n_eval": 4778,
+   "eval_mse": 0.000521424284670502,
+   "eval_nrmse": 0.02167658902443792,
+   "eval_max_abs": 0.06761324405670166,
+   "spikes_per_input": 0.9847216408539138,
+   "near0_mass": 0.0,
+   "near0_spike_share": 0.0,
+   "storage_bytes": 160,
+   "params": 40,
+   "n_banks": 7,
+   "m_map": {
+    "+1,0": 2
+   },
+   "banks_fitted": 10,
+   "byte_budget": 192,
+   "N_used": [
+    1
+   ],
+   "infeasible_banks": 0,
+   "saved": "logs/e42_neurons/invsqrt__spend_x3__1e-03.pt"
+  }
+ ],
+ "finished": "2026-10-09T15:03:52"
+}

@@ -1,0 +1,1674 @@
+[
+ {
+  "tag": "greedy-cli-smoke",
+  "backend": "mbe_pasn",
+  "scope": "both",
+  "stage": 1,
+  "model": "smoke: tiny random GPT-2",
+  "smoke": true,
+  "device": "cpu",
+  "id_target": "relative",
+  "r": 0.01,
+  "pasn_id_tied": true,
+  "pasn_e_min": -3,
+  "pasn_id_e_min": -6,
+  "pasn_readout_order": 2,
+  "pasn_t_fixed": null,
+  "pasn_n_fixed": null,
+  "pasn_n_local": 2,
+  "pasn_budget": "greedy",
+  "pasn_m_max": 1,
+  "pasn_fit_n_max": 4,
+  "pasn_target_mse": 0.001,
+  "mbe_readout_order": null,
+  "mbe_id_logsample": null,
+  "n_basis_act": null,
+  "n_basis_ln": null,
+  "epochs": 1,
+  "n_steps": 2,
+  "block": 32,
+  "calib_offset": 0,
+  "dataset": "wikitext-2-raw-v1",
+  "dataset_arrow_dir": null,
+  "eval_split": "test",
+  "eval_start_token": 0,
+  "eval_mode": "sliding",
+  "ctx": 64,
+  "stride": 1024,
+  "limit_blocks": null,
+  "eval_batch_size": 1,
+  "ppl_ann": null,
+  "ppl_snn": null,
+  "delta_pct": null,
+  "spikes_per_token": 729.40625,
+  "total_spikes": 23341.0,
+  "by_kind": {
+   "layernorm": 16515.0,
+   "activation": 6826.0
+  },
+  "stored_params": 392,
+  "stored_bytes": 1568,
+  "n_primitives": 17,
+  "n_activations": 2,
+  "act_spikes_per_input": 0.833251953125,
+  "build_s": 2.5936320999171585,
+  "eval_ann_s": null,
+  "eval_snn_s": null,
+  "started": "2026-10-09T21:32:28",
+  "pasn_beta": {
+   "inv": 0.5
+  },
+  "convert_cfg": {
+   "n_basis_act": 6,
+   "n_basis_ln": 8,
+   "n_basis_sm": 8,
+   "n_basis_mm": 8,
+   "n_steps": 2,
+   "mbe_readout_order": 1,
+   "mbe_id_logsample": false,
+   "epochs": 1,
+   "seed": 0,
+   "spike_mult": true,
+   "margin": 0.05,
+   "backend": "mbe_pasn",
+   "pasn_e_min": -3,
+   "pasn_id_e_min": -6,
+   "pasn_n_local": 2,
+   "pasn_budget": "greedy",
+   "pasn_target_mse": 0.001,
+   "pasn_m_max": 1,
+   "pasn_fit_n_max": 4,
+   "pasn_t_fixed": null,
+   "pasn_n_fixed": null,
+   "pasn_near0": "signed",
+   "pasn_id_tied": true,
+   "pasn_invsqrt_tied": false,
+   "pasn_near0_rule": false,
+   "pasn_alpha_init": "auto",
+   "pasn_id_target": "relative",
+   "pasn_id_target_rel": 0.01,
+   "pasn_id_signed": false,
+   "pasn_beta": {
+    "inv": 0.5
+   },
+   "pasn_beta_binades": 6,
+   "pasn_readout_order": 2,
+   "pasn_T": 6,
+   "pasn_order": 2,
+   "pasn_s_n_shared": 4,
+   "pasn_s_spike_budget": null,
+   "pasn_s_restarts": 3,
+   "fit_device": "cpu",
+   "verbose_fits": true,
+   "share_fits": true,
+   "share_fit_refs": false
+  },
+  "bank_architectures": [
+   {
+    "name": "transformer.h.0.ln_1.rsqrt",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": [
+     {
+      "bank": [
+       "mag",
+       1.0,
+       -1,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.0009280027588829398,
+       "spikes": 1.072265625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.0009280027588829398,
+        "spikes": 1.072265625,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       1.0,
+       0,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.0004637788515537977,
+       "spikes": 1.16796875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.0004637788515537977,
+        "spikes": 1.16796875,
+        "feasible": true
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "transformer.h.0.ln_1.id_dev",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      2,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": null
+   },
+   {
+    "name": "transformer.h.0.ln_1.id_istd",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      2,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ],
+     [
+      5,
+      "mag",
+      1,
+      2
+     ],
+     [
+      6,
+      "mag",
+      1,
+      2
+     ],
+     [
+      7,
+      "mag",
+      1,
+      2
+     ],
+     [
+      8,
+      "mag",
+      1,
+      2
+     ],
+     [
+      9,
+      "mag",
+      1,
+      2
+     ],
+     [
+      10,
+      "mag",
+      1,
+      2
+     ],
+     [
+      11,
+      "mag",
+      1,
+      2
+     ],
+     [
+      12,
+      "mag",
+      1,
+      2
+     ],
+     [
+      13,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": null
+   },
+   {
+    "name": "transformer.h.0.ln_2.rsqrt",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": [
+     {
+      "bank": [
+       "mag",
+       1.0,
+       -1,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.0009280027588829398,
+       "spikes": 1.072265625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.0009280027588829398,
+        "spikes": 1.072265625,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       1.0,
+       0,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.0004637788515537977,
+       "spikes": 1.16796875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.0004637788515537977,
+        "spikes": 1.16796875,
+        "feasible": true
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "transformer.h.0.ln_2.id_dev",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      2,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": null
+   },
+   {
+    "name": "transformer.h.0.ln_2.id_istd",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      2,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ],
+     [
+      5,
+      "mag",
+      1,
+      2
+     ],
+     [
+      6,
+      "mag",
+      1,
+      2
+     ],
+     [
+      7,
+      "mag",
+      1,
+      2
+     ],
+     [
+      8,
+      "mag",
+      1,
+      2
+     ],
+     [
+      9,
+      "mag",
+      1,
+      2
+     ],
+     [
+      10,
+      "mag",
+      1,
+      2
+     ],
+     [
+      11,
+      "mag",
+      1,
+      2
+     ],
+     [
+      12,
+      "mag",
+      1,
+      2
+     ],
+     [
+      13,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": null
+   },
+   {
+    "name": "transformer.h.0.mlp.act",
+    "kind": "activation",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      1,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ],
+     [
+      5,
+      "mag",
+      1,
+      2
+     ],
+     [
+      6,
+      "mag",
+      1,
+      2
+     ],
+     [
+      7,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": [
+     {
+      "bank": [
+       "near0s",
+       -1.0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.6578027498326264e-05,
+       "spikes": 1.02734375,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.6578027498326264e-05,
+        "spikes": 1.02734375,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "near0s",
+       1.0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 2.4757511710049585e-05,
+       "spikes": 0.9794921875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 2.4757511710049585e-05,
+        "spikes": 0.9794921875,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       -1.0,
+       -3,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.2402688298607245e-05,
+       "spikes": 1.0849609375,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.2402688298607245e-05,
+        "spikes": 1.0849609375,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       -1.0,
+       -2,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.6558011338929646e-05,
+       "spikes": 1.1376953125,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.6558011338929646e-05,
+        "spikes": 1.1376953125,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       1.0,
+       -3,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 3.437369014136493e-05,
+       "spikes": 0.9794921875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 3.437369014136493e-05,
+        "spikes": 0.9794921875,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       1.0,
+       -2,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.00020146813767496496,
+       "spikes": 0.9765625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.00020146813767496496,
+        "spikes": 0.9765625,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       1.0,
+       -1,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.7345298530813125e-08,
+       "spikes": 1.1181640625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.7345298530813125e-08,
+        "spikes": 1.1181640625,
+        "feasible": true
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "transformer.h.1.ln_1.rsqrt",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": [
+     {
+      "bank": [
+       "mag",
+       1.0,
+       -1,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.0009280027588829398,
+       "spikes": 1.072265625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.0009280027588829398,
+        "spikes": 1.072265625,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       1.0,
+       0,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.0004637788515537977,
+       "spikes": 1.16796875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.0004637788515537977,
+        "spikes": 1.16796875,
+        "feasible": true
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "transformer.h.1.ln_1.id_dev",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      2,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": null
+   },
+   {
+    "name": "transformer.h.1.ln_1.id_istd",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      2,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ],
+     [
+      5,
+      "mag",
+      1,
+      2
+     ],
+     [
+      6,
+      "mag",
+      1,
+      2
+     ],
+     [
+      7,
+      "mag",
+      1,
+      2
+     ],
+     [
+      8,
+      "mag",
+      1,
+      2
+     ],
+     [
+      9,
+      "mag",
+      1,
+      2
+     ],
+     [
+      10,
+      "mag",
+      1,
+      2
+     ],
+     [
+      11,
+      "mag",
+      1,
+      2
+     ],
+     [
+      12,
+      "mag",
+      1,
+      2
+     ],
+     [
+      13,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": null
+   },
+   {
+    "name": "transformer.h.1.ln_2.rsqrt",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": [
+     {
+      "bank": [
+       "mag",
+       1.0,
+       -1,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.0009280027588829398,
+       "spikes": 1.072265625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.0009280027588829398,
+        "spikes": 1.072265625,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       1.0,
+       0,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.0004637788515537977,
+       "spikes": 1.16796875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.0004637788515537977,
+        "spikes": 1.16796875,
+        "feasible": true
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "transformer.h.1.ln_2.id_dev",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      2,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": null
+   },
+   {
+    "name": "transformer.h.1.ln_2.id_istd",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      2,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ],
+     [
+      5,
+      "mag",
+      1,
+      2
+     ],
+     [
+      6,
+      "mag",
+      1,
+      2
+     ],
+     [
+      7,
+      "mag",
+      1,
+      2
+     ],
+     [
+      8,
+      "mag",
+      1,
+      2
+     ],
+     [
+      9,
+      "mag",
+      1,
+      2
+     ],
+     [
+      10,
+      "mag",
+      1,
+      2
+     ],
+     [
+      11,
+      "mag",
+      1,
+      2
+     ],
+     [
+      12,
+      "mag",
+      1,
+      2
+     ],
+     [
+      13,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": null
+   },
+   {
+    "name": "transformer.h.1.mlp.act",
+    "kind": "activation",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      1,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ],
+     [
+      5,
+      "mag",
+      1,
+      2
+     ],
+     [
+      6,
+      "mag",
+      1,
+      2
+     ],
+     [
+      7,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": [
+     {
+      "bank": [
+       "near0s",
+       -1.0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.6578027498326264e-05,
+       "spikes": 1.02734375,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.6578027498326264e-05,
+        "spikes": 1.02734375,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "near0s",
+       1.0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 2.4757511710049585e-05,
+       "spikes": 0.9794921875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 2.4757511710049585e-05,
+        "spikes": 0.9794921875,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       -1.0,
+       -3,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.2402688298607245e-05,
+       "spikes": 1.0849609375,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.2402688298607245e-05,
+        "spikes": 1.0849609375,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       -1.0,
+       -2,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.6558011338929646e-05,
+       "spikes": 1.1376953125,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.6558011338929646e-05,
+        "spikes": 1.1376953125,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       1.0,
+       -3,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 3.437369014136493e-05,
+       "spikes": 0.9794921875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 3.437369014136493e-05,
+        "spikes": 0.9794921875,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       1.0,
+       -2,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.00020146813767496496,
+       "spikes": 0.9765625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.00020146813767496496,
+        "spikes": 0.9765625,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       1.0,
+       -1,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.7345298530813125e-08,
+       "spikes": 1.1181640625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.7345298530813125e-08,
+        "spikes": 1.1181640625,
+        "feasible": true
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "transformer.ln_f.rsqrt",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": [
+     {
+      "bank": [
+       "mag",
+       1.0,
+       -1,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.0009280027588829398,
+       "spikes": 1.072265625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.0009280027588829398,
+        "spikes": 1.072265625,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": [
+       "mag",
+       1.0,
+       0,
+       0,
+       0
+      ],
+      "level": 0,
+      "target_mse": 0.001,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.0004637788515537977,
+       "spikes": 1.16796875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.0004637788515537977,
+        "spikes": 1.16796875,
+        "feasible": true
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "transformer.ln_f.id_dev",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      2,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": null
+   },
+   {
+    "name": "transformer.ln_f.id_istd",
+    "kind": "layernorm",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      2,
+      2
+     ],
+     [
+      1,
+      "mag",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ],
+     [
+      5,
+      "mag",
+      1,
+      2
+     ],
+     [
+      6,
+      "mag",
+      1,
+      2
+     ],
+     [
+      7,
+      "mag",
+      1,
+      2
+     ],
+     [
+      8,
+      "mag",
+      1,
+      2
+     ],
+     [
+      9,
+      "mag",
+      1,
+      2
+     ],
+     [
+      10,
+      "mag",
+      1,
+      2
+     ],
+     [
+      11,
+      "mag",
+      1,
+      2
+     ],
+     [
+      12,
+      "mag",
+      1,
+      2
+     ],
+     [
+      13,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": null
+   }
+  ],
+  "ops_per_input": {
+   "cmp": 3649.0,
+   "ac": 1458.8125,
+   "mac": 2085.5,
+   "poly": 261.0,
+   "router": 7326.0,
+   "bitop": 1221.0
+  },
+  "energy_pj_per_input": 21984.33125,
+  "stored_bytes_naive": 4052,
+  "stored_shared_factor": 2.5841836734693877,
+  "stored_by_role": {
+   "alpha": 216,
+   "tau": 864,
+   "readout": 312,
+   "bias": 176
+  }
+ }
+]

@@ -27,7 +27,7 @@ import torch.nn as nn
 
 from . import functions
 from . import spiking_ops as so
-from .mbe_pasn import build_mbe_pasn
+from .mbe_pasn import build_mbe_pasn, build_mbe_pasn_split
 from .mbe_pasn_s import build_mbe_pasn_s
 from .pasn import build_pasn
 
@@ -383,6 +383,22 @@ class ConvertConfig:
     # count and was a global constant until this was added.
     pasn_budget: str = "rule"
     pasn_target_mse: float = 1e-5
+    pasn_m_max: int = 3              # greedy: maximum mantissa-prefix depth per binade
+    # greedy only. "absolute" holds every bank to pasn_target_mse (the first
+    # network gate). "hybrid" is E44's per-bank max((r*rms_j)^2, eps_abs), with
+    # eps_abs = (k*r*rms)^2 and rms the primitive's output RMS on its calibration
+    # sample (a uniform domain grid when the op has none, e.g. rsqrt).
+    pasn_target: str = "absolute"
+    pasn_target_rel: float = 3e-3
+    pasn_floor_k: float = 0.1
+    # greedy only. "rule" keeps the tied identity's rule build (first gate).
+    # "split" makes it N=1 and deepens its one shared prototype by mantissa bits
+    # until the relative target holds: the identity is homogeneous, so every
+    # binade has the same residual shape and one depth serves all of them.
+    pasn_greedy_identity: str = "rule"
+    # Offline fit-budget search cap. The rule arm already caps at four bases;
+    # this only controls how many fitted (N, T) candidates the new arm tries.
+    pasn_fit_n_max: int = 4
     # Force every bank to this many timesteps after the rule picks (N_j, T_j),
     # leaving N_j alone. Only for the timestep-matched comparison against the
     # paper's global T=16; None keeps the rule's per-bank T_j (the default, and
@@ -414,6 +430,22 @@ class ConvertConfig:
     # in ``t``, so ``_build_tied`` raises. beta and tying are mutually exclusive
     # there and beta wins by far (MSE 25x, spikes 5.9x).
     pasn_invsqrt_tied: bool = False
+    # The tied path solves ``(N_j, T_j)`` only for the magnitude banks the shared
+    # prototype covers; the near-zero leftovers fall through to the fixed
+    # ``n_near0``/``n_steps``, so ``pasn_budget="rule"`` has never reached them.
+    # The identity is the only tied primitive and it sits inside fp_multiply,
+    # layernorm, attention and softmax -- exactly the operators whose byte column
+    # is under attack. Measured at op level (E30 follow-up, 2026-08-19): taking
+    # the identity's near-zero bank from N=4 to N=1 cut storage **2.29x** and
+    # spikes slightly with **nrmse identical to four figures**, at three separate
+    # error targets. Those bases buy nothing -- the identity is exactly linear on
+    # ``[0, 2^e_min)``.
+    #
+    # Default **off**: this is a numerics change, not a re-accounting. Spikes move,
+    # so it is not bit-identical and it shifts the frozen fingerprint
+    # (53,888 B / 13,472 p / 339 prims). Turning it on requires the op-level
+    # 3-seed sweep and a network ΔPPL gate against the 0.0064 pp noise floor.
+    pasn_near0_rule: bool = False
     # "auto" fits both alpha placements per bank and keeps the better, doubling
     # the build. "uniform" is the placement the routed residual wants.
     pasn_alpha_init: str = "auto"
@@ -485,6 +517,17 @@ class ConvertConfig:
     fit_device: str | None = None
     verbose_fits: bool = False
     share_fits: bool = True
+    # ``share_fits`` reuses one *fit* per kind but inserts ``copy.deepcopy`` at every
+    # other site, so 24 activation sites and 49 LayerNorm modules each store a
+    # byte-identical copy: 1,143 of the 1,832 stored bases in the frozen build are
+    # duplicates (E11 audit arithmetic; ``storage_bytes`` de-duplicates by storage,
+    # so references are charged once and copies are charged each). Setting this
+    # inserts the prototype *by reference* instead -- mathematically the same
+    # network, one stored copy. Default off: flipping it moves the frozen
+    # fingerprint (53,888 B / 13,472 p / 339 prims), and ``n_primitives`` in
+    # particular drops because ``_spiking_primitives`` de-duplicates by object id.
+    # Share only within one op kind or ``by_kind`` (the op budget table) merges.
+    share_fit_refs: bool = False
 
 
 def _set_submodule(root: nn.Module, name: str, new: nn.Module):
@@ -557,7 +600,7 @@ def _routed_primitive(name, domain, e_min, e_max, cfg: ConvertConfig,
             device=fit_device, verbose=cfg.verbose_fits,
         )
     kw = dict(readout_order=cfg.pasn_readout_order, near0=cfg.pasn_near0,
-              alpha_init=cfg.pasn_alpha_init)
+              alpha_init=cfg.pasn_alpha_init, near0_rule=cfg.pasn_near0_rule)
     kw.update(pasn_kw)
     beta = (cfg.pasn_beta or {}).get(name, 0.0)
     if beta:
@@ -566,15 +609,90 @@ def _routed_primitive(name, domain, e_min, e_max, cfg: ConvertConfig,
         kw["beta"] = beta
         e_min, e_max = _erange_beta(domain[0], domain[1], beta,
                                     cfg.pasn_beta_binades)
+    if cfg.pasn_budget == "greedy":
+        if cfg.pasn_t_fixed is not None or cfg.pasn_n_fixed is not None:
+            raise ValueError("greedy does not support pasn_t_fixed or pasn_n_fixed")
+        # The identity's shared prototype is essential to the existing network
+        # footprint. Its per-binade split search is not implemented yet, so keep
+        # exactly the rule identity for this first network gate.
+        if cfg.pasn_target not in ("absolute", "hybrid"):
+            raise ValueError(f"pasn_target must be absolute or hybrid, got {cfg.pasn_target!r}")
+        if cfg.pasn_greedy_identity not in ("rule", "split"):
+            raise ValueError("pasn_greedy_identity must be 'rule' or 'split'")
+        if kw.get("tied", False):
+            if cfg.pasn_greedy_identity == "split":
+                return _greedy_tied_split(name, domain, e_min, e_max, cfg,
+                                          fit_device, n_near0, kw)
+            return build_mbe_pasn(
+                name, domain, e_min=e_min, e_max=e_max,
+                n_local=cfg.pasn_n_local,
+                n_near0=n_near0 or cfg.pasn_n_local,
+                n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
+                budget="rule", target_mse=cfg.pasn_target_mse,
+                n_max=cfg.pasn_fit_n_max,
+                device=fit_device, verbose=cfg.verbose_fits, **kw,
+            )
+        kw.pop("near0_rule", None)
+        kw.pop("tied", None)
+        target_mse = cfg.pasn_target_mse
+        if cfg.pasn_target == "hybrid" and "target" not in kw:
+            kw.update(target="hybrid", target_rel=cfg.pasn_target_rel)
+            target_mse = (cfg.pasn_floor_k * cfg.pasn_target_rel
+                          * _output_rms(name, domain, sample)) ** 2
+        return build_mbe_pasn_split(
+            name, domain, e_min=e_min, e_max=e_max,
+            m_max=cfg.pasn_m_max, n_basis=1,
+            n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
+            target_mse=target_mse,
+            sample=sample, device=fit_device, verbose=cfg.verbose_fits, **kw,
+        )
     return build_mbe_pasn(
         name, domain, e_min=e_min, e_max=e_max,
         n_local=cfg.pasn_n_local,
         n_near0=n_near0 or cfg.pasn_n_local,
         n_steps=cfg.n_steps, epochs=cfg.epochs, seed=cfg.seed,
         budget=cfg.pasn_budget, target_mse=cfg.pasn_target_mse,
+        n_max=cfg.pasn_fit_n_max,
         t_fixed=cfg.pasn_t_fixed, n_fixed=cfg.pasn_n_fixed,
         device=fit_device, verbose=cfg.verbose_fits, **kw,
     )
+
+
+def _output_rms(name, domain, sample):
+    """RMS of ``f`` over what the primitive is fed: its calibration sample when
+    there is one, else a uniform grid over the domain (rsqrt has no sample)."""
+    fn = functions.REGISTRY[name][0]
+    x = None
+    if sample is not None:
+        s = sample.reshape(-1).float()
+        s = s[torch.isfinite(s) & (s >= domain[0]) & (s <= domain[1])]
+        if s.numel():
+            x = s
+    if x is None:
+        x = torch.linspace(float(domain[0]), float(domain[1]), 4096)
+    return max(float(fn(x).pow(2).mean().sqrt()), 1e-30)
+
+
+def _greedy_tied_split(name, domain, e_min, e_max, cfg, fit_device, n_near0, kw):
+    """N=1 tied identity whose shared prototype is deepened by mantissa bits.
+
+    Under tying every binade carries the same unit-residual shape, so one depth m
+    serves them all (2^m prototypes, one per sub-range). Try m = 0, 1, ... and keep
+    the first whose tied search meets the relative target; past ``pasn_m_max``
+    keep the deepest. Near-zero leftovers get the same N=1 fit selector.
+    """
+    out = None
+    for m in range(cfg.pasn_m_max + 1):
+        out = build_mbe_pasn(
+            name, domain, e_min=e_min, e_max=e_max,
+            n_local=1, n_near0=1, n_steps=cfg.n_steps, epochs=cfg.epochs,
+            seed=cfg.seed, budget="fit", n_fixed=1, m_bits=m,
+            target_mse=cfg.pasn_target_mse, n_max=1,
+            device=fit_device, verbose=cfg.verbose_fits, **kw)
+        out.greedy_identity_m = m
+        if out.fit_budget_diagnostics[0]["selected"]["feasible"]:
+            break
+    return out
 
 
 def _routed_softmax(mod, slot, cfg: ConvertConfig, fit_device):
@@ -755,6 +873,15 @@ def convert(model: nn.Module, recorder: CalibrationRecorder,
     shared_slots = _shared_fit_slots(model, recorder) if cfg.share_fits else {}
     activation_prototypes: dict[str, nn.Module] = {}
     layernorm_prototypes: dict[tuple, so.SpikingLayerNorm] = {}
+
+    # ``share_fit_refs``: hand the prototype over by reference rather than by value.
+    # The copy is what the storage accounting charges (E21); the fit is identical
+    # either way, so the two arms must come out bit-identical on every measured
+    # quantity except the stored footprint.
+    def _instance(proto):
+        return proto if cfg.share_fit_refs else copy.deepcopy(proto)
+
+    how = "ref" if cfg.share_fit_refs else "copy"
     for name, kind in list(recorder.kinds.items()):
         if only is not None and kind not in only:
             continue
@@ -767,11 +894,11 @@ def convert(model: nn.Module, recorder: CalibrationRecorder,
         if prototype_key in activation_prototypes:
             if verbose or cfg.verbose_fits:
                 print(
-                    f"  reuse   {name:32s} (activation: {prototype_key})",
+                    f"  reuse   {name:32s} (activation: {prototype_key}, {how})",
                     flush=True,
                 )
             _set_submodule(
-                model, name, copy.deepcopy(activation_prototypes[prototype_key])
+                model, name, _instance(activation_prototypes[prototype_key])
             )
             continue
         if kind == "layernorm" and cfg.share_fits:
@@ -780,11 +907,13 @@ def convert(model: nn.Module, recorder: CalibrationRecorder,
                 if verbose or cfg.verbose_fits:
                     print(
                         f"  reuse   {name:32s} "
-                        f"(layernorm: {cfg.backend})",
+                        f"(layernorm: {cfg.backend}, {how})",
                         flush=True,
                     )
+                # The wrapper stays per-site: gamma/beta are this LayerNorm's own.
+                # Only the spiking primitive set (rsqrt / id_dev / id_istd) is shared.
                 new = _SpikingLayerNormModule(
-                    copy.deepcopy(layernorm_prototypes[ln_key]),
+                    _instance(layernorm_prototypes[ln_key]),
                     mod.weight,
                     mod.bias,
                 )
@@ -892,6 +1021,13 @@ def _install_cost_probe(name, neuron, tally, busy, saved):
                         ops = entry.setdefault("ops", {})
                         for cls, v in neuron_op_cost(neuron, x, spikes).items():
                             ops[cls] = ops.get(cls, 0.0) + v * x.numel()
+                        # The same work priced with order-1 readouts folded
+                        # into the decode kernel (E45/E46): reported beside,
+                        # never instead of, the historical meter.
+                        opf = entry.setdefault("ops_fused", {})
+                        for cls, v in neuron_op_cost(neuron, x, spikes,
+                                                     fused_readout=True).items():
+                            opf[cls] = opf.get(cls, 0.0) + v * x.numel()
                         entry["elements"] += x.numel()
                         entry["calls"] += 1
                     finally:
@@ -982,17 +1118,22 @@ def spiking_cost_report(model: nn.Module, batch) -> dict:
 
     by_kind: dict[str, float] = {}
     by_op: dict[str, float] = {}
+    by_op_fused: dict[str, float] = {}
     for name, e in tally.items():
         e["spikes_per_element"] = e["spikes"] / max(e["elements"], 1)
         by_kind[e["kind"]] = by_kind.get(e["kind"], 0.0) + e["spikes"]
         for cls, v in e["ops"].items():
             by_op[cls] = by_op.get(cls, 0.0) + v
+        for cls, v in e.get("ops_fused", {}).items():
+            by_op_fused[cls] = by_op_fused.get(cls, 0.0) + v
     total = sum(by_kind.values())
     return dict(primitives=tally, by_kind=by_kind, total_spikes=total,
                 spikes_per_input=total / max(n_in, 1), input_elements=n_in,
                 by_op=by_op,
                 ops_per_input={k: v / max(n_in, 1) for k, v in by_op.items()},
-                energy_pj_per_input=op_energy_pj(by_op) / max(n_in, 1))
+                energy_pj_per_input=op_energy_pj(by_op) / max(n_in, 1),
+                ops_per_input_fused={k: v / max(n_in, 1) for k, v in by_op_fused.items()},
+                energy_pj_per_input_fused=op_energy_pj(by_op_fused) / max(n_in, 1))
 
 
 def format_spiking_cost_report(rep: dict, label: str = "") -> str:

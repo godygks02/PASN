@@ -130,7 +130,8 @@ def perplexity_sliding(model, ids, device, max_length, stride,
 
 
 def load_wikitext_ids(tokenizer, split="test", drop_blank: bool = False,
-                      config: str | None = None, max_rows: int | None = None):
+                      config: str | None = None, max_rows: int | None = None,
+                      arrow_dir: str | None = None):
     """Tokenised WikiText split.
 
     Defaults to the canonical recipe, ``"\\n\\n".join(ds["text"])`` with blank lines
@@ -153,13 +154,26 @@ def load_wikitext_ids(tokenizer, split="test", drop_blank: bool = False,
     because ``<unk>`` is applied from a vocabulary built on each corpus's own
     train split, and -2's train is 49x smaller (36,718 rows against 1,801,350).
     """
-    from datasets import load_dataset
-    # Use the canonical namespaced repository ID. The legacy shorthand
-    # ``"wikitext"`` is resolved by some datasets releases to an invalid
-    # ``hf://datasets/wikitext@...`` URI; recent huggingface_hub parsers require
-    # repository IDs in ``namespace/name`` form.
-    ds = load_dataset(WIKITEXT_DATASET_ID, config or WIKITEXT_CONFIG, split=split)
-    rows = ds["text"]
+    if arrow_dir is None:
+        from datasets import load_dataset
+        # Use the canonical namespaced repository ID. The legacy shorthand
+        # ``"wikitext"`` is resolved by some datasets releases to an invalid
+        # ``hf://datasets/wikitext@...`` URI; recent huggingface_hub parsers require
+        # repository IDs in ``namespace/name`` form.
+        ds = load_dataset(WIKITEXT_DATASET_ID, config or WIKITEXT_CONFIG, split=split)
+        rows = ds["text"]
+    else:
+        # Directly read an existing HF Arrow cache when datasets.load_dataset
+        # waits on a stale cache lock. The text join below remains identical.
+        import pyarrow as pa
+        import pyarrow.ipc as ipc
+        path = os.path.join(arrow_dir, f"wikitext-{split}.arrow")
+        rows = []
+        with pa.memory_map(path, "r") as source:
+            for batch in ipc.open_stream(source):
+                rows.extend(batch.column("text").to_pylist())
+                if max_rows is not None and len(rows) >= max_rows:
+                    break
     if max_rows is not None:
         # Only a prefix of the train split is ever used for calibration, and
         # wikitext-103's train is 540 MB against wikitext-2's 11 MB. Tokenising
@@ -263,6 +277,14 @@ def main():
                          "(6.31%% of -2's test words against 1.03%% of -103's), "
                          "which is what makes the paper's 22.34 and 22.65 two "
                          "numbers for one set of documents")
+    ap.add_argument("--dataset-arrow-dir", default=None, metavar="DIR",
+                    help="read existing wikitext-{train,validation,test}.arrow files directly "
+                         "from this cache directory")
+    ap.add_argument("--eval-split", choices=["validation", "test"], default="test",
+                    help="WikiText split for perplexity and cost probes")
+    ap.add_argument("--eval-start-token", type=int, default=0,
+                    help="skip this many tokens from the selected evaluation split; "
+                         "use 1024 for the test tail after the exposed CPU pilot")
     ap.add_argument("--calib-max-rows", type=int, default=20000, metavar="ROWS",
                     help="read at most this many train rows before tokenising. "
                          "Calibration only ever uses the first ~32k tokens (~440 "
@@ -307,6 +329,27 @@ def main():
                          "--n-basis-act to give the mbe baseline its own frontier")
     ap.add_argument("--pasn-n-local", type=int, default=_DEF.pasn_n_local,
                     help="mbe_pasn: MBE bases per binade bank")
+    ap.add_argument("--pasn-budget", choices=["rule", "fit", "greedy"],
+                    default=_DEF.pasn_budget,
+                    help="per-bank N,T choice: analytic rule, fitted grid, or N=1 prefix split")
+    ap.add_argument("--pasn-m-max", type=int, default=_DEF.pasn_m_max,
+                    help="greedy: maximum mantissa-prefix bits per binade")
+    ap.add_argument("--pasn-target", choices=["absolute", "hybrid"],
+                    default=_DEF.pasn_target,
+                    help="greedy: per-bank target. hybrid = max((r*rms_j)^2, (k*r*rms)^2) (E44)")
+    ap.add_argument("--pasn-target-rel", type=float, default=_DEF.pasn_target_rel,
+                    help="greedy hybrid: relative error r")
+    ap.add_argument("--pasn-floor-k", type=float, default=_DEF.pasn_floor_k,
+                    help="greedy hybrid: absolute floor as a fraction k of r*rms")
+    ap.add_argument("--pasn-greedy-identity", choices=["rule", "split"],
+                    default=_DEF.pasn_greedy_identity,
+                    help="greedy: tied identity kept as rule, or N=1 with a mantissa-split prototype")
+    ap.add_argument("--pasn-fit-max-n", type=int,
+                    default=_DEF.pasn_fit_n_max,
+                    help="maximum basis count searched by --pasn-budget fit")
+    ap.add_argument("--pasn-target-mse", type=float,
+                    default=_DEF.pasn_target_mse,
+                    help="per-bank absolute MSE target for rule/fit selection")
     ap.add_argument("--pasn-e-min", type=int, default=_DEF.pasn_e_min,
                     help="smallest binade exponent (near-zero resolution); "
                          "shared by mbe_pasn and pasn so only the encoder differs")
@@ -414,20 +457,30 @@ def main():
                          "is the P0.4 deliverable). Sequential runs only")
     ap.add_argument("--tag", default=None,
                     help="free-form label stored with the JSON record")
+    ap.add_argument("--benchmark-forwards", type=int, default=0,
+                    help="time this many preloaded 1 x context forward passes "
+                         "and record CUDA peak allocation (0 skips)")
     args = ap.parse_args()
+    if args.eval_start_token < 0:
+        ap.error("--eval-start-token must be nonnegative")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     eval_batch_size = args.eval_batch_size or (4 if device == "cuda" else 1)
 
     if args.smoke:
         model, ids, calib, block = build_smoke()
+        model = model.to(device)
         args.block = block
         print("[smoke] tiny random GPT-2 (2 layers, d=32) -- wiring check only")
     else:
         from transformers import GPT2LMHeadModel, GPT2TokenizerFast
         tok = GPT2TokenizerFast.from_pretrained(args.model)
         model = GPT2LMHeadModel.from_pretrained(args.model).to(device).eval()
-        ids = load_wikitext_ids(tok, "test", args.drop_blank_lines,
-                                config=args.dataset)
+        ids = load_wikitext_ids(tok, args.eval_split, args.drop_blank_lines,
+                                config=args.dataset,
+                                arrow_dir=args.dataset_arrow_dir)
+        ids = ids[args.eval_start_token:]
+        if ids.numel() <= args.block:
+            ap.error("evaluation split after --eval-start-token is too short")
         # Calibration draw: 8 consecutive blocks of the train split. ``--calib-offset``
         # slides the window; 0 is the historical draw, so every existing record is an
         # offset-0 record. This is E12's knob and it is *not* a seed sweep -- the build
@@ -438,6 +491,7 @@ def main():
         cids = load_wikitext_ids(tok, "train", args.drop_blank_lines,
                                  config=args.dataset,
                                  max_rows=args.calib_max_rows,
+                                 arrow_dir=args.dataset_arrow_dir,
                                  )[: max(64 * args.block, need)]
         if cids.numel() < need:
             raise SystemExit(
@@ -538,6 +592,18 @@ def main():
         pasn_t_fixed=rt(args.pasn_t_fixed),
         pasn_n_fixed=rt(args.pasn_n_fixed),
         pasn_n_local=rt(args.pasn_n_local),
+        pasn_budget=rt(args.pasn_budget),
+        pasn_m_max=rt(args.pasn_m_max),
+        greedy_tied_policy=(args.pasn_greedy_identity
+                            if routed and args.pasn_budget == "greedy" else None),
+        pasn_target=(args.pasn_target
+                     if routed and args.pasn_budget == "greedy" else None),
+        pasn_target_rel=(args.pasn_target_rel if routed and args.pasn_budget == "greedy"
+                         and args.pasn_target == "hybrid" else None),
+        pasn_floor_k=(args.pasn_floor_k if routed and args.pasn_budget == "greedy"
+                      and args.pasn_target == "hybrid" else None),
+        pasn_fit_n_max=rt(args.pasn_fit_max_n),
+        pasn_target_mse=rt(args.pasn_target_mse),
         mbe_readout_order=gl(args.mbe_readout_order),
         mbe_id_logsample=gl(args.mbe_id_logsample),
         n_basis_act=gl(args.n_basis_act), n_basis_ln=gl(args.n_basis_ln),
@@ -546,6 +612,8 @@ def main():
         # no future session can tell which draw a number came from.
         block=args.block, calib_offset=args.calib_offset,
         dataset=args.dataset,
+        dataset_arrow_dir=args.dataset_arrow_dir,
+        eval_split=args.eval_split, eval_start_token=args.eval_start_token,
         # ``stride``/``ppl_ann``/``eval_ann_s`` are filled per stride at the end;
         # one record per evaluation point, all sharing this one build.
         eval_mode=args.eval_mode, ctx=max_length, stride=None,
@@ -566,6 +634,14 @@ def main():
                                spike_mult=True, n_basis_act=args.n_basis_act,
                                n_basis_ln=args.n_basis_ln,
                                pasn_n_local=args.pasn_n_local,
+                               pasn_budget=args.pasn_budget,
+                               pasn_m_max=args.pasn_m_max,
+                               pasn_target=args.pasn_target,
+                               pasn_target_rel=args.pasn_target_rel,
+                               pasn_floor_k=args.pasn_floor_k,
+                               pasn_greedy_identity=args.pasn_greedy_identity,
+                               pasn_fit_n_max=args.pasn_fit_max_n,
+                               pasn_target_mse=args.pasn_target_mse,
                                pasn_e_min=args.pasn_e_min,
                                pasn_id_e_min=args.pasn_id_e_min,
                                pasn_id_target=args.pasn_id_target,
@@ -611,6 +687,16 @@ def main():
         convert_gpt2(model, calib, cfg=cfg, only=only, verbose=True)
         rec["build_s"] = time.perf_counter() - t0
         print(f"[build] conversion took {rec['build_s'] / 60:.1f} min")
+        if args.backend == "mbe_pasn":
+            rec["bank_architectures"] = [
+                dict(name=name, kind=kind, budgets=neuron.budget_table(),
+                     selection=getattr(neuron, "fit_budget_diagnostics", None),
+                     greedy_split_depths=[dict(sign=s, exponent=e, m=m)
+                                          for (s, e), m in sorted(
+                                              getattr(neuron, "m_map", {}).items())])
+                for name, kind, neuron in cv._spiking_primitives(model)
+                if hasattr(neuron, "budget_table")
+            ]
         # Fair-comparison cost metrics (MBE and PASN store different #bases, so
         # accuracy alone is not comparable): stored/active bases + spikes per input.
         sample_batch = ids[:block].unsqueeze(0)
@@ -635,6 +721,9 @@ def main():
                    # priced total, or every energy number needs a second run.
                    ops_per_input=spikes.get("ops_per_input"),
                    energy_pj_per_input=spikes.get("energy_pj_per_input"),
+                   # order-1 readouts folded into the decode kernel (E45/E46)
+                   ops_per_input_fused=spikes.get("ops_per_input_fused"),
+                   energy_pj_per_input_fused=spikes.get("energy_pj_per_input_fused"),
                    stored_params=store["params"], stored_bytes=store["bytes"],
                    stored_bytes_naive=store["bytes_naive"],
                    stored_shared_factor=store["shared_factor"],
@@ -642,6 +731,15 @@ def main():
                    n_primitives=store["primitives"], n_activations=len(costs),
                    act_spikes_per_input=(sum(c["spikes"] for c in costs.values())
                                          / len(costs) if costs else None))
+
+        if args.benchmark_forwards:
+            from forward_benchmark import benchmark_forward
+            bench_input = ids[:max_length].unsqueeze(0).to(device)
+            rec["forward_benchmark"] = benchmark_forward(
+                lambda: model(bench_input), device,
+                repeats=args.benchmark_forwards)
+            rec["forward_benchmark"]["input_shape"] = list(bench_input.shape)
+            print(f"[forward] {rec['forward_benchmark']}", flush=True)
 
     # One record per stride. The build above is shared by all of them, so
     # ``build_s`` and every cost/storage field repeat -- only the evaluation

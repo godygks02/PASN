@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="986" height="466" viewBox="0 0 986 466">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eef2f8"/><stop offset="0.55" stop-color="#f8f8fa"/><stop offset="1" stop-color="#f9f3ea"/></linearGradient><linearGradient id="inner" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#f1f4f7"/></linearGradient><radialGradient id="beige" cx="0.4" cy="0.35" r="0.8"><stop offset="0" stop-color="#fbf6ee"/><stop offset="1" stop-color="#ecd9bf"/></radialGradient><radialGradient id="green" cx="0.4" cy="0.35" r="0.8"><stop offset="0" stop-color="#f1f6ec"/><stop offset="1" stop-color="#c5dcc9"/></radialGradient><linearGradient id="wedge" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#b7d9ad" stop-opacity="0.75"/><stop offset="1" stop-color="#dcebd6" stop-opacity="0.35"/></linearGradient><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f1f1f"/></marker><marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a8a8a"/></marker></defs>
+<rect x="0" y="0" width="986" height="466" rx="0" fill="white" stroke="none" stroke-width="1"/>
+<rect x="18" y="17" width="951" height="430" rx="42" fill="url(#bg)" stroke="#1f1f1f" stroke-width="3"/>
+<text x="250" y="60" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="30" fill="#1f1f1f" text-anchor="middle">Exponent-Routed Neuron</text>
+<circle cx="270" cy="106" r="28" fill="url(#beige)" stroke="#1f1f1f" stroke-width="3"/>
+<text x="234" y="115" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="26" fill="#1f1f1f" text-anchor="end"><tspan font-style="italic">x</tspan> = ∑<tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">i</tspan></tspan> <tspan font-style="italic">w</tspan><tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">i</tspan></tspan> <tspan font-style="italic">a</tspan><tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">i</tspan></tspan></text>
+<line x1="270" y1="134" x2="270" y2="150" stroke="#1f1f1f" stroke-width="2.6" marker-end="url(#arr)"/>
+<rect x="213.0" y="152" width="22" height="28" rx="3" fill="#fde3cd" stroke="#e07b28" stroke-width="1.6"/>
+<text x="224.0" y="172" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="19" fill="#a24e00" text-anchor="middle" font-style="italic">s</text>
+<rect x="235.0" y="152" width="46" height="28" rx="3" fill="#fde3cd" stroke="#e07b28" stroke-width="1.6"/>
+<text x="258.0" y="172" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="19" fill="#a24e00" text-anchor="middle" font-style="italic">e</text>
+<rect x="281.0" y="152" width="46" height="28" rx="3" fill="#dfe9fc" stroke="#2f6fed" stroke-width="1.6"/>
+<text x="304.0" y="172" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="19" fill="#1a46c9" text-anchor="middle" font-style="italic">m</text>
+<rect x="105" y="200" width="330" height="92" rx="16" fill="#dbe7f4" stroke="#9fb3c8" stroke-width="1.6" stroke-dasharray="6,4"/>
+<rect x="125.0" y="213.0" width="80" height="66" rx="9" fill="#f7f9fc" stroke="#8a8a8a" stroke-width="1.5" stroke-dasharray="5,4"/>
+<circle cx="155.5" cy="235.0" r="6.5" fill="white" stroke="#8a8a8a" stroke-width="1.3"/>
+<circle cx="174.5" cy="235.0" r="6.5" fill="white" stroke="#8a8a8a" stroke-width="1.3"/>
+<text x="165" y="269.0" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="18" fill="#555" text-anchor="middle" font-style="italic">bank<tspan baseline-shift="sub" font-size="0.62em">1</tspan></text>
+<rect x="230.0" y="213.0" width="80" height="66" rx="9" fill="#e8effd" stroke="#2f6fed" stroke-width="2.2"/>
+<circle cx="251.0" cy="235.0" r="6.5" fill="#2f6fed" stroke="none" stroke-width="1"/>
+<circle cx="270.0" cy="235.0" r="6.5" fill="#2f6fed" stroke="none" stroke-width="1"/>
+<circle cx="289.0" cy="235.0" r="6.5" fill="#2f6fed" stroke="none" stroke-width="1"/>
+<text x="270" y="269.0" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="18" fill="#1f1f1f" text-anchor="middle" font-style="italic">bank<tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan></tspan></text>
+<rect x="335.0" y="213.0" width="80" height="66" rx="9" fill="#f7f9fc" stroke="#8a8a8a" stroke-width="1.5" stroke-dasharray="5,4"/>
+<circle cx="375.0" cy="235.0" r="6.5" fill="white" stroke="#8a8a8a" stroke-width="1.3"/>
+<text x="375" y="269.0" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="18" fill="#555" text-anchor="middle" font-style="italic">bank<tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">R</tspan></tspan></text>
+<text x="217" y="250.0" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="22" fill="#1f1f1f" text-anchor="middle">···</text>
+<text x="322" y="250.0" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="22" fill="#1f1f1f" text-anchor="middle">···</text>
+<line x1="270" y1="180" x2="270" y2="211.0" stroke="#1f1f1f" stroke-width="2.8" marker-end="url(#arr)"/>
+<line x1="252" y1="180" x2="171" y2="211.0" stroke="#8a8a8a" stroke-width="1.3" stroke-dasharray="4,4" marker-end="url(#arrg)"/>
+<line x1="288" y1="180" x2="369" y2="211.0" stroke="#8a8a8a" stroke-width="1.3" stroke-dasharray="4,4" marker-end="url(#arrg)"/>
+<path d="M89.0,226.9 A22,22 0 1 0 97.1,235.0" fill="none" stroke="#1f1f1f" stroke-width="2.8" marker-end="url(#arr)"/>
+<text x="40" y="254.0" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="24" fill="#1f1f1f" text-anchor="middle"><tspan font-style="italic">T</tspan><tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan></tspan></text>
+<line x1="270" y1="280.0" x2="270" y2="306" stroke="#1f1f1f" stroke-width="2.8" marker-end="url(#arr)"/>
+<circle cx="270" cy="336" r="28" fill="url(#green)" stroke="#1f1f1f" stroke-width="3"/>
+<text x="230" y="344" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="22" fill="#1f1f1f" text-anchor="end">Selected bank</text>
+<text x="150" y="416" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="26" fill="#1f1f1f" text-anchor="end"><tspan font-style="italic">f̂</tspan>(<tspan font-style="italic">x</tspan>) =</text>
+<text x="178" y="416" font-family="Cambria Math, STIX Two Math, Times New Roman, serif" font-size="42" fill="#1f1f1f" text-anchor="middle">∑</text>
+<text x="178" y="379.88" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="15" fill="#1f1f1f" text-anchor="middle"><tspan font-style="italic">N</tspan><tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan></tspan></text>
+<text x="178" y="433" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="15" fill="#1f1f1f" text-anchor="middle"><tspan font-style="italic">n</tspan>=1</text>
+<text x="202" y="416" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="26" fill="#1f1f1f" text-anchor="start"><tspan font-style="italic">w</tspan><tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan></tspan><tspan baseline-shift="super" font-size="0.62em" dx="-0.32em">(<tspan font-style="italic">n</tspan>)</tspan> · <tspan font-style="italic">o</tspan><tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan></tspan><tspan baseline-shift="super" font-size="0.62em" dx="-0.32em">(<tspan font-style="italic">n</tspan>)</tspan>(<tspan font-style="italic">T</tspan><tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan></tspan>)</text>
+<polygon points="436,200 436,292 490,414 490,76" fill="url(#wedge)"/>
+<text x="703" y="60" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="30" fill="#1f1f1f" text-anchor="middle"><tspan font-style="italic">j</tspan>-th Bank</text>
+<rect x="490" y="75" width="425" height="340" rx="42" fill="url(#inner)" stroke="#1f1f1f" stroke-width="3"/>
+<line x1="466" y1="135" x2="514" y2="135" stroke="#1f1f1f" stroke-width="3" marker-end="url(#arr)"/>
+<text x="478" y="123" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="20" fill="#1f1f1f" text-anchor="middle"><tspan font-style="italic">x</tspan></text>
+<line x1="518" y1="135" x2="606" y2="135" stroke="#8a8a8a" stroke-width="1.5"/>
+<line x1="530" y1="135" x2="594" y2="135" stroke="#e07b28" stroke-width="6"/>
+<line x1="530" y1="128" x2="530" y2="142" stroke="#1f1f1f" stroke-width="1.6"/>
+<line x1="594" y1="128" x2="594" y2="142" stroke="#1f1f1f" stroke-width="1.6"/>
+<circle cx="555" cy="135" r="4.5" fill="#1f1f1f" stroke="none" stroke-width="1"/>
+<text x="530" y="159" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="16" fill="#1f1f1f" text-anchor="middle">2<tspan baseline-shift="super" font-size="0.62em"><tspan font-style="italic">e</tspan></tspan></text>
+<text x="594" y="159" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="16" fill="#1f1f1f" text-anchor="middle">2<tspan baseline-shift="super" font-size="0.62em"><tspan font-style="italic">e</tspan>+1</tspan></text>
+<line x1="608" y1="135" x2="630" y2="135" stroke="#1f1f1f" stroke-width="2.6" marker-end="url(#arr)"/>
+<rect x="632" y="116" width="150" height="38" rx="5" fill="#ebe6f4" stroke="#8f8aa3" stroke-width="1.6" stroke-dasharray="5,4"/>
+<text x="707.0" y="143" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="22" fill="#1f1f1f" text-anchor="middle"><tspan font-style="italic">ρ</tspan> = |<tspan font-style="italic">x</tspan>| / 2<tspan baseline-shift="super" font-size="0.62em"><tspan font-style="italic">e</tspan></tspan> − 1</text>
+<rect x="560" y="196" width="300" height="88" rx="16" fill="#dbe7f4" stroke="#9fb3c8" stroke-width="1.6" stroke-dasharray="6,4"/>
+<circle cx="612" cy="240" r="30" fill="#f4f7fb" stroke="#1f1f1f" stroke-width="2" stroke-dasharray="5,4"/>
+<text x="612" y="246" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="16" fill="#1f1f1f" text-anchor="middle" font-style="italic">basis<tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan>,1</tspan></text>
+<circle cx="703" cy="240" r="30" fill="#f4f7fb" stroke="#1f1f1f" stroke-width="2" stroke-dasharray="5,4"/>
+<text x="703" y="246" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="16" fill="#1f1f1f" text-anchor="middle" font-style="italic">basis<tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan>,2</tspan></text>
+<circle cx="815" cy="240" r="30" fill="#f4f7fb" stroke="#1f1f1f" stroke-width="2" stroke-dasharray="5,4"/>
+<text x="815" y="246" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="16" fill="#1f1f1f" text-anchor="middle" font-style="italic">basis<tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan>,<tspan font-style="italic">N</tspan><tspan baseline-shift="sub" font-size="0.75em"><tspan font-style="italic">j</tspan></tspan></tspan></text>
+<text x="759" y="246" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="22" fill="#1f1f1f" text-anchor="middle">···</text>
+<path d="M545.0,222.7 A20,20 0 1 0 552.3,230.0" fill="none" stroke="#1f1f1f" stroke-width="2.8" marker-end="url(#arr)"/>
+<text x="535" y="288" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="22" fill="#1f1f1f" text-anchor="middle"><tspan font-style="italic">T</tspan><tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan></tspan></text>
+<line x1="707.0" y1="155" x2="612" y2="209" stroke="#1f1f1f" stroke-width="2.2" marker-end="url(#arr)"/>
+<line x1="707.0" y1="155" x2="703" y2="209" stroke="#1f1f1f" stroke-width="2.2" marker-end="url(#arr)"/>
+<line x1="707.0" y1="155" x2="815" y2="209" stroke="#1f1f1f" stroke-width="2.2" marker-end="url(#arr)"/>
+<line x1="612" y1="272" x2="691.0" y2="341.4" stroke="#1f1f1f" stroke-width="2.2" marker-end="url(#arr)"/>
+<line x1="703" y1="272" x2="703.0" y2="336.0" stroke="#1f1f1f" stroke-width="2.2" marker-end="url(#arr)"/>
+<line x1="815" y1="272" x2="716.0" y2="342.6" stroke="#1f1f1f" stroke-width="2.2" marker-end="url(#arr)"/>
+<text x="620" y="322" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="16" fill="#1f1f1f" text-anchor="end"><tspan font-style="italic">w</tspan><tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan></tspan><tspan baseline-shift="super" font-size="0.62em" dx="-0.32em">(1)</tspan></text>
+<text x="712" y="308" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="16" fill="#1f1f1f" text-anchor="start"><tspan font-style="italic">w</tspan><tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan></tspan><tspan baseline-shift="super" font-size="0.62em" dx="-0.32em">(2)</tspan></text>
+<text x="788" y="322" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="16" fill="#1f1f1f" text-anchor="start"><tspan font-style="italic">w</tspan><tspan baseline-shift="sub" font-size="0.62em"><tspan font-style="italic">j</tspan></tspan><tspan baseline-shift="super" font-size="0.62em" dx="-0.32em">(<tspan font-style="italic">N</tspan><tspan baseline-shift="sub" font-size="0.75em"><tspan font-style="italic">j</tspan></tspan>)</tspan></text>
+<circle cx="703" cy="352" r="14" fill="white" stroke="#1f1f1f" stroke-width="2.4"/>
+<line x1="694" y1="352" x2="712" y2="352" stroke="#1f1f1f" stroke-width="1.8"/>
+<line x1="703" y1="343" x2="703" y2="361" stroke="#1f1f1f" stroke-width="1.8"/>
+<line x1="718" y1="352" x2="950" y2="352" stroke="#1f1f1f" stroke-width="3" marker-end="url(#arr)"/>
+<text x="880" y="340" font-family="Times New Roman, Times, STIX Two Text, serif" font-size="20" fill="#1f1f1f" text-anchor="middle"><tspan font-style="italic">f̂</tspan>(<tspan font-style="italic">x</tspan>)</text>
+</svg>

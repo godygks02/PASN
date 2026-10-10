@@ -1,0 +1,322 @@
+[
+ {
+  "tag": "e33-op-table-restated",
+  "experiment": "E33",
+  "backend": "analysis",
+  "model": "op-level",
+  "convert_cfg": null,
+  "pasn_beta": null,
+  "stored_bytes": null,
+  "stored_params": null,
+  "n_primitives": null,
+  "status": "ok",
+  "started": "2026-08-20T03:14:23",
+  "sources": {
+   "routed_from": "results\\op_pareto_merged.json",
+   "baseline_from": "results\\e33_op_pareto_mbe_tau.json",
+   "n_routed": 240,
+   "n_mbe": 150
+  },
+  "what_changed": "only the `mbe` arm. FIT_TAU_SEARCH lives in spiking_ops and the routed path never calls it, so the 240 routed records are bit-identical and were reused unchanged.",
+  "iso_accuracy": {
+   "activation:exp2": {
+    "old": {
+     "matched": 9,
+     "n_ref": 10,
+     "spikes": 4.479746288020758,
+     "bytes": 0.5102040816326531
+    },
+    "new": {
+     "matched": 5,
+     "n_ref": 8,
+     "spikes": 4.479746288020758,
+     "bytes": 0.2653061224489796
+    }
+   },
+   "activation:gelu": {
+    "old": {
+     "matched": 7,
+     "n_ref": 7,
+     "spikes": 4.946099983716007,
+     "bytes": 0.3493975903614458
+    },
+    "new": {
+     "matched": 7,
+     "n_ref": 7,
+     "spikes": 4.946099983716007,
+     "bytes": 0.30526315789473685
+    }
+   },
+   "activation:inv": {
+    "old": {
+     "matched": 8,
+     "n_ref": 9,
+     "spikes": 5.385615668646652,
+     "bytes": 0.3877551020408163
+    },
+    "new": {
+     "matched": 9,
+     "n_ref": 12,
+     "spikes": 4.532830309841065,
+     "bytes": 0.2653061224489796
+    }
+   },
+   "activation:invsqrt": {
+    "old": {
+     "matched": 6,
+     "n_ref": 10,
+     "spikes": 2.2733900972602834,
+     "bytes": 0.9285714285714286
+    },
+    "new": {
+     "matched": 6,
+     "n_ref": 11,
+     "spikes": 2.332901991257126,
+     "bytes": 0.9285714285714286
+    }
+   },
+   "activation:silu": {
+    "old": {
+     "matched": 7,
+     "n_ref": 7,
+     "spikes": 2.6262721893491126,
+     "bytes": 0.29896907216494845
+    },
+    "new": {
+     "matched": 7,
+     "n_ref": 7,
+     "spikes": 2.753974149457733,
+     "bytes": 0.29896907216494845
+    }
+   },
+   "activation:tanh": {
+    "old": {
+     "matched": 8,
+     "n_ref": 8,
+     "spikes": 3.913626503648196,
+     "bytes": 0.19387755102040816
+    },
+    "new": {
+     "matched": 7,
+     "n_ref": 7,
+     "spikes": 4.6359692368369165,
+     "bytes": 0.25510204081632654
+    }
+   },
+   "attention": {
+    "old": {
+     "matched": 6,
+     "n_ref": 6,
+     "spikes": 1.7023578231579837,
+     "bytes": 0.3155737704918033
+    },
+    "new": {
+     "matched": 5,
+     "n_ref": 6,
+     "spikes": 0.9023240343800815,
+     "bytes": 0.13114754098360656
+    }
+   },
+   "fp_multiply": {
+    "old": {
+     "matched": 2,
+     "n_ref": 3,
+     "spikes": 1.2299472038659913,
+     "bytes": 0.10526315789473684
+    },
+    "new": {
+     "matched": 2,
+     "n_ref": 3,
+     "spikes": 1.3428179833433278,
+     "bytes": 0.10526315789473684
+    }
+   },
+   "layernorm": {
+    "old": {
+     "matched": 6,
+     "n_ref": 8,
+     "spikes": 1.54902349347783,
+     "bytes": 0.21875
+    },
+    "new": {
+     "matched": 6,
+     "n_ref": 9,
+     "spikes": 1.085327755168922,
+     "bytes": 0.1959292763157895
+    }
+   },
+   "softmax": {
+    "old": {
+     "matched": 7,
+     "n_ref": 7,
+     "spikes": 4.2322980388038545,
+     "bytes": 0.2585034013605442
+    },
+    "new": {
+     "matched": 7,
+     "n_ref": 9,
+     "spikes": 2.5776387541400423,
+     "bytes": 0.2585034013605442
+    }
+   }
+  },
+  "domination": {
+   "activation:exp2": {
+    "old": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 10,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    },
+    "new": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 10,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    }
+   },
+   "activation:gelu": {
+    "old": {
+     "cand_beats_mbe": 1,
+     "of_mbe": 7,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    },
+    "new": {
+     "cand_beats_mbe": 1,
+     "of_mbe": 7,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    }
+   },
+   "activation:inv": {
+    "old": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 10,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    },
+    "new": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 15,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    }
+   },
+   "activation:invsqrt": {
+    "old": {
+     "cand_beats_mbe": 1,
+     "of_mbe": 11,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    },
+    "new": {
+     "cand_beats_mbe": 1,
+     "of_mbe": 13,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    }
+   },
+   "activation:silu": {
+    "old": {
+     "cand_beats_mbe": 1,
+     "of_mbe": 7,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    },
+    "new": {
+     "cand_beats_mbe": 2,
+     "of_mbe": 9,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    }
+   },
+   "activation:tanh": {
+    "old": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 9,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    },
+    "new": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 8,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    }
+   },
+   "attention": {
+    "old": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 6,
+     "mbe_beats_cand": 2,
+     "of_cand": 6
+    },
+    "new": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 6,
+     "mbe_beats_cand": 2,
+     "of_cand": 6
+    }
+   },
+   "fp_multiply": {
+    "old": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 3,
+     "mbe_beats_cand": 2,
+     "of_cand": 6
+    },
+    "new": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 3,
+     "mbe_beats_cand": 2,
+     "of_cand": 6
+    }
+   },
+   "layernorm": {
+    "old": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 8,
+     "mbe_beats_cand": 2,
+     "of_cand": 6
+    },
+    "new": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 9,
+     "mbe_beats_cand": 2,
+     "of_cand": 6
+    }
+   },
+   "softmax": {
+    "old": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 7,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    },
+    "new": {
+     "cand_beats_mbe": 0,
+     "of_mbe": 9,
+     "mbe_beats_cand": 0,
+     "of_cand": 6
+    }
+   }
+  },
+  "spike_wins": {
+   "old": 10,
+   "new": 9,
+   "n_ops": 10
+  },
+  "strict_domination_totals": {
+   "pasn_beats_mbe": {
+    "old": 3,
+    "new": 4
+   },
+   "mbe_beats_pasn": {
+    "old": 6,
+    "new": 6
+   }
+  },
+  "caveat": "small per-cell baseline regressions (0.86-0.99x on 5/150) are selection noise: _fit_best selects on a held-out draw and op_pareto reports on a third draw."
+ }
+]

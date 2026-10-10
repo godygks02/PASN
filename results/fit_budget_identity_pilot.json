@@ -1,0 +1,278 @@
+{
+  "experiment": "offline_fit_budget",
+  "quick": false,
+  "config": {
+    "functions": [
+      "identity"
+    ],
+    "epochs": 30,
+    "max_n": 2,
+    "max_t": 8,
+    "target_mse": 0.001,
+    "eval_samples": 2048,
+    "seed": 0
+  },
+  "rows": [
+    {
+      "function": "identity",
+      "budget": "rule",
+      "mse": 9.009574569063261e-06,
+      "spikes": 4.5419921875,
+      "bytes": 80,
+      "stored_bases": 3,
+      "bank_budget": [
+        [
+          0,
+          "near0s",
+          2,
+          8
+        ],
+        [
+          1,
+          "mag",
+          1,
+          8
+        ],
+        [
+          2,
+          "mag",
+          1,
+          8
+        ],
+        [
+          3,
+          "mag",
+          1,
+          8
+        ],
+        [
+          4,
+          "mag",
+          1,
+          8
+        ],
+        [
+          5,
+          "mag",
+          1,
+          8
+        ]
+      ]
+    },
+    {
+      "function": "identity",
+      "budget": "fit",
+      "mse": 8.893677659216337e-06,
+      "spikes": 2.740234375,
+      "bytes": 56,
+      "stored_bases": 2,
+      "bank_budget": [
+        [
+          0,
+          "near0s",
+          1,
+          6
+        ],
+        [
+          1,
+          "mag",
+          1,
+          6
+        ],
+        [
+          2,
+          "mag",
+          1,
+          6
+        ],
+        [
+          3,
+          "mag",
+          1,
+          6
+        ],
+        [
+          4,
+          "mag",
+          1,
+          6
+        ],
+        [
+          5,
+          "mag",
+          1,
+          6
+        ]
+      ],
+      "selection": [
+        {
+          "bank": "tied_magnitude",
+          "target_mse": 9.123164627382663e-07,
+          "selected": {
+            "N": 1,
+            "T": 6,
+            "mse": 2.488588108917611e-07,
+            "spikes": 2.7255859375,
+            "feasible": true
+          },
+          "candidates": [
+            {
+              "N": 1,
+              "T": 2,
+              "mse": 2.039008541032672e-05,
+              "spikes": 0.990234375,
+              "feasible": false
+            },
+            {
+              "N": 1,
+              "T": 3,
+              "mse": 5.3155526984483e-06,
+              "spikes": 1.466796875,
+              "feasible": false
+            },
+            {
+              "N": 1,
+              "T": 4,
+              "mse": 1.495378342042386e-06,
+              "spikes": 1.8232421875,
+              "feasible": false
+            },
+            {
+              "N": 1,
+              "T": 6,
+              "mse": 2.488588108917611e-07,
+              "spikes": 2.7255859375,
+              "feasible": true
+            },
+            {
+              "N": 1,
+              "T": 8,
+              "mse": 2.5396812475264596e-07,
+              "spikes": 4.3271484375,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 2,
+              "mse": 1.716065889922902e-05,
+              "spikes": 2.0439453125,
+              "feasible": false
+            },
+            {
+              "N": 2,
+              "T": 3,
+              "mse": 4.2689262045314535e-06,
+              "spikes": 2.6767578125,
+              "feasible": false
+            },
+            {
+              "N": 2,
+              "T": 4,
+              "mse": 1.8080120298691327e-06,
+              "spikes": 3.4599609375,
+              "feasible": false
+            },
+            {
+              "N": 2,
+              "T": 6,
+              "mse": 4.674489559874928e-07,
+              "spikes": 4.703125,
+              "feasible": true
+            },
+            {
+              "N": 2,
+              "T": 8,
+              "mse": 6.910330085929672e-08,
+              "spikes": 6.2294921875,
+              "feasible": true
+            }
+          ]
+        },
+        {
+          "bank": 0,
+          "target_mse": 1.3020822111947104e-07,
+          "selected": {
+            "N": 1,
+            "T": 6,
+            "mse": 4.65599327981181e-07,
+            "spikes": 2.6298828125,
+            "feasible": false
+          },
+          "candidates": [
+            {
+              "N": 1,
+              "T": 2,
+              "mse": 2.065034641418606e-05,
+              "spikes": 1.0048828125,
+              "feasible": false
+            },
+            {
+              "N": 1,
+              "T": 3,
+              "mse": 5.717871772503713e-06,
+              "spikes": 1.4208984375,
+              "feasible": false
+            },
+            {
+              "N": 1,
+              "T": 4,
+              "mse": 2.029634288192028e-06,
+              "spikes": 1.6865234375,
+              "feasible": false
+            },
+            {
+              "N": 1,
+              "T": 6,
+              "mse": 4.65599327981181e-07,
+              "spikes": 2.6298828125,
+              "feasible": false
+            },
+            {
+              "N": 1,
+              "T": 8,
+              "mse": 5.258829105514451e-07,
+              "spikes": 4.6337890625,
+              "feasible": false
+            },
+            {
+              "N": 2,
+              "T": 2,
+              "mse": 1.8025306417257525e-05,
+              "spikes": 2.02734375,
+              "feasible": false
+            },
+            {
+              "N": 2,
+              "T": 3,
+              "mse": 4.073599484399892e-06,
+              "spikes": 2.6904296875,
+              "feasible": false
+            },
+            {
+              "N": 2,
+              "T": 4,
+              "mse": 2.175152985728346e-06,
+              "spikes": 3.4541015625,
+              "feasible": false
+            },
+            {
+              "N": 2,
+              "T": 6,
+              "mse": 1.6478636553074466e-06,
+              "spikes": 5.4814453125,
+              "feasible": false
+            },
+            {
+              "N": 2,
+              "T": 8,
+              "mse": 1.1123077001684578e-06,
+              "spikes": 7.5146484375,
+              "feasible": false
+            }
+          ]
+        }
+      ],
+      "infeasible_banks": 1
+    }
+  ]
+}

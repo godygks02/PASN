@@ -1,0 +1,543 @@
+[
+ {
+  "tag": "smoke-fit",
+  "backend": "mbe_pasn",
+  "scope": "activation",
+  "stage": 1,
+  "model": "smoke: tiny random GPT-2",
+  "smoke": true,
+  "device": "cpu",
+  "id_target": "relative",
+  "r": 0.01,
+  "pasn_id_tied": true,
+  "pasn_e_min": -3,
+  "pasn_id_e_min": -6,
+  "pasn_readout_order": 2,
+  "pasn_t_fixed": null,
+  "pasn_n_fixed": null,
+  "pasn_n_local": 2,
+  "pasn_budget": "fit",
+  "pasn_fit_n_max": 1,
+  "pasn_target_mse": 0.1,
+  "mbe_readout_order": null,
+  "mbe_id_logsample": null,
+  "n_basis_act": null,
+  "n_basis_ln": null,
+  "epochs": 1,
+  "n_steps": 2,
+  "block": 32,
+  "calib_offset": 0,
+  "dataset": "wikitext-2-raw-v1",
+  "dataset_arrow_dir": null,
+  "eval_split": "test",
+  "eval_start_token": 0,
+  "eval_mode": "sliding",
+  "ctx": 64,
+  "stride": 1024,
+  "limit_blocks": null,
+  "eval_batch_size": 1,
+  "ppl_ann": null,
+  "ppl_snn": null,
+  "delta_pct": null,
+  "spikes_per_token": 213.0625,
+  "total_spikes": 6818.0,
+  "by_kind": {
+   "activation": 6818.0
+  },
+  "stored_params": 112,
+  "stored_bytes": 448,
+  "n_primitives": 2,
+  "n_activations": 2,
+  "act_spikes_per_input": 0.832275390625,
+  "build_s": 0.8734063000883907,
+  "eval_ann_s": null,
+  "eval_snn_s": null,
+  "started": "2026-10-08T13:00:08",
+  "pasn_beta": {
+   "inv": 0.5
+  },
+  "convert_cfg": {
+   "n_basis_act": 6,
+   "n_basis_ln": 8,
+   "n_basis_sm": 8,
+   "n_basis_mm": 8,
+   "n_steps": 2,
+   "mbe_readout_order": 1,
+   "mbe_id_logsample": false,
+   "epochs": 1,
+   "seed": 0,
+   "spike_mult": true,
+   "margin": 0.05,
+   "backend": "mbe_pasn",
+   "pasn_e_min": -3,
+   "pasn_id_e_min": -6,
+   "pasn_n_local": 2,
+   "pasn_budget": "fit",
+   "pasn_target_mse": 0.1,
+   "pasn_fit_n_max": 1,
+   "pasn_t_fixed": null,
+   "pasn_n_fixed": null,
+   "pasn_near0": "signed",
+   "pasn_id_tied": true,
+   "pasn_invsqrt_tied": false,
+   "pasn_near0_rule": false,
+   "pasn_alpha_init": "auto",
+   "pasn_id_target": "relative",
+   "pasn_id_target_rel": 0.01,
+   "pasn_id_signed": false,
+   "pasn_beta": {
+    "inv": 0.5
+   },
+   "pasn_beta_binades": 6,
+   "pasn_readout_order": 2,
+   "pasn_T": 6,
+   "pasn_order": 2,
+   "pasn_s_n_shared": 4,
+   "pasn_s_spike_budget": null,
+   "pasn_s_restarts": 3,
+   "fit_device": null,
+   "verbose_fits": true,
+   "share_fits": true,
+   "share_fit_refs": false
+  },
+  "bank_architectures": [
+   {
+    "name": "transformer.h.0.mlp.act",
+    "kind": "activation",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      1,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ],
+     [
+      5,
+      "mag",
+      1,
+      2
+     ],
+     [
+      6,
+      "mag",
+      1,
+      2
+     ],
+     [
+      7,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": [
+     {
+      "bank": 0,
+      "kind": "near0s",
+      "sign": -1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.6578027498326264e-05,
+       "spikes": 1.02734375,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.6578027498326264e-05,
+        "spikes": 1.02734375,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": 1,
+      "kind": "near0s",
+      "sign": 1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 2.4757511710049585e-05,
+       "spikes": 0.9794921875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 2.4757511710049585e-05,
+        "spikes": 0.9794921875,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": 2,
+      "kind": "mag",
+      "sign": -1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.2402688298607245e-05,
+       "spikes": 1.0849609375,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.2402688298607245e-05,
+        "spikes": 1.0849609375,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": 3,
+      "kind": "mag",
+      "sign": -1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.6558011338929646e-05,
+       "spikes": 1.1376953125,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.6558011338929646e-05,
+        "spikes": 1.1376953125,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": 5,
+      "kind": "mag",
+      "sign": 1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 3.437369014136493e-05,
+       "spikes": 0.9794921875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 3.437369014136493e-05,
+        "spikes": 0.9794921875,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": 6,
+      "kind": "mag",
+      "sign": 1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.00020146813767496496,
+       "spikes": 0.9765625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.00020146813767496496,
+        "spikes": 0.9765625,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": 7,
+      "kind": "mag",
+      "sign": 1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.7345298530813125e-08,
+       "spikes": 1.1181640625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.7345298530813125e-08,
+        "spikes": 1.1181640625,
+        "feasible": true
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "transformer.h.1.mlp.act",
+    "kind": "activation",
+    "budgets": [
+     [
+      0,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      1,
+      "near0s",
+      1,
+      2
+     ],
+     [
+      2,
+      "mag",
+      1,
+      2
+     ],
+     [
+      3,
+      "mag",
+      1,
+      2
+     ],
+     [
+      4,
+      "mag",
+      1,
+      2
+     ],
+     [
+      5,
+      "mag",
+      1,
+      2
+     ],
+     [
+      6,
+      "mag",
+      1,
+      2
+     ],
+     [
+      7,
+      "mag",
+      1,
+      2
+     ]
+    ],
+    "selection": [
+     {
+      "bank": 0,
+      "kind": "near0s",
+      "sign": -1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.6578027498326264e-05,
+       "spikes": 1.02734375,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.6578027498326264e-05,
+        "spikes": 1.02734375,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": 1,
+      "kind": "near0s",
+      "sign": 1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 2.4757511710049585e-05,
+       "spikes": 0.9794921875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 2.4757511710049585e-05,
+        "spikes": 0.9794921875,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": 2,
+      "kind": "mag",
+      "sign": -1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.2402688298607245e-05,
+       "spikes": 1.0849609375,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.2402688298607245e-05,
+        "spikes": 1.0849609375,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": 3,
+      "kind": "mag",
+      "sign": -1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.6558011338929646e-05,
+       "spikes": 1.1376953125,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.6558011338929646e-05,
+        "spikes": 1.1376953125,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": 5,
+      "kind": "mag",
+      "sign": 1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 3.437369014136493e-05,
+       "spikes": 0.9794921875,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 3.437369014136493e-05,
+        "spikes": 0.9794921875,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": 6,
+      "kind": "mag",
+      "sign": 1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 0.00020146813767496496,
+       "spikes": 0.9765625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 0.00020146813767496496,
+        "spikes": 0.9765625,
+        "feasible": true
+       }
+      ]
+     },
+     {
+      "bank": 7,
+      "kind": "mag",
+      "sign": 1.0,
+      "target_mse": 0.1,
+      "selected": {
+       "N": 1,
+       "T": 2,
+       "mse": 1.7345298530813125e-08,
+       "spikes": 1.1181640625,
+       "feasible": true
+      },
+      "candidates": [
+       {
+        "N": 1,
+        "T": 2,
+        "mse": 1.7345298530813125e-08,
+        "spikes": 1.1181640625,
+        "feasible": true
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "ops_per_input": {
+   "cmp": 512.0,
+   "ac": 426.125,
+   "mac": 512.0,
+   "poly": 256.0,
+   "router": 1536.0,
+   "bitop": 256.0
+  },
+  "energy_pj_per_input": 5759.5125,
+  "stored_bytes_naive": 512,
+  "stored_shared_factor": 1.1428571428571428,
+  "stored_by_role": {
+   "alpha": 56,
+   "tau": 224,
+   "readout": 112,
+   "bias": 56
+  }
+ }
+]

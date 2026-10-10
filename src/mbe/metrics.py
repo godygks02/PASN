@@ -92,7 +92,8 @@ OP_ENERGY_PJ = dict(ac=0.9, mac=4.6, cmp=0.9, bitop=0.0)
 
 
 @torch.no_grad()
-def neuron_op_cost(neuron, x: torch.Tensor, spikes: float | None = None) -> dict:
+def neuron_op_cost(neuron, x: torch.Tensor, spikes: float | None = None,
+                   fused_readout: bool = False) -> dict:
     """Per-input-element event counts, split by what the hardware would run.
 
     Spikes are not the whole energy story (open issue 5): the membrane compare
@@ -112,6 +113,11 @@ def neuron_op_cost(neuron, x: torch.Tensor, spikes: float | None = None) -> dict
       IEEE-754 exponent-field read, which is a bit select and is charged to
       ``bitop`` (zero by default) -- that is the claim the router rests on, now
       counted rather than asserted.
+
+    ``fused_readout=True`` prices an order-1 readout folded into the decode kernel
+    (``w`` pre-multiplied into ``d[t]``): no MAC, one bias add (counted as an
+    ``ac``). Order-2 banks cannot fold (``o^2`` is not linear in the spike sum) and
+    keep their MACs. Default off, so every recorded number is unchanged (E45/E46).
 
     Routed neurons are weighted **per element by the bank it lands in**: the budget
     rule gives each bank its own ``(N_j, T_j)``, so a single ``T`` is wrong for
@@ -141,8 +147,14 @@ def neuron_op_cost(neuron, x: torch.Tensor, spikes: float | None = None) -> dict
         if not flat.numel():
             return zero
         n, t, o = Nv[idx], Tv[idx], Ov[idx]
+        if fused_readout:
+            one = (o == 1).to(n.dtype)
+            zero["ac"] += float(one.mean())               # the bias add
+            n_mac = n * (1.0 - one)                       # order-1 banks fold
+        else:
+            n_mac = n
         zero.update(cmp=float((n * t).mean()),
-                    mac=float((n * o).mean()),
+                    mac=float((n_mac * o).mean()),
                     poly=float((n * (o - 1)).mean()),
                     # key affine (sub) + near0/sign/2x clamp compares + bank affine
                     # (sub + mul); the binade read is the bitop below
@@ -151,8 +163,11 @@ def neuron_op_cost(neuron, x: torch.Tensor, spikes: float | None = None) -> dict
 
     if isinstance(neuron, MBEPASNSNeuron):
         cfg = neuron.core.cfg
+        fold = fused_readout and cfg.readout_order == 1
+        if fold:
+            zero["ac"] += 1.0
         zero.update(cmp=float(cfg.n_basis * cfg.n_steps),
-                    mac=float(cfg.n_basis * cfg.readout_order),
+                    mac=0.0 if fold else float(cfg.n_basis * cfg.readout_order),
                     poly=float(cfg.n_basis * (cfg.readout_order - 1)),
                     router=6.0, bitop=1.0)
         return zero
@@ -172,8 +187,11 @@ def neuron_op_cost(neuron, x: torch.Tensor, spikes: float | None = None) -> dict
         return zero
 
     cfg = neuron.cfg                                   # plain MBE
+    fold = fused_readout and cfg.readout_order == 1
+    if fold:
+        zero["ac"] += 1.0
     zero.update(cmp=float(cfg.n_basis * cfg.n_steps),
-                mac=float(cfg.n_basis * cfg.readout_order),
+                mac=0.0 if fold else float(cfg.n_basis * cfg.readout_order),
                 poly=float(cfg.n_basis * (cfg.readout_order - 1)))
     return zero
 

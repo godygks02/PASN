@@ -1,0 +1,508 @@
+[
+ {
+  "tag": "e18-op-net-energy",
+  "experiment": "E18-stage1",
+  "idea": "research/ideas/idea-005.md",
+  "backend": "analysis",
+  "model": "gpt2-medium (frozen build audit) + op-level bench",
+  "convert_cfg": null,
+  "pasn_beta": {
+   "inv": 0.5
+  },
+  "stored_bytes": null,
+  "stored_params": null,
+  "n_primitives": null,
+  "status": "ok",
+  "started": "2026-08-19T13:16:42",
+  "sources": {
+   "audit": "results\\bank_usage_audit.json",
+   "pareto": "results\\op_pareto_merged.json",
+   "params_per_basis": 7.353711790393013
+  },
+  "provenance": {
+   "network_level": [
+    "cmp",
+    "mac",
+    "poly",
+    "router",
+    "bitop",
+    "access"
+   ],
+   "op_level_iso_accuracy": [
+    "spike saving"
+   ],
+   "why": "the spike term cannot come from the network: our MBE diverges there (ppl 611-589,287 vs ANN 21.71), so a network spike ratio divides a working system by a broken one. The other classes need no firing rate and are computable at network level for both."
+  },
+  "price_table": {
+   "ac": 0.9,
+   "mac": 4.6,
+   "cmp": 0.9,
+   "bitop": 0.0
+  },
+  "access_pj": {
+   "register": 0.1,
+   "sram_8kb": 10.0,
+   "sram_64kb": 20.0
+  },
+  "residency": [
+   "R0_none",
+   "R1_one_bank_cached",
+   "R2_bank_set_resident"
+  ],
+  "mbe_convention": {
+   "N": {
+    "mlp.act": 4,
+    "rsqrt": 8,
+    "id_dev": 8,
+    "id_istd": 8,
+    "idn": 8,
+    "idn2": 8,
+    "exp": 8,
+    "inv": 8
+   },
+   "T": 16,
+   "note": "paper G.1, NOT our reimplementation (2026-08-01)"
+  },
+  "per_op": {
+   "activation": {
+    "spike_saving": {
+     "median": 12.116499999999998,
+     "lo": 2.1824999999999997,
+     "hi": 114.21225,
+     "matched": 7,
+     "n_ref": 7,
+     "thin": false
+    },
+    "spike_saving_pj": 21.8097,
+    "compute_delta_pj": 51.4236636519432,
+    "reads_per_elem": {
+     "R0_none": 7.42196056311828,
+     "R1_one_bank_cached": 5.860985072744304,
+     "R2_bank_set_resident": 0.0
+    },
+    "cells": {
+     "R0_none|register": {
+      "access_pj": 0.7421960563118281,
+      "net_without_spike_term": 50.681467595631375,
+      "net": 72.49116759563137,
+      "sign_source": "network-only"
+     },
+     "R0_none|sram_8kb": {
+      "access_pj": 74.2196056311828,
+      "net_without_spike_term": -22.7959419792396,
+      "net": -0.9862419792396011,
+      "sign_source": "negative"
+     },
+     "R0_none|sram_64kb": {
+      "access_pj": 148.4392112623656,
+      "net_without_spike_term": -97.0155476104224,
+      "net": -75.20584761042241,
+      "sign_source": "negative"
+     },
+     "R1_one_bank_cached|register": {
+      "access_pj": 0.5860985072744305,
+      "net_without_spike_term": 50.83756514466877,
+      "net": 72.64726514466878,
+      "sign_source": "network-only"
+     },
+     "R1_one_bank_cached|sram_8kb": {
+      "access_pj": 58.609850727443046,
+      "net_without_spike_term": -7.186187075499845,
+      "net": 14.623512924500154,
+      "sign_source": "spike-term"
+     },
+     "R1_one_bank_cached|sram_64kb": {
+      "access_pj": 117.21970145488609,
+      "net_without_spike_term": -65.79603780294289,
+      "net": -43.98633780294289,
+      "sign_source": "negative"
+     },
+     "R2_bank_set_resident|register": {
+      "access_pj": 0.0,
+      "net_without_spike_term": 51.4236636519432,
+      "net": 73.2333636519432,
+      "sign_source": "network-only"
+     },
+     "R2_bank_set_resident|sram_8kb": {
+      "access_pj": 0.0,
+      "net_without_spike_term": 51.4236636519432,
+      "net": 73.2333636519432,
+      "sign_source": "network-only"
+     },
+     "R2_bank_set_resident|sram_64kb": {
+      "access_pj": 0.0,
+      "net_without_spike_term": 51.4236636519432,
+      "net": 73.2333636519432,
+      "sign_source": "network-only"
+     }
+    },
+    "all_positive": false,
+    "any_negative": true,
+    "sign_stable": false,
+    "thin": false
+   },
+   "layernorm": {
+    "spike_saving": {
+     "median": 10.3099609375,
+     "lo": -7.15546875,
+     "hi": 28.029687499999998,
+     "matched": 6,
+     "n_ref": 8,
+     "thin": false
+    },
+    "spike_saving_pj": 18.5579296875,
+    "compute_delta_pj": 118.02566466120622,
+    "reads_per_elem": {
+     "R0_none": 11.059338246501659,
+     "R1_one_bank_cached": 7.109443488388705,
+     "R2_bank_set_resident": 0.0
+    },
+    "cells": {
+     "R0_none|register": {
+      "access_pj": 1.105933824650166,
+      "net_without_spike_term": 116.91973083655606,
+      "net": 135.47766052405606,
+      "sign_source": "network-only"
+     },
+     "R0_none|sram_8kb": {
+      "access_pj": 110.59338246501659,
+      "net_without_spike_term": 7.432282196189632,
+      "net": 25.990211883689632,
+      "sign_source": "network-only"
+     },
+     "R0_none|sram_64kb": {
+      "access_pj": 221.18676493003318,
+      "net_without_spike_term": -103.16110026882696,
+      "net": -84.60317058132696,
+      "sign_source": "negative"
+     },
+     "R1_one_bank_cached|register": {
+      "access_pj": 0.7109443488388706,
+      "net_without_spike_term": 117.31472031236736,
+      "net": 135.87264999986735,
+      "sign_source": "network-only"
+     },
+     "R1_one_bank_cached|sram_8kb": {
+      "access_pj": 71.09443488388705,
+      "net_without_spike_term": 46.931229777319174,
+      "net": 65.48915946481918,
+      "sign_source": "network-only"
+     },
+     "R1_one_bank_cached|sram_64kb": {
+      "access_pj": 142.1888697677741,
+      "net_without_spike_term": -24.163205106567872,
+      "net": -5.605275419067873,
+      "sign_source": "negative"
+     },
+     "R2_bank_set_resident|register": {
+      "access_pj": 0.0,
+      "net_without_spike_term": 118.02566466120622,
+      "net": 136.5835943487062,
+      "sign_source": "network-only"
+     },
+     "R2_bank_set_resident|sram_8kb": {
+      "access_pj": 0.0,
+      "net_without_spike_term": 118.02566466120622,
+      "net": 136.5835943487062,
+      "sign_source": "network-only"
+     },
+     "R2_bank_set_resident|sram_64kb": {
+      "access_pj": 0.0,
+      "net_without_spike_term": 118.02566466120622,
+      "net": 136.5835943487062,
+      "sign_source": "network-only"
+     }
+    },
+    "all_positive": false,
+    "any_negative": true,
+    "sign_stable": false,
+    "thin": false
+   },
+   "matmul": {
+    "spike_saving": {
+     "median": 0.9984999999999999,
+     "lo": 0.47299999999999986,
+     "hi": 0.9984999999999999,
+     "matched": 2,
+     "n_ref": 3,
+     "thin": true
+    },
+    "spike_saving_pj": 1.7973,
+    "compute_delta_pj": 112.75452678430648,
+    "reads_per_elem": {
+     "R0_none": 13.099466075667177,
+     "R1_one_bank_cached": 4.1011665837231615,
+     "R2_bank_set_resident": 0.0
+    },
+    "cells": {
+     "R0_none|register": {
+      "access_pj": 1.3099466075667179,
+      "net_without_spike_term": 111.44458017673976,
+      "net": 113.24188017673976,
+      "sign_source": "network-only"
+     },
+     "R0_none|sram_8kb": {
+      "access_pj": 130.99466075667178,
+      "net_without_spike_term": -18.2401339723653,
+      "net": -16.4428339723653,
+      "sign_source": "negative"
+     },
+     "R0_none|sram_64kb": {
+      "access_pj": 261.98932151334355,
+      "net_without_spike_term": -149.23479472903708,
+      "net": -147.43749472903707,
+      "sign_source": "negative"
+     },
+     "R1_one_bank_cached|register": {
+      "access_pj": 0.41011665837231615,
+      "net_without_spike_term": 112.34441012593416,
+      "net": 114.14171012593417,
+      "sign_source": "network-only"
+     },
+     "R1_one_bank_cached|sram_8kb": {
+      "access_pj": 41.01166583723162,
+      "net_without_spike_term": 71.74286094707486,
+      "net": 73.54016094707487,
+      "sign_source": "network-only"
+     },
+     "R1_one_bank_cached|sram_64kb": {
+      "access_pj": 82.02333167446324,
+      "net_without_spike_term": 30.73119510984324,
+      "net": 32.52849510984324,
+      "sign_source": "network-only"
+     },
+     "R2_bank_set_resident|register": {
+      "access_pj": 0.0,
+      "net_without_spike_term": 112.75452678430648,
+      "net": 114.55182678430648,
+      "sign_source": "network-only"
+     },
+     "R2_bank_set_resident|sram_8kb": {
+      "access_pj": 0.0,
+      "net_without_spike_term": 112.75452678430648,
+      "net": 114.55182678430648,
+      "sign_source": "network-only"
+     },
+     "R2_bank_set_resident|sram_64kb": {
+      "access_pj": 0.0,
+      "net_without_spike_term": 112.75452678430648,
+      "net": 114.55182678430648,
+      "sign_source": "network-only"
+     }
+    },
+    "all_positive": false,
+    "any_negative": true,
+    "sign_stable": false,
+    "thin": true
+   },
+   "softmax": {
+    "spike_saving": {
+     "median": 15.0286865234375,
+     "lo": -1.1468505859375,
+     "hi": 62.0845947265625,
+     "matched": 7,
+     "n_ref": 7,
+     "thin": false
+    },
+    "spike_saving_pj": 27.0516357421875,
+    "compute_delta_pj": 116.65269451611391,
+    "reads_per_elem": {
+     "R0_none": 11.590729127755496,
+     "R1_one_bank_cached": 4.4600958523307686,
+     "R2_bank_set_resident": 0.0
+    },
+    "cells": {
+     "R0_none|register": {
+      "access_pj": 1.1590729127755497,
+      "net_without_spike_term": 115.49362160333835,
+      "net": 142.54525734552584,
+      "sign_source": "network-only"
+     },
+     "R0_none|sram_8kb": {
+      "access_pj": 115.90729127755496,
+      "net_without_spike_term": 0.74540323855895,
+      "net": 27.79703898074645,
+      "sign_source": "network-only"
+     },
+     "R0_none|sram_64kb": {
+      "access_pj": 231.81458255510992,
+      "net_without_spike_term": -115.16188803899601,
+      "net": -88.11025229680851,
+      "sign_source": "negative"
+     },
+     "R1_one_bank_cached|register": {
+      "access_pj": 0.4460095852330769,
+      "net_without_spike_term": 116.20668493088084,
+      "net": 143.25832067306834,
+      "sign_source": "network-only"
+     },
+     "R1_one_bank_cached|sram_8kb": {
+      "access_pj": 44.60095852330768,
+      "net_without_spike_term": 72.05173599280623,
+      "net": 99.10337173499373,
+      "sign_source": "network-only"
+     },
+     "R1_one_bank_cached|sram_64kb": {
+      "access_pj": 89.20191704661536,
+      "net_without_spike_term": 27.450777469498547,
+      "net": 54.50241321168605,
+      "sign_source": "network-only"
+     },
+     "R2_bank_set_resident|register": {
+      "access_pj": 0.0,
+      "net_without_spike_term": 116.65269451611391,
+      "net": 143.7043302583014,
+      "sign_source": "network-only"
+     },
+     "R2_bank_set_resident|sram_8kb": {
+      "access_pj": 0.0,
+      "net_without_spike_term": 116.65269451611391,
+      "net": 143.7043302583014,
+      "sign_source": "network-only"
+     },
+     "R2_bank_set_resident|sram_64kb": {
+      "access_pj": 0.0,
+      "net_without_spike_term": 116.65269451611391,
+      "net": 143.7043302583014,
+      "sign_source": "network-only"
+     }
+    },
+    "all_positive": false,
+    "any_negative": true,
+    "sign_stable": false,
+    "thin": false
+   }
+  },
+  "terms": {
+   "layernorm": {
+    "elements": 154165760,
+    "sites": 147,
+    "pasn": {
+     "cmp": 24.062598180036865,
+     "mac": 1.503912386252304,
+     "poly": 0.0,
+     "router": 6.0,
+     "bitop": 1.0
+    },
+    "mbe": {
+     "cmp": 128.0,
+     "mac": 8.0,
+     "poly": 0.0,
+     "router": 0.0,
+     "bitop": 0.0
+    },
+    "pasn_active_bases": 1.503912386252304,
+    "mbe_bases": 8.0,
+    "p_switch": 0.64284528874389,
+    "site_footprint_B": {
+     "median": 88.24454148471615,
+     "max": 88.24454148471615
+    }
+   },
+   "matmul": {
+    "elements": 176160768,
+    "sites": 96,
+    "pasn": {
+     "cmp": 28.50145112900507,
+     "mac": 1.7813406955628168,
+     "poly": 0.0,
+     "router": 6.0,
+     "bitop": 1.0
+    },
+    "mbe": {
+     "cmp": 128.0,
+     "mac": 8.0,
+     "poly": 0.0,
+     "router": 0.0,
+     "bitop": 0.0
+    },
+    "pasn_active_bases": 1.7813406955628168,
+    "mbe_bases": 8.0,
+    "p_switch": 0.313078911768874,
+    "site_footprint_B": {
+     "median": 88.24454148471615,
+     "max": 88.24454148471615
+    }
+   },
+   "softmax": {
+    "elements": 101056512,
+    "sites": 72,
+    "pasn": {
+     "cmp": 25.218783565377755,
+     "mac": 1.5761739728361097,
+     "poly": 0.0,
+     "router": 6.0,
+     "bitop": 1.0
+    },
+    "mbe": {
+     "cmp": 128.0,
+     "mac": 8.0,
+     "poly": 0.0,
+     "router": 0.0,
+     "bitop": 0.0
+    },
+    "pasn_active_bases": 1.5761739728361097,
+    "mbe_bases": 8.0,
+    "p_switch": 0.3847985578103532,
+    "site_footprint_B": {
+     "median": 147.07423580786025,
+     "max": 205.90393013100436
+    }
+   },
+   "activation": {
+    "elements": 50331648,
+    "sites": 24,
+    "pasn": {
+     "cmp": 16.148493766784668,
+     "mac": 1.0092808604240417,
+     "poly": 0.0,
+     "router": 6.0,
+     "bitop": 1.0
+    },
+    "mbe": {
+     "cmp": 64.0,
+     "mac": 4.0,
+     "poly": 0.0,
+     "router": 0.0,
+     "bitop": 0.0
+    },
+    "pasn_active_bases": 1.0092808604240417,
+    "mbe_bases": 4.0,
+    "p_switch": 0.7896815164808496,
+    "site_footprint_B": {
+     "median": 970.6899563318777,
+     "max": 970.6899563318777
+    }
+   }
+  },
+  "gates": {
+   "G3_mbe_zero_reads": {
+    "layernorm": {
+     "mbe_resident_B": 235.3187772925764,
+     "pasn_R2_resident_B": 88.24454148471615,
+     "mbe_fits_if_pasn_does": false
+    },
+    "matmul": {
+     "mbe_resident_B": 235.3187772925764,
+     "pasn_R2_resident_B": 88.24454148471615,
+     "mbe_fits_if_pasn_does": false
+    },
+    "softmax": {
+     "mbe_resident_B": 235.3187772925764,
+     "pasn_R2_resident_B": 147.07423580786025,
+     "mbe_fits_if_pasn_does": false
+    },
+    "activation": {
+     "mbe_resident_B": 117.6593886462882,
+     "pasn_R2_resident_B": 970.6899563318777,
+     "mbe_fits_if_pasn_does": true
+    }
+   },
+   "G1_thin": [
+    "matmul"
+   ]
+  },
+  "gate": "R3_undecided_sign_flips",
+  "caveat": "residency and access class are hardware assumptions. This script brackets them and does not choose. Picking the flattering one is the 5.27x error (idea-005 §a)."
+ }
+]

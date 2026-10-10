@@ -75,6 +75,21 @@ class MBEConfig:
     x_min: float = 0.0               # calibration: domain lower bound (membrane shift)
     x_scale: float = 1.0             # calibration: domain span (membrane normaliser)
     decay: bool = True               # exponential decay kernels (False = ablation)
+    # Eq. (4) reads ``Para(tau_n, t) = alpha * exp(-t*dt/tau_n)`` for **all three**
+    # of ``tau_n in {tau_d, tau_r, tau_Vth}``, so the spike intensity ``d`` carries
+    # ``alpha`` too. The original transcription applied it to ``r`` and ``Vth``
+    # only and let ``w`` absorb it, which is an exact reparameterisation -- the
+    # readout is solved in closed form, so nothing numerical depends on it. Two
+    # things do:
+    #   * it is not literally Eq. (4), and the audit's Appendix E.1 row was passed
+    #     while checking only ``r[0]`` and ``Vth[0]``, never ``d[0]``;
+    #   * Theorem 2's quantisation gap is ``||w||_1 * |alpha| * tau_max/(T dt)``,
+    #     so moving alpha between ``d`` and ``w`` rescales ``||w||_1`` and our
+    #     numbers stop being the quantity that bound is about.
+    # Default off: turning it on rescales the readout features and therefore moves
+    # the frozen fingerprint (53,888 B / 13,472 p / 339 prims), so it needs its own
+    # re-eval before it can become the default.
+    alpha_on_d: bool = False
     use_bias: bool = True            # learnable output DC offset (affine baseline)
     # Decoder order. Eq. 8 reads out f_hat = sum_n w_n o_n, i.e. the decode is
     # *linear* in the accumulated features. That is the binding constraint on how
@@ -185,7 +200,8 @@ class MBENeuron(nn.Module):
             ones = torch.ones(T, cfg.n_basis, device=device, dtype=dtype)
             decay_d = decay_r = decay_vth = ones
 
-        d = decay_d                                   # intensity scaled later by w
+        # Eq. (4) puts alpha on all three kernels; see ``MBEConfig.alpha_on_d``.
+        d = alpha_v * decay_d if cfg.alpha_on_d else decay_d
         r = alpha_v * decay_r                         # (N,) broadcast over (T,N)
         vth = alpha_v * decay_vth
         return d, r, vth

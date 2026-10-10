@@ -1,0 +1,207 @@
+[
+ {
+  "tag": "e16-symmetric-energy",
+  "experiment": "E16",
+  "idea": "research/ideas/idea-001.md",
+  "backend": "analysis",
+  "model": "vit_medium_patch16_reg4_gap_256",
+  "convert_cfg": {
+   "n_basis_act": 6,
+   "n_basis_ln": 8,
+   "n_basis_sm": 8,
+   "n_basis_mm": 8,
+   "n_steps": 16,
+   "mbe_readout_order": 1,
+   "mbe_id_logsample": false,
+   "epochs": 300,
+   "seed": 0,
+   "spike_mult": true,
+   "margin": 0.05,
+   "backend": "mbe_pasn",
+   "pasn_e_min": -3,
+   "pasn_id_e_min": -6,
+   "pasn_n_local": 2,
+   "pasn_budget": "rule",
+   "pasn_target_mse": 1e-05,
+   "pasn_t_fixed": 16,
+   "pasn_n_fixed": null,
+   "pasn_near0": "signed",
+   "pasn_id_tied": true,
+   "pasn_invsqrt_tied": false,
+   "pasn_alpha_init": "auto",
+   "pasn_id_target": "relative",
+   "pasn_id_target_rel": 0.01,
+   "pasn_id_signed": false,
+   "pasn_beta": {
+    "inv": 0.5
+   },
+   "pasn_beta_binades": 6,
+   "pasn_readout_order": 2,
+   "pasn_T": 6,
+   "pasn_order": 2,
+   "pasn_s_n_shared": 4,
+   "pasn_s_spike_budget": null,
+   "pasn_s_restarts": 3,
+   "fit_device": null,
+   "verbose_fits": true,
+   "share_fits": true
+  },
+  "pasn_beta": null,
+  "stored_bytes": 25616,
+  "stored_params": 6404,
+  "n_primitives": 171,
+  "status": "ok",
+  "started": "2026-08-19T01:44:29",
+  "source_record": {
+   "path": "results\\e8m_vit_medium.json",
+   "tag": "e8m-vitm16-t16"
+  },
+  "operating_point": {
+   "model": "vit_medium_patch16_reg4_gap_256",
+   "T": 16,
+   "arm": "pasn_rule (conversion path)",
+   "scope": "Stage 2 -- activation, LayerNorm, softmax, act x act matmul",
+   "geometry_source": "timm",
+   "note": "ViT-M/16 -- NOT the GPT-2 frozen build; do not place beside 53,888 B / 13,472 p / 339 prims"
+  },
+  "energy_mJ_per_image": {
+   "E_MBE_nl__6nonlinear_ops__6classes__per_basis_reading": 3.1509084672,
+   "E_MBE_fp__fp_multiply__paper_E_FP__no_cmp_no_mac": 1.321637707461427,
+   "E_PASN_all__7ops__6classes__strict_measured": 2.871280907354334,
+   "E_PASN_nl__6nonlinear_ops_only": null,
+   "E_ANN": 49.4339710976
+  },
+  "brackets": {
+   "A__same_7_ops_both_sides": 1.5576832497320983,
+   "A_is_not_an_upper_bound": "MBE's FP-path compares are set to 0 because the paper does not define the operand reconstruction. If they are ever derived, A rises.",
+   "B__lower_bound_only": 1.0973877404782806,
+   "B_is_a_bound_because": "E_PASN_nl <= E_PASN_all, so B <= E_MBE_nl / E_PASN_nl. Quoting B as a point estimate repeats 5.27x's scope mismatch.",
+   "B_star__symmetric_nonlinear_only": null,
+   "B_star_blocked_by": "no record cross-tabulates PASN's op classes with op kind. Needs spiking_cost_report primitives serialised + one forward, which needs the ImageNet calibration -> remote. Stage 2, R2-gated.",
+   "interval": [
+    1.0973877404782806,
+    1.5576832497320983
+   ]
+  },
+  "mbe_nonlinear_ops_by_class": {
+   "cmp": 1653350400,
+   "ac": 1319505408.0,
+   "mac": 103334400.0,
+   "poly": 0.0,
+   "router": 0.0,
+   "bitop": 0.0
+  },
+  "mbe_nonlinear_by_op": {
+   "gelu": {
+    "cmp": 408944640,
+    "ac": 312597282.816,
+    "mac": 25559040.0,
+    "poly": 0.0,
+    "router": 0.0,
+    "bitop": 0.0,
+    "spikes": 156298641.408
+   },
+   "exp2": {
+    "cmp": 830668800,
+    "ac": 779831869.4399999,
+    "mac": 51916800.0,
+    "poly": 0.0,
+    "router": 0.0,
+    "bitop": 0.0,
+    "spikes": 389915934.71999997
+   },
+   "inv": {
+    "cmp": 3194880,
+    "ac": 238977.024,
+    "mac": 199680.0,
+    "poly": 0.0,
+    "router": 0.0,
+    "bitop": 0.0,
+    "spikes": 119488.512
+   },
+   "ln_input_identity": {
+    "cmp": 408944640,
+    "ac": 225819230.208,
+    "mac": 25559040.0,
+    "poly": 0.0,
+    "router": 0.0,
+    "bitop": 0.0,
+    "spikes": 112909615.104
+   },
+   "ln_inv_identity": {
+    "cmp": 798720,
+    "ac": 614375.424,
+    "mac": 49920.0,
+    "poly": 0.0,
+    "router": 0.0,
+    "bitop": 0.0,
+    "spikes": 307187.712
+   },
+   "invsqrt": {
+    "cmp": 798720,
+    "ac": 403673.088,
+    "mac": 49920.0,
+    "poly": 0.0,
+    "router": 0.0,
+    "bitop": 0.0,
+    "spikes": 201836.544
+   }
+  },
+  "pasn_ops_by_class_per_image": {
+   "cmp": 1562738933.5004883,
+   "ac": 595877858.3125,
+   "mac": 113863276.9460907,
+   "poly": 16192093.60231018,
+   "router": 366967878.0,
+   "bitop": 61161313.0
+  },
+  "pasn_spikes_per_image": 297938929.15625,
+  "unit_conversion": {
+   "pixels_per_image": 196608,
+   "batch_recovered": 32,
+   "note": "G2: both sides pass op_energy_pj and are per image"
+  },
+  "conversion_loss_pct": {
+   "pasn": -0.002355102329190715,
+   "paper": -0.7446189645142531,
+   "caveat": "not an iso-accuracy comparison (idea-001 §e)"
+  },
+  "gates": {
+   "G1": {
+    "required": {
+     "tag": "e8m-vitm16-t16",
+     "epochs": 300,
+     "n_eval": 50000,
+     "smoke": false
+    },
+    "required_n_steps": 16,
+    "got": {
+     "tag": "e8m-vitm16-t16",
+     "epochs": 300,
+     "n_eval": 50000,
+     "smoke": false
+    },
+    "got_n_steps": 16,
+    "failures": [],
+    "passed": true
+   },
+   "G2_same_price_table_and_unit": true,
+   "G3_readings_named_in_fields": true,
+   "G4_brackets_serialised": true,
+   "G_paper_transcription": {
+    "source": "paper/appendix_p15.png via energy_ratio_vitm.PAPER_FIRING/PAPER_BASIS",
+    "cross_checked_against_vault": true,
+    "vault_note": "PASN_vault/60 - 연구일지/Table XI 발화율 대조.md",
+    "matched": "7/7 firing rates identical (8.31 / 46.94 / 3.74 / 25.27 / 27.61 / 38.46 / 38.22 %)",
+    "limitation": "both are transcriptions of the same appendix image, so this catches a typo, NOT a misreading of the source. The whole bracket still rests on those 7 numbers."
+   }
+  },
+  "verdict": "S_supported",
+  "verdict_note": "quote the multiple as an interval only. Never fold it to one number.",
+  "do_not": [
+   "do not print A or B beside the 5.27x spike-only figure (different reading of the same paper)",
+   "do not quote B as a point estimate",
+   "do not carry these to GPT-2, T=8, or the per-bank T_j arm"
+  ]
+ }
+]

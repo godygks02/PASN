@@ -47,11 +47,64 @@ def _cache_key(name, lo, hi, n_basis, n_steps, epochs, seed, device):
             epochs, seed, str(torch.device(device)))
 
 
+#: Time-constant initialisations to try when ``FIT_RESTARTS`` is on. The default
+#: is ``MBEConfig``'s own log-spaced ``[tau_min, tau_max]``; ``binary`` puts every
+#: basis at ``tau = dt/ln 2``, i.e. ratio ``exp(-dt/tau) = 0.5``, so each basis is
+#: an exact binary-search (SAR) encoder. The bases still differ -- ``alpha_v`` is
+#: curvature-placed per basis -- so this is *not* the degenerate shared-alpha case
+#: the audit warns about.
+_TAU_INITS = ("default", "binary")
+_TAU_BINARY = 1.0 / math.log(2.0)
+
+#: Number of seeds tried per tau init. 1 reproduces the historical single-shot
+#: behaviour exactly (with ``_TAU_INITS`` restricted to "default").
+FIT_RESTARTS: int = 1
+FIT_TAU_SEARCH: bool = False
+
+
+def _fit_variants(n_restarts=None, tau_search=None):
+    """The (tau_init, seed_offset) grid a keep-best fit walks."""
+    k = FIT_RESTARTS if n_restarts is None else n_restarts
+    taus = (_TAU_INITS if (FIT_TAU_SEARCH if tau_search is None else tau_search)
+            else ("default",))
+    return [(t, s) for t in taus for s in range(max(1, k))]
+
+
+def _fit_best(make_model, x, y, seed, epochs, device, score_x=None, score_y=None):
+    """Fit over the init grid and keep the best on a **held-out** draw.
+
+    The global-MBE path historically called ``fit_model`` once, while the routed
+    path (:func:`mbe.mbe_pasn._fit_bank`) has always tried two alpha placements and
+    kept the better. That asymmetry favours the routed side for a reason that has
+    nothing to do with routing, and it is large: the identity's fit on a real
+    LayerNorm domain spans **100-2500x** across seeds, and swapping the tau init
+    alone moves the median **13-1132x** on that domain (measured 2026-08-19).
+
+    Scoring uses ``score_x``/``score_y`` when given -- fitting and scoring on the
+    same points lets a staircase nail its own grid nodes while drifting between
+    them, which is the trap ``_fit_bank`` already avoids with an offset grid.
+    """
+    sx = x if score_x is None else score_x
+    sy = y if score_y is None else score_y
+    best, best_err = None, float("inf")
+    for tau_init, off in _fit_variants():
+        extra = ({} if tau_init == "default"
+                 else dict(tau_min=_TAU_BINARY, tau_max=_TAU_BINARY))
+        m = make_model(**extra).to(device)
+        fit_model(m, x, y, seed=seed + off, epochs=epochs)
+        with torch.no_grad():
+            err = float((m(sx) - sy).pow(2).mean())
+        if err < best_err:
+            best, best_err = m, err
+    return best
+
+
 def calibrate_identity(lo: float, hi: float, n_basis: int = 8, n_steps: int = 16,
                        epochs: int = 600, seed: int = 0,
                        use_cache: bool = True, readout_order: int = 1,
                        log_sample: bool = False,
-                       device: torch.device | str = "cpu") -> MBENeuron:
+                       device: torch.device | str = "cpu",
+                       **cfg_overrides) -> MBENeuron:
     """MBE_Id: approximate the identity map on ``[lo, hi]`` with **no bias**, so
     ``reconstruct(x) = sum_{n,t} a_{n,t} s_n[t] ~= x`` is a pure spike sum.
 
@@ -64,7 +117,7 @@ def calibrate_identity(lo: float, hi: float, n_basis: int = 8, n_steps: int = 16
     device = torch.device(device)
     key = _cache_key(
         "identity", lo, hi, n_basis, n_steps, epochs, seed, device
-    ) + (readout_order, log_sample)
+    ) + (readout_order, log_sample, tuple(sorted(cfg_overrides.items())))
     if use_cache and key in _FIT_CACHE:
         return _FIT_CACHE[key]
     if log_sample:
@@ -77,11 +130,14 @@ def calibrate_identity(lo: float, hi: float, n_basis: int = 8, n_steps: int = 16
     else:
         x, y, _ = functions.sample("identity", m=4000, seed=seed, domain=(lo, hi))
     x, y = x.to(device), y.to(device)
-    cfg = functions.make_config("identity", n_basis=n_basis, n_steps=n_steps,
-                                domain=(lo, hi), use_bias=False,
-                                readout_order=readout_order)
-    m = MBENeuron(cfg).to(device)
-    fit_model(m, x, y, seed=seed, epochs=epochs)
+    # Held-out scoring draw (seed+1): fitting and scoring on one set hides a
+    # staircase that only matches at its own nodes.
+    sx, sy, _ = functions.sample("identity", m=2048, seed=seed + 1, domain=(lo, hi))
+    m = _fit_best(
+        lambda **kw: MBENeuron(functions.make_config(
+            "identity", n_basis=n_basis, n_steps=n_steps, domain=(lo, hi),
+            use_bias=False, readout_order=readout_order, **cfg_overrides, **kw)),
+        x, y, seed, epochs, device, sx.to(device), sy.to(device))
     if use_cache:
         _FIT_CACHE[key] = m
     return m
@@ -90,20 +146,24 @@ def calibrate_identity(lo: float, hi: float, n_basis: int = 8, n_steps: int = 16
 def calibrate(name: str, lo: float, hi: float, n_basis: int = 8, n_steps: int = 16,
               epochs: int = 600, seed: int = 0, use_cache: bool = True,
               readout_order: int = 1,
-              device: torch.device | str = "cpu") -> MBENeuron:
+              device: torch.device | str = "cpu",
+              **cfg_overrides) -> MBENeuron:
     """Calibrate a primitive MBE neuron (``exp2`` / ``inv`` / ``invsqrt`` / ...)
     on ``[lo, hi]``."""
     device = torch.device(device)
     key = _cache_key(name, lo, hi, n_basis, n_steps, epochs, seed,
-                     device) + (readout_order,)
+                     device) + (readout_order,
+                                tuple(sorted(cfg_overrides.items())))
     if use_cache and key in _FIT_CACHE:
         return _FIT_CACHE[key]
     x, y, _ = functions.sample(name, m=4000, seed=seed, domain=(lo, hi))
     x, y = x.to(device), y.to(device)
-    cfg = functions.make_config(name, n_basis=n_basis, n_steps=n_steps,
-                                domain=(lo, hi), readout_order=readout_order)
-    m = MBENeuron(cfg).to(device)
-    fit_model(m, x, y, seed=seed, epochs=epochs)
+    sx, sy, _ = functions.sample(name, m=2048, seed=seed + 1, domain=(lo, hi))
+    m = _fit_best(
+        lambda **kw: MBENeuron(functions.make_config(
+            name, n_basis=n_basis, n_steps=n_steps, domain=(lo, hi),
+            readout_order=readout_order, **cfg_overrides, **kw)),
+        x, y, seed, epochs, device, sx.to(device), sy.to(device))
     if use_cache:
         _FIT_CACHE[key] = m
     return m
@@ -245,7 +305,8 @@ def build_activation(name: str, sample_x: torch.Tensor, n_basis: int = 4,
                      n_steps: int = 16, seed: int = 0, margin: float = 0.05,
                      epochs: int = 600, device: torch.device | str = "cpu",
                      signed: bool | None = None,
-                     readout_order: int = 1) -> SpikingActivation:
+                     readout_order: int = 1,
+                     **cfg_overrides) -> SpikingActivation:
     """Calibrate a :class:`SpikingActivation` for ``name`` (``gelu`` / ``silu`` /
     ``tanh``) on the range measured in ``sample_x`` (padded by ``margin``).
 
@@ -273,16 +334,17 @@ def build_activation(name: str, sample_x: torch.Tensor, n_basis: int = 4,
         signed = name in _NONMONOTONE_ACTS and lo < 0.0 < hi
     if signed:
         neuron = _fit_signed_activation(name, lo, hi, n_basis, n_steps,
-                                        epochs, seed, device, readout_order)
+                                        epochs, seed, device, readout_order,
+                                        **cfg_overrides)
     else:
         neuron = calibrate(name, lo, hi, n_basis=n_basis, n_steps=n_steps,
                            epochs=epochs, seed=seed, device=device,
-                           readout_order=readout_order)
+                           readout_order=readout_order, **cfg_overrides)
     return SpikingActivation(neuron)
 
 
 def _fit_signed_activation(name, lo, hi, n_basis, n_steps, epochs, seed, device,
-                           readout_order=1):
+                           readout_order=1, **cfg_overrides):
     """Polarity-split (signed) MBE fit of ``name`` on ``[lo, hi]`` (crosses 0).
 
     Each side gets ``n_basis`` bases, curvature-placed for its restriction of the
@@ -295,13 +357,16 @@ def _fit_signed_activation(name, lo, hi, n_basis, n_steps, epochs, seed, device,
     :mod:`mbe.signed`, not a wiring fix; until then a caller cannot match a routed
     backend's decoder order here, and P0.4's ``mbe-*-matched`` rows do not."""
     device = torch.device(device)
-    sm = functions.make_signed(name, n_pos=n_basis, n_neg=n_basis, pivot=0.0,
-                               n_steps=n_steps, domain=(lo, hi)).to(device)
     # (the joint readout lives on SignedMBENeuron, so readout_order applies to
     # its sub-banks' features only via make_signed; kept for signature parity)
     x, y, _ = functions.sample(name, m=4000, seed=seed, domain=(lo, hi))
-    fit_model(sm, x.to(device), y.to(device), seed=seed, epochs=epochs)
-    return sm
+    sx, sy, _ = functions.sample(name, m=2048, seed=seed + 1, domain=(lo, hi))
+    return _fit_best(
+        lambda **kw: functions.make_signed(
+            name, n_pos=n_basis, n_neg=n_basis, pivot=0.0,
+            n_steps=n_steps, domain=(lo, hi), **cfg_overrides, **kw),
+        x.to(device), y.to(device), seed, epochs, device,
+        sx.to(device), sy.to(device))
 
 
 # --------------------------------------------------------------------------

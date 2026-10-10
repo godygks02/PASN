@@ -1,0 +1,464 @@
+{
+ "experiment": "e47_multiply",
+ "status": "ok",
+ "argv": [
+  "--layer",
+  "18",
+  "--threads",
+  "8",
+  "--json",
+  "results/e47_multiply_L18.json"
+ ],
+ "started": "2026-10-10T08:00:34",
+ "layer": 18,
+ "energy": {
+  "ac": 0.9,
+  "cmp": 0.9,
+  "mac": 4.6,
+  "router_ops": 6.0
+ },
+ "exact_pj_per_term": 4.6,
+ "rows": [
+  {
+   "op": "w*x",
+   "operand_spikes": 15.972957611083984,
+   "out_nrmse": 0.011546268127858639,
+   "operand_nrmse": 0.019702430814504623,
+   "pj_per_term": 14.410806216299534,
+   "pj_per_term_no_table": 73.51074937731028,
+   "fanout": 4096,
+   "bytes": 192,
+   "readout_order": 1,
+   "encoder": "mbe",
+   "target_rel": null,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.31920490297046034
+  },
+  {
+   "op": "q*k (QK^T)",
+   "operand_spikes": [
+    24.99974250793457,
+    17.327476501464844
+   ],
+   "coincidences_per_term": 439.7093505859375,
+   "out_nrmse": 0.0010498036863282323,
+   "pj_per_term": 396.3372221469879,
+   "fanout": [
+    512,
+    512
+   ],
+   "bytes": 384,
+   "readout_order": 1,
+   "encoder": "mbe",
+   "target_rel": null,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.011606278045451954
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    1.9182922840118408,
+    21.48267364501953
+   ],
+   "coincidences_per_term": 40.21539306640625,
+   "out_nrmse": 0.05206621438264847,
+   "pj_per_term": 38.34833043217659,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 384,
+   "readout_order": 1,
+   "encoder": "mbe",
+   "target_rel": null,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.11995307092014412
+  },
+  {
+   "op": "w*x",
+   "operand_spikes": 3.2486934661865234,
+   "out_nrmse": 0.002931884489953518,
+   "operand_nrmse": 0.005245210137218237,
+   "pj_per_term": 4.728423862624914,
+   "pj_per_term_no_table": 16.74858968751505,
+   "fanout": 4096,
+   "bytes": 80,
+   "readout_order": 1,
+   "encoder": "pasn_rule",
+   "target_rel": 0.01,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.9728400273841733
+  },
+  {
+   "op": "q*k (QK^T)",
+   "operand_spikes": [
+    3.1333351135253906,
+    3.1296424865722656
+   ],
+   "coincidences_per_term": 9.806222915649414,
+   "out_nrmse": 0.004624419845640659,
+   "pj_per_term": 16.333789933472872,
+   "fanout": [
+    512,
+    512
+   ],
+   "bytes": 160,
+   "readout_order": 1,
+   "encoder": "pasn_rule",
+   "target_rel": 0.01,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.2816247802093505
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    0.4149930477142334,
+    3.147287368774414
+   ],
+   "coincidences_per_term": 1.3120064735412598,
+   "out_nrmse": 0.08621730655431747,
+   "pj_per_term": 6.542666563391686,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 160,
+   "readout_order": 1,
+   "encoder": "pasn_rule",
+   "target_rel": 0.01,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.7030772476987399
+  },
+  {
+   "op": "w*x",
+   "operand_spikes": 2.5256500244140625,
+   "out_nrmse": 0.0036993399262428284,
+   "operand_nrmse": 0.0066053541377186775,
+   "pj_per_term": 4.076831640955061,
+   "pj_per_term_no_table": 13.421736731287092,
+   "fanout": 4096,
+   "bytes": 280,
+   "readout_order": 1,
+   "encoder": "greedy_ro1",
+   "target_rel": 0.01,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 1.1283271925652487
+  },
+  {
+   "op": "q*k (QK^T)",
+   "operand_spikes": [
+    2.4313011169433594,
+    2.447477340698242
+   ],
+   "coincidences_per_term": 5.951131820678711,
+   "out_nrmse": 0.005865066312253475,
+   "pj_per_term": 11.60551646500826,
+   "fanout": [
+    512,
+    512
+   ],
+   "bytes": 644,
+   "readout_order": 1,
+   "encoder": "greedy_ro1",
+   "target_rel": 0.01,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.39636323069890417
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    0.28732776641845703,
+    2.466114044189453
+   ],
+   "coincidences_per_term": 0.703534722328186,
+   "out_nrmse": 0.1093432754278183,
+   "pj_per_term": 5.145454930514097,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 504,
+   "readout_order": 1,
+   "encoder": "greedy_ro1",
+   "target_rel": 0.01,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.8939928659603283
+  },
+  {
+   "op": "w*x",
+   "operand_spikes": 2.5489349365234375,
+   "out_nrmse": 0.0036380027886480093,
+   "operand_nrmse": 0.006498676724731922,
+   "pj_per_term": 4.607125993259251,
+   "pj_per_term_no_table": 4.607125993259251,
+   "fanout": 4096,
+   "bytes": 320,
+   "readout_order": 2,
+   "encoder": "greedy_ro2",
+   "target_rel": 0.01,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.998453267119311
+  },
+  {
+   "op": "q*k (QK^T)",
+   "operand_spikes": [
+    2.4488887786865234,
+    2.465534210205078
+   ],
+   "coincidences_per_term": null,
+   "out_nrmse": 0.0057463026605546474,
+   "pj_per_term": 4.712628791481256,
+   "fanout": [
+    512,
+    512
+   ],
+   "bytes": 736,
+   "readout_order": 2,
+   "encoder": "greedy_ro2",
+   "target_rel": 0.01,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.9761006443612005
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    0.2943003177642822,
+    2.4846229553222656
+   ],
+   "coincidences_per_term": null,
+   "out_nrmse": 0.10613403469324112,
+   "pj_per_term": 5.077015305310487,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 576,
+   "readout_order": 2,
+   "encoder": "greedy_ro2",
+   "target_rel": 0.01,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.9060441466836753
+  },
+  {
+   "op": "w*x",
+   "operand_spikes": 15.972957611083984,
+   "out_nrmse": 0.011546268127858639,
+   "operand_nrmse": 0.019702430814504623,
+   "pj_per_term": 14.410806216299534,
+   "pj_per_term_no_table": 73.51074937731028,
+   "fanout": 4096,
+   "bytes": 192,
+   "readout_order": 1,
+   "encoder": "mbe",
+   "target_rel": null,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.31920490297046034
+  },
+  {
+   "op": "q*k (QK^T)",
+   "operand_spikes": [
+    24.99974250793457,
+    17.327476501464844
+   ],
+   "coincidences_per_term": 439.7093505859375,
+   "out_nrmse": 0.0010498036863282323,
+   "pj_per_term": 396.3372221469879,
+   "fanout": [
+    512,
+    512
+   ],
+   "bytes": 384,
+   "readout_order": 1,
+   "encoder": "mbe",
+   "target_rel": null,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.011606278045451954
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    1.9182922840118408,
+    21.48267364501953
+   ],
+   "coincidences_per_term": 40.21539306640625,
+   "out_nrmse": 0.05206621438264847,
+   "pj_per_term": 38.34833043217659,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 384,
+   "readout_order": 1,
+   "encoder": "mbe",
+   "target_rel": null,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.11995307092014412
+  },
+  {
+   "op": "w*x",
+   "operand_spikes": 5.325523376464844,
+   "out_nrmse": 0.002834227168932557,
+   "operand_nrmse": 0.005053263623267412,
+   "pj_per_term": 6.60014534117654,
+   "pj_per_term_no_table": 26.30458183409646,
+   "fanout": 4096,
+   "bytes": 104,
+   "readout_order": 1,
+   "encoder": "pasn_rule",
+   "target_rel": 0.003,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.6969543490658957
+  },
+  {
+   "op": "q*k (QK^T)",
+   "operand_spikes": [
+    5.320249557495117,
+    5.322948455810547
+   ],
+   "coincidences_per_term": 28.318626403808594,
+   "out_nrmse": 0.004469165578484535,
+   "pj_per_term": 36.980403219908474,
+   "fanout": [
+    512,
+    512
+   ],
+   "bytes": 208,
+   "readout_order": 1,
+   "encoder": "pasn_rule",
+   "target_rel": 0.003,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.124390206689893
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    0.4358980655670166,
+    5.323579788208008
+   ],
+   "coincidences_per_term": 2.320251941680908,
+   "out_nrmse": 0.08627793192863464,
+   "pj_per_term": 9.450778989493848,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 208,
+   "readout_order": 1,
+   "encoder": "pasn_rule",
+   "target_rel": 0.003,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.48673236408487425
+  },
+  {
+   "op": "w*x",
+   "operand_spikes": 2.9756240844726562,
+   "out_nrmse": 0.0015017217956483364,
+   "operand_nrmse": 0.0026876076590269804,
+   "pj_per_term": 4.48226329870522,
+   "pj_per_term_no_table": 15.492072411254048,
+   "fanout": 4096,
+   "bytes": 504,
+   "readout_order": 1,
+   "encoder": "greedy_ro1",
+   "target_rel": 0.003,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 1.0262672434546158
+  },
+  {
+   "op": "q*k (QK^T)",
+   "operand_spikes": [
+    2.9538421630859375,
+    2.914705276489258
+   ],
+   "coincidences_per_term": 8.609640121459961,
+   "out_nrmse": 0.002395086456090212,
+   "pj_per_term": 14.896919093281031,
+   "fanout": [
+    512,
+    512
+   ],
+   "bytes": 1008,
+   "readout_order": 1,
+   "encoder": "greedy_ro1",
+   "target_rel": 0.003,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.30878868114916064
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    0.2933468818664551,
+    2.9363059997558594
+   ],
+   "coincidences_per_term": 0.8598244190216064,
+   "out_nrmse": 0.10900666564702988,
+   "pj_per_term": 5.718816456943751,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 868,
+   "readout_order": 1,
+   "encoder": "greedy_ro1",
+   "target_rel": 0.003,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.8043622372973185
+  },
+  {
+   "op": "w*x",
+   "operand_spikes": 3.0050506591796875,
+   "out_nrmse": 0.0014834213070571423,
+   "operand_nrmse": 0.0026512648910284042,
+   "pj_per_term": 4.6075836949981746,
+   "pj_per_term_no_table": 4.6075836949981746,
+   "fanout": 4096,
+   "bytes": 576,
+   "readout_order": 2,
+   "encoder": "greedy_ro2",
+   "target_rel": 0.003,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.9983540841577316
+  },
+  {
+   "op": "q*k (QK^T)",
+   "operand_spikes": [
+    2.981311798095703,
+    2.9412307739257812
+   ],
+   "coincidences_per_term": null,
+   "out_nrmse": 0.002356338081881404,
+   "pj_per_term": 4.7206463687121865,
+   "fanout": [
+    512,
+    512
+   ],
+   "bytes": 1152,
+   "readout_order": 2,
+   "encoder": "greedy_ro2",
+   "target_rel": 0.003,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.9744428285262343
+  },
+  {
+   "op": "p*v (attn*V)",
+   "operand_spikes": [
+    0.30044078826904297,
+    2.9637908935546875
+   ],
+   "coincidences_per_term": null,
+   "out_nrmse": 0.1057659387588501,
+   "pj_per_term": 5.081161072850227,
+   "fanout": [
+    64,
+    512
+   ],
+   "bytes": 992,
+   "readout_order": 2,
+   "encoder": "greedy_ro2",
+   "target_rel": 0.003,
+   "exact_pj_per_term": 4.6,
+   "vs_exact": 0.9053048966660046
+  }
+ ],
+ "finished": "2026-10-10T08:18:49"
+}

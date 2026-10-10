@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import io
 import json
 import os
@@ -124,13 +125,42 @@ def _hf_style(model) -> bool:
     return hasattr(model, "config")
 
 
+def converted_fingerprint(model) -> str:
+    """Identify the fitted neuron state before reusing partial accuracy counts."""
+    digest = hashlib.sha256()
+    for name, kind, neuron in cv._spiking_primitives(model):
+        digest.update(f"{name}:{kind}\0".encode())
+        for key, tensor in sorted(neuron.state_dict().items()):
+            digest.update(f"{key}:{tuple(tensor.shape)}:{tensor.dtype}\0".encode())
+            digest.update(tensor.detach().cpu().contiguous().numpy().tobytes())
+    return digest.hexdigest()
+
+
 @torch.no_grad()
-def top1(model, batches, device, label="eval", progress_every=20) -> float:
+def top1(model, batches, device, label="eval", progress_every=20,
+         progress_path=None, progress_key=None) -> float:
     model.eval()
     right = total = 0
+    completed = 0
     started = time.perf_counter()
     n_batches = len(batches)
+    if progress_path and os.path.exists(progress_path):
+        with open(progress_path, encoding="utf-8") as fh:
+            progress = json.load(fh)
+        if (progress.get("key") != progress_key or
+                progress.get("n_batches") != n_batches):
+            raise ValueError("accuracy checkpoint does not match this fitted "
+                             "model or evaluation set")
+        completed = int(progress["batch"])
+        right = int(progress["right"])
+        total = int(progress["total"])
+        if not 0 <= completed <= n_batches:
+            raise ValueError("invalid accuracy checkpoint batch index")
+        print(f"  [{label}] resuming after batch {completed}/{n_batches}",
+              flush=True)
     for i, b in enumerate(batches, 1):
+        if i <= completed:
+            continue
         b = {k: v.to(device) for k, v in b.items()}
         y = b.pop("labels")
         # HF returns an output object; timm returns the logit tensor directly.
@@ -139,7 +169,14 @@ def top1(model, batches, device, label="eval", progress_every=20) -> float:
         right += int((pred == y).sum())
         total += y.numel()
         if progress_every and (i == n_batches or i % progress_every == 0):
-            rate = i / max(time.perf_counter() - started, 1e-9)
+            if progress_path:
+                progress = dict(key=progress_key, n_batches=n_batches,
+                                batch=i, right=right, total=total)
+                tmp = progress_path + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as fh:
+                    json.dump(progress, fh)
+                os.replace(tmp, progress_path)
+            rate = (i - completed) / max(time.perf_counter() - started, 1e-9)
             print(f"  [{label}] batch {i}/{n_batches}  {rate:.2f} b/s  "
                   f"ETA {(n_batches - i) / max(rate, 1e-9) / 60:.1f} min  "
                   f"top-1 {100.0 * right / max(total, 1):.2f}", flush=True)
@@ -176,6 +213,19 @@ def main() -> None:
                     help="tiny random ViT, no download")
     ap.add_argument("--build-only", action="store_true")
     ap.add_argument("--epochs", type=int, default=300)
+    ap.add_argument("--n-steps", type=int, default=_DEF.n_steps,
+                    help="maximum timestep budget for each fitted bank")
+    ap.add_argument("--pasn-budget", choices=["rule", "fit"],
+                    default=_DEF.pasn_budget,
+                    help="analytic or offline-fitted per-bank N,T allocation")
+    ap.add_argument("--pasn-fit-max-n", type=int, default=_DEF.pasn_fit_n_max,
+                    help="maximum basis count in the offline-fit search")
+    ap.add_argument("--pasn-target-mse", type=float,
+                    default=_DEF.pasn_target_mse,
+                    help="per-bank fitting error target")
+    ap.add_argument("--fit-device", choices=["auto", "cpu", "cuda"],
+                    default="auto",
+                    help="device for neuron fitting; model evaluation uses its own device")
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--limit", type=int, default=None,
                     help="evaluate only the first N images (smoke / gate runs)")
@@ -198,7 +248,13 @@ def main() -> None:
     ap.add_argument("--pasn-n-fixed", type=int, default=None)
     ap.add_argument("--seed", type=int, default=_DEF.seed)
     ap.add_argument("--json", default=None)
+    ap.add_argument("--progress-json", default=None,
+                    help="checkpoint exact top-1 counts every 20 batches; "
+                         "resume only if the fitted neuron state matches")
     ap.add_argument("--tag", default="run")
+    ap.add_argument("--benchmark-forwards", type=int, default=0,
+                    help="time this many preloaded image-batch forwards and "
+                         "record CUDA peak allocation (0 skips)")
     a = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -257,6 +313,9 @@ def main() -> None:
                framework=a.framework,
                backend=a.backend, scope=a.convert_ops, device=device,
                smoke=a.smoke, epochs=a.epochs, batch_size=a.batch_size,
+               n_steps=a.n_steps, pasn_budget=a.pasn_budget,
+               pasn_fit_max_n=a.pasn_fit_max_n,
+               pasn_target_mse=a.pasn_target_mse, fit_device=a.fit_device,
                limit=a.limit, n_eval=n_eval, calib_batches=a.calib_batches,
                stage=(None if a.backend == "none"
                       else 2 if a.convert_ops in ("all", "attention") else 1),
@@ -299,6 +358,12 @@ def main() -> None:
                 raise SystemExit("make_attention_spikable marked 0 blocks -- "
                                  "attention would stay exact FP; see above.")
         cfg = cv.ConvertConfig(epochs=a.epochs, backend=a.backend, spike_mult=True,
+                               n_steps=a.n_steps,
+                               pasn_budget=a.pasn_budget,
+                               pasn_fit_n_max=a.pasn_fit_max_n,
+                               pasn_target_mse=a.pasn_target_mse,
+                               fit_device=None if a.fit_device == "auto"
+                               else a.fit_device,
                                seed=a.seed,
                                pasn_id_target=a.pasn_id_target,
                                pasn_id_target_rel=a.pasn_id_target_rel,
@@ -313,6 +378,13 @@ def main() -> None:
         conv(model, calib, cfg=cfg, only=_KINDS[a.convert_ops], verbose=True)
         rec["build_s"] = time.perf_counter() - t0
         print(f"[build] conversion took {rec['build_s'] / 60:.1f} min")
+        if a.backend == "mbe_pasn":
+            rec["bank_architectures"] = [
+                dict(name=name, kind=kind, budgets=neuron.budget_table(),
+                     selection=getattr(neuron, "fit_budget_diagnostics", None))
+                for name, kind, neuron in cv._spiking_primitives(model)
+                if hasattr(neuron, "budget_table")
+            ]
 
         spikes = cv.spiking_cost_report(model, calib[0])
         print(cv.format_spiking_cost_report(spikes, label=a.backend), flush=True)
@@ -328,8 +400,34 @@ def main() -> None:
                    stored_params=params, stored_bytes=store["bytes"],
                    n_primitives=len(prims))
 
+        if a.benchmark_forwards:
+            from forward_benchmark import benchmark_forward
+            bench_input = calib[0]
+            if _hf_style(model):
+                bench_input = {k: v.to(device) for k, v in bench_input.items()}
+                call = lambda: model(**bench_input)
+                shape = list(bench_input["pixel_values"].shape)
+            else:
+                bench_input = bench_input.to(device)
+                call = lambda: model(bench_input)
+                shape = list(bench_input.shape)
+            rec["forward_benchmark"] = benchmark_forward(
+                call, device, repeats=a.benchmark_forwards)
+            rec["forward_benchmark"]["input_shape"] = shape
+            print(f"[forward] {rec['forward_benchmark']}", flush=True)
+
         if not a.build_only:
-            acc_snn = top1(model, batches, device, f"SNN-{a.backend}")
+            progress_key = None
+            if a.progress_json:
+                progress_key = json.dumps(dict(
+                    tag=a.tag, model=a.model, framework=a.framework,
+                    backend=a.backend, scope=a.convert_ops,
+                    n_eval=n_eval, batch_size=a.batch_size,
+                    fitted_state=converted_fingerprint(model)),
+                    sort_keys=True)
+            acc_snn = top1(model, batches, device, f"SNN-{a.backend}",
+                           progress_path=a.progress_json,
+                           progress_key=progress_key)
             drop_pp = acc_snn - acc_ann
             rec.update(acc_snn=acc_snn, delta_pp=drop_pp,
                        delta_pct=100.0 * drop_pp / acc_ann)

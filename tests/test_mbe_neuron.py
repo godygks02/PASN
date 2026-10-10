@@ -93,6 +93,148 @@ def test_mbe_pasn_router_routes_by_binade():
     assert int(idx[5]) == r.key_to_idx[(-1.0, 2)]           # -6.0 in [-8,-4)
 
 
+def test_mbe_pasn_mantissa_prefix_splits_each_binade():
+    """``m_bits`` reads the top mantissa bits too: each binade becomes ``2^m``
+    equal sub-banks, the near-zero region is untouched, and ``m_bits=0`` is the
+    original router bank for bank (E39)."""
+    r0 = MBEPrefixRouter(-8.0, 8.0, e_min=-2, e_max=3, near0="signed")
+    r2 = MBEPrefixRouter(-8.0, 8.0, e_min=-2, e_max=3, near0="signed", m_bits=2)
+    n_mag = r0.n_banks - 2
+    assert r2.n_banks == 2 + 4 * n_mag
+    x = torch.tensor([1.0, 1.24, 1.25, 1.99, 3.0, -1.6, -6.0, 0.1, -0.1])
+    idx = r2.route(x)
+    assert int(idx[0]) == r2.key_to_idx[(1.0, 0, 0)]
+    assert int(idx[1]) == r2.key_to_idx[(1.0, 0, 0)]       # 1.24 < 1.25
+    assert int(idx[2]) == r2.key_to_idx[(1.0, 0, 1)]       # sub-range boundary
+    assert int(idx[3]) == r2.key_to_idx[(1.0, 0, 3)]
+    assert int(idx[4]) == r2.key_to_idx[(1.0, 1, 2)]       # 3 = 2(1 + 2/4)
+    assert int(idx[5]) == r2.key_to_idx[(-1.0, 0, 2)]      # |-1.6| in [1.5, 1.75)
+    assert int(idx[6]) == r2.key_to_idx[(-1.0, 2, 2)]      # |-6| = 4(1 + 2/4)
+    assert int(idx[7]) == r2.near0_idx[1.0] and int(idx[8]) == r2.near0_idx[-1.0]
+    assert r2.bank_interval(r2.key_to_idx[(1.0, 1, 2)]) == (3.0, 3.5)
+    assert r2.bank_interval(r2.key_to_idx[(-1.0, 1, 2)]) == (-3.5, -3.0)
+    # the sub-banks of a binade tile it exactly
+    for e in range(-2, 3):
+        spans = [r2.bank_interval(r2.key_to_idx[(1.0, e, j)]) for j in range(4)]
+        assert spans[0][0] == 2.0 ** e and spans[-1][1] == 2.0 ** (e + 1)
+        assert all(a[1] == b[0] for a, b in zip(spans, spans[1:]))
+    # m_bits=0: same banks, same indices as before the prefix existed
+    assert [b for b in r0.banks] == [
+        b for b in MBEPrefixRouter(-8.0, 8.0, e_min=-2, e_max=3,
+                                   near0="signed", m_bits=0).banks]
+
+
+def test_mbe_pasn_per_binade_mantissa_depth():
+    """``m_bits`` as ``{(sign, e): m}``: only the named binades are split, and an
+    all-equal mapping is the uniform router bank for bank (E40)."""
+    r = MBEPrefixRouter(-8.0, 8.0, e_min=-2, e_max=3, near0="signed",
+                        m_bits={(1.0, 1): 2, (-1.0, 0): 1})
+    r0 = MBEPrefixRouter(-8.0, 8.0, e_min=-2, e_max=3, near0="signed")
+    assert r.n_banks == r0.n_banks + 3 + 1
+    x = torch.tensor([3.0, 2.2, 3.9, 1.5, -1.6, -1.2, -6.0])
+    idx = r.route(x)
+    assert int(idx[0]) == r.key_to_idx[(1.0, 1, 2)]        # 3 = 2(1 + 2/4)
+    assert int(idx[1]) == r.key_to_idx[(1.0, 1, 0)]
+    assert int(idx[2]) == r.key_to_idx[(1.0, 1, 3)]
+    assert int(idx[3]) == r.key_to_idx[(1.0, 0, 0)]        # unsplit binade
+    assert int(idx[4]) == r.key_to_idx[(-1.0, 0, 1)]       # |-1.6| in [1.5, 2)
+    assert int(idx[5]) == r.key_to_idx[(-1.0, 0, 0)]
+    assert int(idx[6]) == r.key_to_idx[(-1.0, 2, 0)]
+    for bi in range(r.n_banks):                            # every bank is hit by
+        a, b = r.bank_interval(bi)                         # its own midpoint
+        assert int(r.route(torch.tensor([0.5 * (a + b)]))) == bi
+    u = MBEPrefixRouter(-8.0, 8.0, e_min=-2, e_max=3, near0="signed", m_bits=2)
+    d = MBEPrefixRouter(-8.0, 8.0, e_min=-2, e_max=3, near0="signed",
+                        m_bits={k: 2 for k in u.m_of})
+    assert u.banks == d.banks and u.key_to_idx == d.key_to_idx
+
+
+def test_mbe_pasn_split_builder_deepens_only_missing_binades():
+    """``build_mbe_pasn_split`` splits a binade only when it misses its target, so
+    a loose target leaves the exponent-only layout and a tight one deepens a few."""
+    from mbe.mbe_pasn import build_mbe_pasn_split
+    loose = build_mbe_pasn_split("exp2", (0.0, 1.0), e_min=-3, e_max=0, m_max=2,
+                                 n_steps=8, epochs=20, target_mse=1e-2)
+    assert loose.m_map == {} and not loose.router.split
+    tight = build_mbe_pasn_split("exp2", (0.0, 1.0), e_min=-3, e_max=0, m_max=2,
+                                 n_steps=4, epochs=20, target_mse=1e-6)
+    assert tight.m_map and all(1 <= m <= 2 for m in tight.m_map.values())
+    assert tight.router.n_banks > loose.router.n_banks
+    x = torch.linspace(0.01, 0.99, 513)
+    assert torch.isfinite(tight(x)).all()
+
+
+def test_mbe_pasn_split_builder_spends_a_byte_budget_on_spikes():
+    """With ``byte_budget`` the builder deepens binades past the target-driven
+    layout, never over budget, and every accepted step lowers the spikes (E41)."""
+    from mbe.mbe_pasn import build_mbe_pasn_split
+    from mbe.metrics import storage_bytes
+    kw = dict(e_min=-3, e_max=0, m_max=2, n_steps=8, epochs=20, target_mse=1e-3)
+    base = build_mbe_pasn_split("exp2", (0.0, 1.0), **kw)
+    cal = torch.rand(4096, generator=torch.Generator().manual_seed(0))
+    budget = 3 * storage_bytes(base)
+    spent = build_mbe_pasn_split("exp2", (0.0, 1.0), byte_budget=budget,
+                                 sample=cal, **kw)
+    assert storage_bytes(spent) <= budget
+    traj = spent.spend_trajectory
+    assert traj, "a 3x budget bought nothing"
+    assert all(a["spikes"] > b["spikes"] for a, b in zip(traj, traj[1:]))
+    assert all(a["bytes"] < b["bytes"] for a, b in zip(traj, traj[1:]))
+    assert spent.mean_spikes(cal) < base.mean_spikes(cal)
+
+
+def test_mbe_pasn_hybrid_target_floors_the_relative_budget():
+    """``target="hybrid"`` is the relative budget, but never below ``target_mse``:
+    a bank whose output is ~0 no longer asks for an unreachable MSE (E44)."""
+    from mbe.mbe_pasn import _bank_eps
+    big, tiny = torch.full((64,), 10.0), torch.full((64,), 1e-6)
+    assert _bank_eps(big, "absolute", 1e-4, 1e-3) == 1e-4
+    assert abs(_bank_eps(big, "relative", 1e-4, 1e-3) - 1e-4) < 1e-12
+    assert _bank_eps(tiny, "relative", 1e-8, 1e-3) < 1e-17
+    assert _bank_eps(tiny, "hybrid", 1e-8, 1e-3) == 1e-8          # floored
+    assert abs(_bank_eps(big, "hybrid", 1e-8, 1e-3) - 1e-4) < 1e-12  # relative wins
+    try:
+        _bank_eps(big, "bogus", 1e-4, 1e-3)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown target accepted")
+
+
+def test_mbe_pasn_bank_energy_and_energy_select():
+    """``bank_energy_pj`` prices compares, spike accumulates and the readout; a
+    fused order-1 readout costs one add, and order 2 cannot be fused. The
+    energy selector picks the cheapest feasible candidate, not the fewest spikes."""
+    from mbe.mbe_pasn import bank_energy_pj, _fit_bank_budget
+    assert abs(bank_energy_pj(1, 8, 2, 2.0) - (0.9 * 8 + 0.9 * 4 + 4.6 * 3)) < 1e-9
+    assert abs(bank_energy_pj(1, 8, 1, 2.0, fused_readout=True) - (0.9 * 8 + 0.9 * 4 + 0.9)) < 1e-9
+    try:
+        bank_energy_pj(1, 8, 2, 2.0, fused_readout=True)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("order-2 readout accepted as fused")
+    _, chosen, cands = _fit_bank_budget(
+        lambda v: v * v, 1.0, 2.0, 1e-2, (1,), (2, 4, 8), 5, 0, "cpu",
+        readout_order=1, select="energy", fused_readout=True)
+    feas = [c for c in cands if c["feasible"]]
+    assert feas and chosen["energy"] == min(c["energy"] for c in feas)
+
+
+def test_mbe_pasn_tied_mantissa_prefix_shares_one_prototype_per_subrange():
+    """Tied identity with ``m_bits=1``: two prototypes (one per sub-range), each
+    shared by every binade, and the build still reconstructs the identity."""
+    n = build_mbe_pasn("identity", (0.0, 1.0), e_min=-4, e_max=0, n_steps=8,
+                       epochs=30, tied=True, target="relative", target_rel=1e-2,
+                       budget="fixed", n_local=1, n_near0=1, m_bits=1)
+    protos = {id(b.core) for b, s in zip(n.bank_mods, n.router.banks)
+              if s["kind"] == "mag"}
+    assert len(protos) == 2
+    x = torch.linspace(0.07, 0.99, 257)
+    rel = float((n(x) - x).abs().max() / x.abs().max())
+    assert rel < 0.1, rel
+
+
 def test_mbe_pasn_signed_near0_splits_the_polarity():
     """``near0="signed"`` reads the sign bit in the near-zero region too.
 
@@ -824,6 +966,53 @@ def test_storage_bytes_charges_a_shared_prototype_once():
     assert storage_bytes(tied) < storage_bytes(untied)
     # de-duplicating across a list must not re-charge a neuron shared by two sites
     assert storage_bytes([tied, tied]) == storage_bytes(tied)
+
+
+def test_share_fit_refs_is_bit_identical_and_cheaper():
+    """``share_fit_refs`` may move the stored footprint and nothing else (E21).
+
+    ``share_fits`` already fits one prototype per kind, then inserts it with
+    ``copy.deepcopy`` -- so every site stores its own copy and ``storage_bytes``
+    charges all of them. Handing the prototype over by reference is the same
+    network by construction, which makes this a two-sided pin: bytes must fall,
+    and the logits must be **equal**, not close. A tolerance here would let a real
+    divergence (a module that turns out to carry state) pass as rounding.
+    """
+    try:
+        import transformers
+    except ImportError:                                   # pragma: no cover
+        print("  (skipped: transformers not installed)")
+        return
+    from mbe import convert as cv
+    from mbe.gpt2_convert import make_spikable, convert_gpt2
+    from mbe.metrics import storage_bytes
+
+    def built(share_refs):
+        torch.manual_seed(0)
+        gcfg = transformers.GPT2Config(n_layer=2, n_head=2, n_embd=32,
+                                       n_positions=64, vocab_size=64)
+        model = transformers.GPT2LMHeadModel(gcfg).eval()
+        model.config._attn_implementation = "eager"
+        make_spikable(model)
+        calib = [torch.randint(0, 64, (1, 32))]
+        cfg = cv.ConvertConfig(epochs=4, backend="mbe_pasn", n_steps=4,
+                               share_fit_refs=share_refs)
+        convert_gpt2(model, calib, cfg=cfg, only={"activation", "layernorm"})
+        neurons = [n for _, _, n in cv._spiking_primitives(model)]
+        with torch.no_grad():
+            logits = model(torch.arange(16).unsqueeze(0) % 64).logits
+        return storage_bytes(neurons), logits
+
+    bytes_copy, logits_copy = built(False)
+    bytes_ref, logits_ref = built(True)
+
+    assert torch.equal(logits_copy, logits_ref), (
+        "sharing changed the network by "
+        f"{float((logits_copy - logits_ref).abs().max()):.3g} -- the prototype "
+        "carries state, so it cannot be shared")
+    assert bytes_ref < bytes_copy, (
+        f"sharing saved nothing ({bytes_ref} vs {bytes_copy}); check that .to() "
+        "did not cast the prototype into per-site tensors")
 
 
 if __name__ == "__main__":

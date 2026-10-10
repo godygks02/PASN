@@ -1,0 +1,77 @@
+{
+  "experiment": "global_router_depth_cpu_stage1",
+  "interpretation": "common e_min shift, not literal prefix k",
+  "model": "gpt2",
+  "dataset": "wikitext-2-raw-v1",
+  "scope": "activation+layernorm",
+  "args": {
+    "model": "gpt2",
+    "dataset_arrow_dir": "C:\\Users\\cm120\\.cache\\huggingface\\datasets\\Salesforce___wikitext\\wikitext-2-raw-v1\\0.0.0\\b08601e04326c79dfdd32d625aee71d232d685c3",
+    "json": "results\\global_router_depth_cpu.json",
+    "deltas": [
+      1,
+      0,
+      -1
+    ],
+    "block": 64,
+    "val_blocks": 8,
+    "test_blocks": 8,
+    "test_start_block": 16,
+    "epochs": 6,
+    "n_steps": 4,
+    "target_mse": 0.001,
+    "threads": 8,
+    "val_accuracy_tolerance_pp": 0.25
+  },
+  "ann_val": 57.81158719858297,
+  "ann_test": 83.0067267303014,
+  "rows": [
+    {
+      "delta": 1,
+      "pasn_e_min": -2,
+      "pasn_id_e_min": -5,
+      "ppl_val": 57.483428964917785,
+      "ppl_test": 79.37460171041621,
+      "val_conversion_loss_pp": -0.5676340151983039,
+      "test_conversion_loss_pp": -4.3756996124981296,
+      "val_spikes_first_block": 147386.8125,
+      "test_spikes_first_block": 145461.046875,
+      "stored_bytes": 13904,
+      "n_routers": 87,
+      "total_banks": 1015,
+      "build_s": 8.14907499984838
+    },
+    {
+      "delta": 0,
+      "pasn_e_min": -3,
+      "pasn_id_e_min": -6,
+      "ppl_val": 58.57724413556984,
+      "ppl_test": 78.93969232370898,
+      "val_conversion_loss_pp": 1.324400477635801,
+      "test_conversion_loss_pp": -4.899644362325817,
+      "val_spikes_first_block": 146994.96875,
+      "test_spikes_first_block": 145444.546875,
+      "stored_bytes": 14672,
+      "n_routers": 87,
+      "total_banks": 1089,
+      "build_s": 7.9739351000171155
+    },
+    {
+      "delta": -1,
+      "pasn_e_min": -4,
+      "pasn_id_e_min": -7,
+      "ppl_val": 58.101199016069145,
+      "ppl_test": 80.33180732588717,
+      "val_conversion_loss_pp": 0.5009580804127722,
+      "test_conversion_loss_pp": -3.2225332931213546,
+      "val_spikes_first_block": 145892.4375,
+      "test_spikes_first_block": 144221.703125,
+      "stored_bytes": 15440,
+      "n_routers": 87,
+      "total_banks": 1163,
+      "build_s": 8.262924999929965
+    }
+  ],
+  "chosen_delta": 1,
+  "selection_rule": "lowest validation first-block spikes within tolerance of best validation conversion loss"
+}
