@@ -418,7 +418,7 @@ def rule_budget(delta: float, target_mse: float, n_max: int = 4,
 
 def _fit_bank(tgt, feed_lo, feed_hi, n_basis, n_steps, epochs, seed,
               device, alpha_init="auto", m=1024, readout_order=1,
-              learn_tau=True, tau_range=None, spike_lambda=0.0):
+              learn_tau=True, tau_range=None, spike_lambda=0.0, dyadic=False):
     """Fit one MBE bank and return ``(bank, mse)``.
 
     ``[feed_lo, feed_hi]`` is the range of the **routing key** actually fed to the
@@ -429,9 +429,18 @@ def _fit_bank(tgt, feed_lo, feed_hi, n_basis, n_steps, epochs, seed,
     The reported MSE is measured on an **offset grid** that shares no point with
     the fitting grid -- scored on the fitting grid a staircase can nail the grid
     midpoints while drifting between them.
+
+    ``dyadic=True`` freezes the bank into an exact binary-search encoder (E49):
+    every kernel halves per step (``tau = dt/ln2``) and the leading threshold is
+    fixed at the uniform placement (1/2 for N=1), so the spike train *is* the
+    binary expansion of the normalised residual and ``d[t] = 2^-t``. Only the
+    readout is fitted.
     """
     from .fit import fit_model
     device = torch.device(device)
+    if dyadic:
+        alpha_init, learn_tau = "uniform", False
+        tau_range = (1.0 / math.log(2.0), 1.0 / math.log(2.0))
     xf = _grid(feed_lo, feed_hi, m, 0.0, device)
     xe = _grid(feed_lo, feed_hi, m, 0.25, device)
     yf, ye = tgt(xf), tgt(xe)
@@ -447,7 +456,8 @@ def _fit_bank(tgt, feed_lo, feed_hi, n_basis, n_steps, epochs, seed,
         cfg = MBEConfig(n_basis=n_basis, n_steps=n_steps, x_min=float(feed_lo),
                         x_scale=float(feed_hi - feed_lo), alpha_v=alpha,
                         use_bias=True, readout_order=readout_order,
-                        learn_tau=learn_tau, **extra)
+                        learn_tau=learn_tau,
+                        **(dict(learn_alpha_v=False) if dyadic else {}), **extra)
         bank = MBENeuron(cfg).to(device)
         fit_model(bank, xf, yf, seed=seed, epochs=epochs,
                   spike_lambda=spike_lambda)
@@ -663,7 +673,8 @@ def bank_energy_pj(n_basis: int, n_steps: int, readout_order: int,
 def _fit_bank_budget(tgt, feed_lo, feed_hi, target_mse, n_grid, t_grid,
                      epochs, seed, device, *, alpha_init="auto",
                      readout_order=1, learn_tau=True, tau_range=None,
-                     spike_lambda=0.0, select="spikes", fused_readout=False):
+                     spike_lambda=0.0, select="spikes", fused_readout=False,
+                     dyadic=False):
     """Select a fitted ``(N, T)`` using held-out error and measured spikes.
 
     A candidate must meet the bank's error target. Among feasible candidates,
@@ -688,7 +699,7 @@ def _fit_bank_budget(tgt, feed_lo, feed_hi, target_mse, n_grid, t_grid,
                 tgt, feed_lo, feed_hi, N, T, epochs, seed, device,
                 alpha_init=alpha_init, readout_order=readout_order,
                 learn_tau=learn_tau, tau_range=tau_range,
-                spike_lambda=spike_lambda,
+                spike_lambda=spike_lambda, dyadic=dyadic,
             )
             with torch.no_grad():
                 mse = float((bank(x_sel) - y_sel).pow(2).mean())
@@ -1060,6 +1071,7 @@ def build_mbe_pasn_split(name: str, domain: tuple[float, float], e_min: int = -2
                          sample: torch.Tensor | None = None,
                          min_gain: float = 0.0,
                          select: str = "spikes", fused_readout: bool = False,
+                         dyadic: bool = False,
                          verbose: bool = False,
                          device: torch.device | str = "cpu") -> MBEPASNNeuron:
     """Greedy per-binade mantissa depth: split only where the target is missed.
@@ -1117,7 +1129,8 @@ def build_mbe_pasn_split(name: str, domain: tuple[float, float], e_min: int = -2
         bank, chosen, candidates = _fit_bank_budget(
             tgt, flo, fhi, eps, (n_basis,), t_grid, epochs, seed, device,
             alpha_init=alpha_init, readout_order=readout_order,
-            learn_tau=learn_tau, select=select, fused_readout=fused_readout)
+            learn_tau=learn_tau, select=select, fused_readout=fused_readout,
+            dyadic=dyadic)
         cache[k] = (bank, chosen)
         diagnostics.append(dict(bank=k, level=level, target_mse=eps,
                                 selected=chosen, candidates=candidates))

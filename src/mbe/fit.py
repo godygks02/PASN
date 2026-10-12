@@ -134,6 +134,14 @@ def fit_model(
     # closed-form solve, which is exact and avoids surrogate-gradient noise on w.
     shape_params = [p for name, p in model.named_parameters()
                     if p.requires_grad and not _is_readout(name)]
+    if not shape_params:
+        # Every spike-shaping parameter is frozen (e.g. the dyadic encoder, E49):
+        # the spike trains are fixed, so the closed-form readout already is the
+        # optimum and there is nothing for Adam or LBFGS to do.
+        with torch.no_grad():
+            mse = loss_fn(model(x), y).item()
+        return FitResult(mse=mse, final_lr=0.0, firing_rate=model.firing_rate(x),
+                         num_params=model.num_learnable(), loss_history=[mse])
     opt = torch.optim.Adam(shape_params, lr=lr)
     sched = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=gamma)
 

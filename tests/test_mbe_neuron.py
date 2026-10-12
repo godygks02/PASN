@@ -221,6 +221,25 @@ def test_mbe_pasn_bank_energy_and_energy_select():
     assert feas and chosen["energy"] == min(c["energy"] for c in feas)
 
 
+def test_mbe_pasn_dyadic_bank_spikes_are_the_binary_digits():
+    """``dyadic=True``: d[t] = 2^-t, thresholds halve from 1/2, nothing in the
+    spike path is learnable, and the spike train is the binary expansion of the
+    normalised residual -- so the fit is the closed-form readout alone (E49)."""
+    from mbe.mbe_pasn import _fit_bank
+    bank, _ = _fit_bank(lambda v: torch.exp2(v), 0.5, 1.0, 1, 6, 5, 0, "cpu",
+                        readout_order=1, dyadic=True)
+    d, _, vth = bank._kernels()
+    assert torch.allclose(d.flatten(), 2.0 ** -torch.arange(6.0))
+    assert torch.allclose(vth.flatten(), 0.5 * 2.0 ** -torch.arange(6.0))
+    assert not any(p.requires_grad for n, p in bank.named_parameters()
+                   if n not in ("w", "bias"))
+    rho = torch.tensor([0.0, 0.3125, 0.71875])           # .000000 .010100 .101110
+    S = bank.spike_train(0.5 + 0.5 * rho)[:, 0, :]
+    bits = torch.tensor([[0, 0, 0, 0, 0, 0], [0, 1, 0, 1, 0, 0], [1, 0, 1, 1, 1, 0]],
+                        dtype=S.dtype)
+    assert torch.equal(S, bits)
+
+
 def test_mbe_pasn_tied_mantissa_prefix_shares_one_prototype_per_subrange():
     """Tied identity with ``m_bits=1``: two prototypes (one per sub-range), each
     shared by every binade, and the build still reconstructs the identity."""
